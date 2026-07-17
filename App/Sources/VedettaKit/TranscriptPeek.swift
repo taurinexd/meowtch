@@ -1,5 +1,13 @@
 import Foundation
 
+/// Parses the transcript's ISO8601-with-fractional-seconds timestamps.
+/// A fresh formatter per call keeps this free of shared mutable state.
+private func parseTimestamp(_ string: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: string)
+}
+
 /// Bounded, tolerant reader for Claude Code transcript JSONL files:
 /// pulls the first real user prompt (session title) and the latest
 /// user/assistant text (card body lines) without loading giant files.
@@ -15,6 +23,10 @@ public struct TranscriptPeek: Sendable {
     public var aiTitle: String?
     /// Working directory recorded in the entries.
     public var cwd: String?
+    /// Timestamp of the last real user/assistant message — the honest
+    /// "last activity", unlike the file mtime which background writes
+    /// (repeated ai-title/agent-name entries) keep artificially fresh.
+    public var lastActivity: Date?
 
     /// Parses transcript JSONL content. Malformed lines are skipped.
     public static func parse(_ data: Data) -> TranscriptPeek {
@@ -36,6 +48,11 @@ public struct TranscriptPeek: Sendable {
             if entry["isSidechain"] as? Bool == true { continue }
 
             if let cwd = entry["cwd"] as? String { peek.cwd = cwd }
+            if (type == "user" || type == "assistant"),
+               let stamp = entry["timestamp"] as? String,
+               let date = parseTimestamp(stamp) {
+                peek.lastActivity = date
+            }
             guard let text = textContent(of: message), !text.isEmpty else { continue }
             switch type {
             case "user":
@@ -106,6 +123,7 @@ public struct TranscriptPeek: Sendable {
         merged.aiTitle = tailPeek.aiTitle ?? headPeek.aiTitle
         merged.lastUserText = tailPeek.lastUserText
         merged.lastAssistantText = tailPeek.lastAssistantText
+        merged.lastActivity = tailPeek.lastActivity ?? headPeek.lastActivity
 
         // Renames outside these windows are picked up by the async
         // TranscriptFullScan — never a synchronous full read here.

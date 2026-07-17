@@ -110,12 +110,14 @@ struct NotchView: View {
     }
 
     /// Full row = window known AND attention-worthy: working, awaiting a
-    /// decision, or active in the last ~30 minutes (measured against the
-    /// original's behavior); everything else collapses.
+    /// decision, or just-stopped (a short grace so the result is readable);
+    /// idle sessions collapse. Activity is the real last-message time.
+    private static let fullRowGrace: TimeInterval = 10 * 60
+
     private func deservesFullRow(_ session: AgentSession) -> Bool {
         guard !session.isMinimized, store.terminal(for: session.id) != nil else { return false }
         if session.state == .running || session.state == .needsApproval { return true }
-        return session.lastActivityAt.timeIntervalSinceNow > -30 * 60
+        return session.lastActivityAt.timeIntervalSinceNow > -Self.fullRowGrace
     }
 
     private var fullSessions: [AgentSession] {
