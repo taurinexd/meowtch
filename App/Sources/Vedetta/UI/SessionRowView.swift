@@ -88,60 +88,67 @@ struct SessionRowView: View {
                 .frame(minWidth: 46, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(session.directoryName)
-                            .fontWeight(.bold)
-                        + Text(" · ")
-                            .foregroundStyle(Theme.secondaryText)
-                        + Text(session.title)
-                            .fontWeight(.bold)
+                    // Text block and chips are COLUMNS: the You:/tool/reply
+                    // lines truncate before the chips' left edge and never
+                    // run under them (measured on the original). Only the
+                    // recap below escapes the split and spans full width.
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            (
+                                Text(session.directoryName)
+                                    .fontWeight(.bold)
+                                + Text(" · ")
+                                    .foregroundStyle(Theme.secondaryText)
+                                + Text(session.title)
+                                    .fontWeight(.bold)
+                            )
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.primaryText)
+                            .lineLimit(1)
+
+                            if session.recap == nil || session.recap?.isEmpty == true {
+                                // Like the original: the user's last words
+                                // always visible, then the running tool while
+                                // working or the agent's reply otherwise.
+                                if let message = session.lastMessage {
+                                    Text("You: \(message)")
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(Theme.secondaryText)
+                                        .lineLimit(1)
+                                }
+                                if session.state == .compacting {
+                                    CompactingLine(startedAt: session.compactingStartedAt ?? session.lastActivityAt)
+                                } else if session.state == .running, let tool = session.currentTool {
+                                    HStack(spacing: 6) {
+                                        Text(tool)
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(Theme.toolBlue)
+                                        if let detail = session.currentToolDetail {
+                                            Text(detail)
+                                                .foregroundStyle(Theme.secondaryText)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .font(.system(size: 11.5))
+                                } else if let reply = session.lastAssistantMessage {
+                                    Text(reply)
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(Theme.secondaryText)
+                                        .lineLimit(session.lastMessage != nil ? 1 : 3)
+                                }
+                            }
+                        }
                         Spacer(minLength: 8)
                         chips
                     }
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
 
-                    // When Claude wrote an away-recap it replaces the
-                    // You:/reply lines entirely, like the original.
+                    // The away-recap replaces the You:/reply lines and runs
+                    // full width, under the chips column, like the original.
                     if let recap = session.recap, !recap.isEmpty {
                         Text(recap)
                             .font(.system(size: 11.5))
                             .foregroundStyle(Color.white.opacity(0.85))
                             .lineLimit(3)
-                    } else {
-                        // Like the original: the user's last words always
-                        // visible, then the running tool while working or the
-                        // agent's reply otherwise (1 line if a widget follows).
-                        if let message = session.lastMessage {
-                            Text("You: \(message)")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Theme.secondaryText)
-                                .lineLimit(1)
-                        }
-                        // While working, show the running tool; otherwise (or
-                        // when the tool is unknown) the agent's last reply — so
-                        // there is always a second line under You:, like VI.
-                        if session.state == .compacting {
-                            CompactingLine(startedAt: session.compactingStartedAt ?? session.lastActivityAt)
-                        } else if session.state == .running, let tool = session.currentTool {
-                            HStack(spacing: 6) {
-                                Text(tool)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(Theme.toolBlue)
-                                if let detail = session.currentToolDetail {
-                                    Text(detail)
-                                        .foregroundStyle(Theme.secondaryText)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .font(.system(size: 11.5))
-                        } else if let reply = session.lastAssistantMessage {
-                            Text(reply)
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Theme.secondaryText)
-                                .lineLimit(session.lastMessage != nil ? 1 : 3)
-                        }
                     }
                 }
             }
@@ -320,28 +327,31 @@ struct SessionRowView: View {
     /// Trailing element (age / status dot / archive on hover). Hidden
     /// reference chips reserve a width that is the same on EVERY row (not
     /// this row's own age), so the chips to its left all start at the same
-    /// distance from the right edge across rows, like the original.
+    /// distance from the right edge across rows. Measured on the original:
+    /// the age chip is right-aligned in the slot, while the archive icon
+    /// and the status dot sit CENTERED in it (icon cx identical on full
+    /// cards and compact rows).
     private var trailingSlot: some View {
-        ZStack(alignment: .trailing) {
+        ZStack {
             Chip(text: "<1m").hidden()
             Chip(text: "59m").hidden()
             Chip(text: "23h").hidden()
-            Group {
-                if isHovered {
-                    Button {
-                        ArchiveStore.shared.archive(session.id)
-                    } label: {
-                        Image(systemName: "tray")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.secondaryText)
-                    }
-                    .buttonStyle(.plain)
-                } else if session.state == .waitingForInput && !isCompact {
-                    Circle()
-                        .fill(Theme.color(for: .waitingForInput))
-                        .frame(width: 7, height: 7)
-                        .padding(.trailing, 6)
-                } else {
+            if isHovered {
+                Button {
+                    ArchiveStore.shared.archive(session.id)
+                } label: {
+                    Image(systemName: "tray")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+            } else if session.state == .waitingForInput && !isCompact {
+                Circle()
+                    .fill(Theme.color(for: .waitingForInput))
+                    .frame(width: 7, height: 7)
+            } else {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
                     Chip(text: session.lastActivityAt.vedettaAge)
                 }
             }

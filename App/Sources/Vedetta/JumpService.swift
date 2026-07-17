@@ -9,18 +9,55 @@ import VedettaKit
 enum JumpService {
     static func jump(to session: AgentSession, terminal: TerminalInfo?) {
         guard let terminal else { return }
+        let isVSCode = terminal.termProgram == "vscode"
+            || terminal.bundleIdentifier == "com.microsoft.VSCode"
+        let bundleId = terminal.bundleIdentifier
+            ?? (isVSCode ? "com.microsoft.VSCode" : nil)
 
-        if terminal.termProgram == "vscode" || terminal.bundleIdentifier == "com.microsoft.VSCode" {
-            if let pid = terminal.pid,
-               let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)") {
-                NSWorkspace.shared.open(url)
-                return
-            }
+        // Raise the hosting app first — restoring minimized windows needs
+        // Accessibility (the reason the original requires it too); without
+        // the grant this quietly degrades to a plain activate.
+        if let bundleId,
+           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
+            unminimizeIfNeeded(app: app)
+            app.activate(options: [.activateAllWindows])
         }
 
-        if let bundleId = terminal.bundleIdentifier,
-           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
-            app.activate()
+        // Then the companion extension focuses the exact integrated
+        // terminal inside the now-frontmost VS Code.
+        if isVSCode, let pid = terminal.pid,
+           let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// If the app has no visible window (all minimized), restores the
+    /// minimized ones and raises the first — best effort: without a
+    /// tracked windowId the exact window is the extension's job.
+    private static func unminimizeIfNeeded(app: NSRunningApplication) {
+        guard AXIsProcessTrusted() else { return }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let windows = windowsRef as? [AXUIElement], !windows.isEmpty else { return }
+
+        var minimized: [AXUIElement] = []
+        var anyVisible = false
+        for window in windows {
+            var value: CFTypeRef?
+            if AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success,
+               (value as? Bool) == true {
+                minimized.append(window)
+            } else {
+                anyVisible = true
+            }
+        }
+        guard !anyVisible else { return }
+        for window in minimized {
+            AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        }
+        if let first = minimized.first {
+            AXUIElementPerformAction(first, kAXRaiseAction as CFString)
         }
     }
 
