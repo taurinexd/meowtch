@@ -103,12 +103,18 @@ struct NotchView: View {
     /// Sessions with a visible terminal window render as full rows;
     /// the rest (minimized, or adopted with no live terminal) collapse
     /// to compact lines at the bottom, like the original.
+    @ObservedObject private var archive = ArchiveStore.shared
+
+    private var visibleSessions: [AgentSession] {
+        store.sessions.filter { !archive.isArchived($0.id) }
+    }
+
     private var fullSessions: [AgentSession] {
-        store.sessions.filter { !$0.isMinimized && store.terminal(for: $0.id) != nil }
+        visibleSessions.filter { !$0.isMinimized && store.terminal(for: $0.id) != nil }
     }
 
     private var compactSessions: [AgentSession] {
-        store.sessions.filter { $0.isMinimized || store.terminal(for: $0.id) == nil }
+        visibleSessions.filter { $0.isMinimized || store.terminal(for: $0.id) == nil }
     }
 
     /// Color of the sprite: the most urgent state across sessions.

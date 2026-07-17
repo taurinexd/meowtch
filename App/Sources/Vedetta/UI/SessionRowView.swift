@@ -294,11 +294,16 @@ struct SessionRowView: View {
             if !isCompact {
                 Chip(text: "VS Code")
             }
-            if isHovered && !isCompact {
-                Image(systemName: "tray")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.secondaryText)
-                    .padding(.horizontal, 3)
+            if isHovered {
+                Button {
+                    ArchiveStore.shared.archive(session.id)
+                } label: {
+                    Image(systemName: "tray")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.secondaryText)
+                        .padding(.horizontal, 3)
+                }
+                .buttonStyle(.plain)
             } else if session.state == .waitingForInput && !isCompact {
                 Circle()
                     .fill(Theme.color(for: .waitingForInput))
