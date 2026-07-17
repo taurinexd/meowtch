@@ -3,57 +3,83 @@
 **Your AI coding agents, watched from the notch.**
 
 Vedetta is a native macOS menu bar app that turns the MacBook notch into a
-control surface for AI coding agents. See every running session at a glance,
-approve permission requests without switching windows, and jump back to the
-exact terminal that asked.
+control surface for AI coding agents. See every running session at a
+glance, approve permission requests without switching windows, answer the
+agent's questions, review plans, and jump back to the exact terminal that
+asked.
 
-> *Vedetta* is Italian for "lookout" — the sentinel posted up high who spots
-> what's coming and sounds the alert.
+> *Vedetta* is Italian for "lookout" — the sentinel posted up high who
+> spots what's coming and sounds the alert.
 
-## Status
+![Collapsed bar](docs/images/collapsed.png)
 
-🚧 Early development — not yet usable. See
-[`docs/superpowers/specs/`](docs/superpowers/specs/) for the design document.
+![Expanded panel](docs/images/expanded.png)
 
-## Planned features (v1)
+## Features
 
-- **Live sessions in the notch** — running / waiting for input / needs
-  approval / completed, with real prompt titles, git branch, current tool
-  call, model name and elapsed time
-- **Approvals from the notch** — allow/deny Claude Code permission requests
-  without leaving what you're doing, with a multi-session approval queue
-- **Plan review** — full Markdown rendering before you approve
-- **Precise terminal jump** — click a session, land on the exact VS Code
-  integrated terminal that started it
-- **Agents**: Claude Code and Codex
-- **8-bit sound alerts** with custom sound pack support
-- **Usage tracking** for Claude and Codex quotas
-- **Zero config** — detected CLIs are set up automatically, with config
-  backups, drift detection and self-healing
-- **Fully local** — no cloud, no accounts, no telemetry. Nothing leaves your
-  Mac.
+- **Live sessions in the notch** — running (pixel spinner), waiting for
+  input (blinking bar), needs approval (blinking `?`), with real prompt
+  titles, session names, git branch, current tool call and elapsed time
+- **Approvals from the notch** — Claude Code permission requests are held
+  open by a blocking hook while you decide; Allow/Deny without leaving
+  what you're doing, with a multi-session queue
+- **Questions & plan review** — AskUserQuestion options rendered as
+  buttons, plans rendered as Markdown with Approve/Reject
+- **Task list on the card** — the session's live task list, rebuilt from
+  the transcript
+- **Precise VS Code jump** — click a card, land on the exact integrated
+  terminal (bundled companion extension, auto-installed)
+- **Agents**: Claude Code (hooks, real-time) and Codex CLI (rollout files)
+- **Usage strip** — 5h/7d quota with reset countdowns, harvested from the
+  statusline with zero API calls
+- **8-bit sound alerts** — synthesized in-app, custom packs via
+  `~/.vedetta/custom-sounds/`, mute toggle
+- **Session archive** — tray icon on hover hides a card persistently
+- **Zero config** — detected CLIs are set up automatically with config
+  backups; hooks are additive, idempotent, and self-neutralizing (if the
+  app is gone they exit silently and never slow Claude Code down)
+- **Fully local** — no cloud, no accounts, no telemetry
+
+## How it works
+
+Claude Code hooks invoke a tiny bundled bridge that forwards each event
+(plus the terminal identity — the hook runs inside your terminal) to the
+app over a Unix socket. Approvals ride the `PermissionRequest` hook: the
+bridge holds the connection open until you decide from the notch and
+replies with the documented `hookSpecificOutput` decision. Session titles,
+messages and task lists are enriched from the transcript JSONL files with
+bounded reads; Codex sessions are adopted from its rollout files without
+touching `config.toml`.
+
+Everything the app writes lives in `~/.vedetta/` (bridge launcher, socket,
+cache, config backups) and `~/Library/Application Support/Vedetta/`.
+"Remove Claude Code Hooks" in the menu restores your settings cleanly.
 
 ## Requirements
 
-- macOS 14+ (Apple Silicon)
-- Swift 6 toolchain to build from source (full Xcode not required)
+- macOS 14+ (Apple Silicon); a notch for the full effect, floating bar
+  otherwise
+- Swift 6 toolchain to build from source (Command Line Tools are enough —
+  full Xcode not required)
 
 ## Building
 
 ```sh
-cd App
-swift build
-swift test
-../Scripts/make-app.sh   # assembles dist/Vedetta.app
+make build   # swift build
+make test    # swift test (39 tests)
+make app     # assembles dist/Vedetta.app (bridge + VS Code extension + icon)
+make run     # build and launch
+Scripts/make-dmg.sh  # dist/Vedetta.dmg
 ```
 
 ## Acknowledgements
 
 Vedetta is an independent open-source reimplementation inspired by the
-feature set of [Vibe Island](https://vibeisland.app), a commercial app by its
-respective authors. Vedetta shares no code or assets with it and is not
-affiliated with or endorsed by the Vibe Island team. If you want a polished,
-supported product with a much broader integration matrix, go buy it.
+feature set of [Vibe Island](https://vibeisland.app), a commercial app by
+its respective authors. Vedetta shares no code or assets with it and is
+not affiliated with or endorsed by the Vibe Island team. If you want a
+polished, supported product with a much broader integration matrix (26
+agents, 20+ terminals, SSH remotes), go buy it — it's excellent.
 
 ## License
 

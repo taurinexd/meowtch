@@ -49,6 +49,13 @@ final class StatusItemController {
         muteItem.target = self
         muteItem.state = SoundEngine.shared.isMuted ? .on : .off
         menu.addItem(muteItem)
+        let onboardingItem = NSMenuItem(
+            title: "Show Onboarding",
+            action: #selector(showOnboarding),
+            keyEquivalent: ""
+        )
+        onboardingItem.target = self
+        menu.addItem(onboardingItem)
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -62,6 +69,10 @@ final class StatusItemController {
 
     @objc private func togglePanel() {
         panelController.toggleVisibility()
+    }
+
+    @objc private func showOnboarding() {
+        OnboardingController.shared.show()
     }
 
     @objc private func toggleMute(_ sender: NSMenuItem) {
