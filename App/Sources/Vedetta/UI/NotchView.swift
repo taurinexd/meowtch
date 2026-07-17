@@ -30,6 +30,8 @@ struct NotchView: View {
     private let expandedFlare: CGFloat = 14
 
     private var topFlare: CGFloat { model.isExpanded ? expandedFlare : collapsedFlare }
+    /// 1 while the cursor primes the collapsed bar (slight swell), 0 otherwise.
+    private var primeBoost: CGFloat { model.isPrimed && !model.isExpanded ? 1 : 0 }
 
     private var collapsedWidth: CGFloat {
         geometry.notchWidth + leftWing + rightWing + collapsedFlare * 2
@@ -58,12 +60,17 @@ struct NotchView: View {
                             .transition(.opacity)
                     }
                 }
-                // Content crossfades faster than the shape springs, so it
-                // settles while the container is still doing its accordion.
-                .animation(.easeOut(duration: 0.16), value: model.isExpanded)
+                // Asymmetric crossfade: on expand the content waits a beat
+                // so the panel grows first; on collapse it vanishes at once.
+                .animation(
+                    model.isExpanded
+                        ? .easeOut(duration: 0.18).delay(0.05)
+                        : .easeIn(duration: 0.10),
+                    value: model.isExpanded
+                )
             }
-            .frame(width: model.isExpanded ? expandedWidth : collapsedWidth)
-            .frame(height: model.isExpanded ? nil : collapsedHeight)
+            .frame(width: model.isExpanded ? expandedWidth : collapsedWidth + primeBoost * 16)
+            .frame(height: model.isExpanded ? nil : collapsedHeight + primeBoost * 4)
             .fixedSize(horizontal: false, vertical: true)
             .offset(x: model.isExpanded ? 0 : collapsedOffset)
             // The collapsed bar reads as part of the bezel: no shadow at all.
@@ -74,9 +81,12 @@ struct NotchView: View {
             )
             .contentShape(NotchShape(topRadius: topFlare))
             .onHover(perform: onHoverChange)
-            // Bouncy spring gives the notch its accordion overshoot: it grows
-            // slightly past the target size, then settles (Dynamic Island feel).
-            .animation(.spring(response: 0.4, dampingFraction: 0.68), value: model.isExpanded)
+            // Smooth, non-overshooting expand/collapse (critically damped);
+            // the hover "prime" below gives the slight pre-open growth.
+            .animation(.spring(response: 0.32, dampingFraction: 1), value: model.isExpanded)
+            // On hover the bar swells slightly BEFORE the full expansion,
+            // like the original's touch-feedback nudge.
+            .animation(.easeOut(duration: 0.12), value: model.isPrimed)
 
             Spacer(minLength: 0)
         }
@@ -120,7 +130,8 @@ struct NotchView: View {
 
     private func deservesFullRow(_ session: AgentSession) -> Bool {
         guard !session.isMinimized, store.terminal(for: session.id) != nil else { return false }
-        if session.state == .running || session.state == .needsApproval { return true }
+        if session.state == .running || session.state == .needsApproval
+            || session.state == .compacting { return true }
         return session.lastActivityAt.timeIntervalSinceNow > -Self.fullRowGrace
     }
 

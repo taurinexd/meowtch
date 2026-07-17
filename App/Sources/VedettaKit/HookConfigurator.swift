@@ -13,8 +13,8 @@ public enum HookConfigurator {
     public static let claudeEvents = [
         "SessionStart", "SessionEnd", "UserPromptSubmit",
         "PreToolUse", "PostToolUse", "Notification",
-        "Stop", "SubagentStart", "SubagentStop",
-        "PermissionRequest",
+        "Stop", "StopFailure", "SubagentStart", "SubagentStop",
+        "PermissionRequest", "PreCompact",
     ]
 
     /// Tool-scoped events need an explicit wildcard matcher.

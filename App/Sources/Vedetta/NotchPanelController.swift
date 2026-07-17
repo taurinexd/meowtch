@@ -168,11 +168,14 @@ final class NotchPanelController {
 
     private var isHovering = false
     private var cooldownWorkItem: DispatchWorkItem?
+    private var primeWorkItem: DispatchWorkItem?
     /// After a collapse, a brief window during which returning the cursor
     /// does not immediately re-expand — so a quick flick back into the
     /// area the panel just vacated doesn't reopen it, like the original.
     private var cooldownUntil: Date?
     private let cooldown: TimeInterval = 0.5
+    /// Hover-to-open delay, during which the bar swells slightly (prime).
+    private let primeDelay: TimeInterval = 0.15
 
     private func hoverChanged(_ hovering: Bool) {
         if pinnedExpanded { return }
@@ -181,21 +184,33 @@ final class NotchPanelController {
         cooldownWorkItem?.cancel()
 
         if hovering {
+            guard !uiModel.isExpanded else { return }
             if let until = cooldownUntil, Date() < until {
                 // In cooldown: don't reopen now. Re-check when it ends and
-                // expand only if the cursor is still there (a deliberate
-                // hover), not a quick flick-through.
+                // expand only if the cursor is REALLY on the bar. isHovering
+                // can be stale here: while the collapse animation retreats
+                // from under a stationary cursor SwiftUI emits no hover-exit,
+                // so trusting it would reopen the panel on a quick flick.
                 let remaining = until.timeIntervalSinceNow
                 let work = DispatchWorkItem { [weak self] in
-                    guard let self, self.isHovering else { return }
+                    guard let self, self.isHovering, self.cursorOverCollapsedBar() else { return }
                     self.setExpanded(true)
                 }
                 cooldownWorkItem = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: work)
             } else {
-                setExpanded(true)
+                // Prime first (slight swell), then open — like the original.
+                uiModel.isPrimed = true
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, self.isHovering else { return }
+                    self.setExpanded(true)
+                }
+                primeWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + primeDelay, execute: work)
             }
         } else {
+            primeWorkItem?.cancel()
+            uiModel.isPrimed = false
             // Small delay so the panel doesn't flicker when the pointer
             // grazes the edge.
             let workItem = DispatchWorkItem { [weak self] in
@@ -207,11 +222,30 @@ final class NotchPanelController {
     }
 
     private func setExpanded(_ expanded: Bool) {
+        uiModel.isPrimed = false
         guard uiModel.isExpanded != expanded else { return }
         uiModel.isExpanded = expanded
         if !expanded {
             cooldownUntil = Date().addingTimeInterval(cooldown)
         }
+    }
+
+    /// True when the mouse is inside the collapsed bar's rect right now —
+    /// queried directly (NSEvent) because hover state can go stale while
+    /// the collapse animation moves the shape away from a still cursor.
+    private func cursorOverCollapsedBar() -> Bool {
+        guard let screen = Self.targetScreen() else { return false }
+        let geometry = Self.notchGeometry(for: screen)
+        // Wings + flares as drawn by NotchView, with a small margin.
+        let barWidth = geometry.notchWidth + 40 + 23 + 8 + 24
+        let barHeight = geometry.barHeight + 8
+        let rect = NSRect(
+            x: screen.frame.midX - barWidth / 2,
+            y: screen.frame.maxY - barHeight,
+            width: barWidth,
+            height: barHeight
+        )
+        return rect.contains(NSEvent.mouseLocation)
     }
 }
 
@@ -219,4 +253,7 @@ final class NotchPanelController {
 @MainActor
 final class NotchUIModel: ObservableObject {
     @Published var isExpanded = false
+    /// Cursor is on the collapsed bar but the panel hasn't opened yet:
+    /// the bar swells slightly as touch-style feedback.
+    @Published var isPrimed = false
 }

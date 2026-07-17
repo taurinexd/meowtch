@@ -64,7 +64,23 @@ public enum SessionEventReducer {
 
         switch name {
         case "SessionStart":
-            session.state = .running
+            // After a compaction the session resumes: a manual /compact
+            // leaves it waiting for the user, an auto-compact happens
+            // mid-turn so the agent keeps working.
+            if session.state == .compacting {
+                session.state = session.compactTrigger == "auto" ? .running : .waitingForInput
+                session.compactingStartedAt = nil
+                session.compactTrigger = nil
+            } else {
+                session.state = .running
+            }
+
+        case "PreCompact":
+            session.state = .compacting
+            session.compactingStartedAt = date
+            session.compactTrigger = event["trigger"] as? String
+            session.currentTool = nil
+            session.currentToolDetail = nil
 
         case "UserPromptSubmit":
             session.state = .running
@@ -92,6 +108,8 @@ public enum SessionEventReducer {
             session.state = .waitingForInput
             session.currentTool = nil
             session.currentToolDetail = nil
+            session.compactingStartedAt = nil
+            session.compactTrigger = nil
             enrich(from: event, into: &session)
             // The final assistant message may not have hit the transcript
             // yet when Stop fires: re-read shortly after.
