@@ -28,6 +28,9 @@ struct SessionRowView: View {
         )
         .padding(.vertical, -8)
         .animation(.easeInOut(duration: 0.18), value: isHovered)
+        // The whole card rect must react to the cursor, not just the
+        // rendered glyphs inside it.
+        .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
 
@@ -83,20 +86,20 @@ struct SessionRowView: View {
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
 
-                    // While the agent waits, the panel shows its last words;
-                    // while it works, what the user asked plus the tool.
-                    if session.state == .running || session.state == .needsApproval {
-                        if let message = session.lastMessage {
-                            Text("You: \(message)")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Theme.secondaryText)
-                                .lineLimit(1)
-                        }
-                    } else if let reply = session.lastAssistantMessage {
+                    // Like the original: the user's last words always
+                    // visible, then the running tool while working or the
+                    // agent's reply otherwise (1 line if a widget follows).
+                    if let message = session.lastMessage {
+                        Text("You: \(message)")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    if session.state != .running, let reply = session.lastAssistantMessage {
                         Text(reply)
                             .font(.system(size: 11.5))
                             .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(3)
+                            .lineLimit(tasks != nil ? 1 : 3)
                     }
 
                     if session.state == .running, let tool = session.currentTool {

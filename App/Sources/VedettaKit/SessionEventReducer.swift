@@ -86,11 +86,16 @@ public enum SessionEventReducer {
             session.state = .waitingForInput
             session.currentTool = nil
             session.currentToolDetail = nil
+            enrich(from: event, into: &session)
+            // The final assistant message may not have hit the transcript
+            // yet when Stop fires: re-read shortly after.
+            scheduleReplyRefresh(for: sessionId, from: event, in: store)
 
         case "SessionEnd":
             session.state = .completed
             session.currentTool = nil
             session.currentToolDetail = nil
+            enrich(from: event, into: &session)
 
         case "Notification":
             let message = (event["message"] as? String)?.lowercased() ?? ""
@@ -104,7 +109,51 @@ public enum SessionEventReducer {
             break
         }
 
+        // Sessions adopted mid-flight (the app started after them) have no
+        // title yet: backfill it from the transcript.
+        if session.title.isEmpty || session.lastMessage == nil {
+            enrich(from: event, into: &session)
+        }
+
         store.upsert(session)
+    }
+
+    private static func scheduleReplyRefresh(
+        for sessionId: String,
+        from event: [String: Any],
+        in store: SessionStore
+    ) {
+        guard let path = event["transcript_path"] as? String else { return }
+        Task { @MainActor in
+            for delay in [700, 2_000] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard var session = store.sessions.first(where: { $0.id == sessionId }) else { return }
+                let peek = TranscriptPeek.read(path: path)
+                if let reply = peek.lastAssistantText, reply != session.lastAssistantMessage {
+                    session.lastAssistantMessage = reply
+                    if session.title.isEmpty, let first = peek.firstUserPrompt {
+                        session.title = first
+                    }
+                    store.upsert(session)
+                    return
+                }
+            }
+        }
+    }
+
+    /// Fills title and message lines from the transcript the hook points at.
+    private static func enrich(from event: [String: Any], into session: inout AgentSession) {
+        guard let path = event["transcript_path"] as? String else { return }
+        let peek = TranscriptPeek.read(path: path)
+        if let reply = peek.lastAssistantText {
+            session.lastAssistantMessage = reply
+        }
+        if session.title.isEmpty, let first = peek.firstUserPrompt {
+            session.title = first
+        }
+        if session.lastMessage == nil, let lastUser = peek.lastUserText {
+            session.lastMessage = lastUser
+        }
     }
 
     /// Compact one-line description of what the tool is touching,

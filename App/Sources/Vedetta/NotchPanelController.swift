@@ -122,7 +122,12 @@ final class NotchPanelController {
 
     // MARK: - Hover
 
+    /// Dev aid: with `--expanded` the panel stays pinned open regardless
+    /// of hover, so screenshots are deterministic.
+    private let pinnedExpanded = ProcessInfo.processInfo.arguments.contains("--expanded")
+
     private func hoverChanged(_ hovering: Bool) {
+        if pinnedExpanded { return }
         collapseWorkItem?.cancel()
         if hovering {
             setExpanded(true)
