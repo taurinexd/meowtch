@@ -7,13 +7,28 @@ import VedettaKit
 struct SessionRowView: View {
     let session: AgentSession
     var tasks: MockTaskList?
+    @State private var isHovered = false
 
     var body: some View {
-        if session.isMinimized {
-            compactRow
-        } else {
-            fullRow
+        Group {
+            if session.isMinimized {
+                compactRow
+            } else {
+                fullRow
+            }
         }
+        // Hover highlight like the original: a soft rounded backdrop fades
+        // in under the row the cursor is on, and out when it leaves.
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 13)
+                .fill(Color.white.opacity(0.07))
+                .padding(.horizontal, 8)
+                .opacity(isHovered ? 1 : 0)
+        )
+        .padding(.vertical, -8)
+        .animation(.easeInOut(duration: 0.18), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 
     /// Sessions whose terminal window is minimized collapse to one line.
@@ -115,7 +130,12 @@ struct SessionRowView: View {
             if !session.isMinimized {
                 Chip(text: "VS Code")
             }
-            if session.state == .waitingForInput && !session.isMinimized {
+            if isHovered && !session.isMinimized {
+                Image(systemName: "tray")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText)
+                    .padding(.horizontal, 3)
+            } else if session.state == .waitingForInput && !session.isMinimized {
                 Circle()
                     .fill(Theme.color(for: .waitingForInput))
                     .frame(width: 7, height: 7)
@@ -149,6 +169,8 @@ struct Chip: View {
 struct MockTaskList {
     var done: Int
     var inProgress: String
+    var openVisible: [String] = []
+    var open: Int = 0
     var completedVisible: [String]
 }
 
@@ -162,7 +184,7 @@ struct TasksWidget: View {
                 Text("Tasks")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.primaryText)
-                Text("(\(tasks.done) done, 1 in progress, 0 open)")
+                Text("(\(tasks.done) done, 1 in progress, \(tasks.open) open)")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
             }
@@ -172,6 +194,17 @@ struct TasksWidget: View {
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
+            }
+            ForEach(tasks.openVisible, id: \.self) { item in
+                HStack(spacing: 8) {
+                    Image(systemName: "square")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.secondaryText.opacity(0.6))
+                    Text(item)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.primaryText.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
             ForEach(tasks.completedVisible, id: \.self) { item in
                 HStack(spacing: 8) {

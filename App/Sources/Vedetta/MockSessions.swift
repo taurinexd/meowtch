@@ -9,8 +9,13 @@ import VedettaKit
 enum MockSessions {
     static let tasks: [String: MockTaskList] = [
         "mock-vedetta": MockTaskList(
-            done: 7,
-            inProgress: "M1: skeleton app menu bar + pannello notch con dati finti",
+            done: 8,
+            inProgress: "M2.3 — HookConfigurator: merge/backup/drift/uninstall (TDD)",
+            openVisible: [
+                "M2.1 — EventServer: socket Unix in-app (JSON line protocol)",
+                "M2.2 — vedetta-bridge: helper eseguibile + launcher zsh",
+            ],
+            open: 10,
             completedVisible: [
                 "Esplorare contesto progetto (repo GitHub + sito vibeisland.app)",
                 "Fare domande di chiarimento per ridimensionare lo scope",
