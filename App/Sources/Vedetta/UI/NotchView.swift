@@ -126,22 +126,10 @@ struct NotchView: View {
         visibleSessions.filter { !deservesFullRow($0) }
     }
 
-    /// Collapsed-bar priority, measured on the original: a pending
-    /// approval wins, then WORKING (blue) beats waiting (green) — one
-    /// busy agent turns the notch blue even if others idle.
+    /// Sprite/indicator state for the collapsed bar: the highest-priority
+    /// state across visible sessions (approval > working > waiting).
     private var collapsedTopState: SessionState? {
-        visibleSessions.map(\.state).min { lhs, rhs in
-            collapsedRank(lhs) < collapsedRank(rhs)
-        }
-    }
-
-    private func collapsedRank(_ state: SessionState) -> Int {
-        switch state {
-        case .needsApproval: 0
-        case .running: 1
-        case .waitingForInput: 2
-        case .completed: 3
-        }
+        visibleSessions.map(\.state).min()
     }
 
     /// Color of the sprite: the most urgent state across sessions.

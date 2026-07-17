@@ -39,13 +39,14 @@ struct SessionStoreTests {
         #expect(store.sessions.first?.title == "renamed")
     }
 
-    @Test func sortingPutsApprovalsFirstThenWaitingThenRunningThenCompleted() {
+    @Test func sortingPutsApprovalsFirstThenRunningThenWaitingThenCompleted() {
         let store = SessionStore()
         store.upsert(makeSession(id: "done", state: .completed))
-        store.upsert(makeSession(id: "run", state: .running))
-        store.upsert(makeSession(id: "appr", state: .needsApproval))
         store.upsert(makeSession(id: "wait", state: .waitingForInput))
-        #expect(store.sessions.map(\.id) == ["appr", "wait", "run", "done"])
+        store.upsert(makeSession(id: "appr", state: .needsApproval))
+        store.upsert(makeSession(id: "run", state: .running))
+        // Working (blue) ranks above waiting (green), like the original.
+        #expect(store.sessions.map(\.id) == ["appr", "run", "wait", "done"])
     }
 
     @Test func sortingBreaksTiesByMostRecentActivity() {
