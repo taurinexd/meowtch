@@ -103,9 +103,17 @@ final class NotchPanelController {
     /// How long the peek stays open without interaction (tuned live
     /// against the original: 6s read as one second too long).
     private let peekDuration: TimeInterval = 5
+    /// A session won't re-peek within this window: during live work every
+    /// turn end fires a Stop, and popping the notch open at each one reads
+    /// as the panel expanding on its own (the original peeks occasionally,
+    /// not at every turn).
+    private let peekThrottle: TimeInterval = 120
+    private var lastPeekAt: [String: Date] = [:]
 
     private func maybePeek(sessionId: String) {
         guard !pinnedExpanded, !uiModel.isExpanded, !isHovering else { return }
+        if let last = lastPeekAt[sessionId],
+           Date().timeIntervalSince(last) < peekThrottle { return }
         // Only when the user is elsewhere: a Stop in the frontmost
         // terminal needs no notification.
         let terminal = store.terminal(for: sessionId)
@@ -113,6 +121,7 @@ final class NotchPanelController {
            NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleId {
             return
         }
+        lastPeekAt[sessionId] = Date()
         uiModel.peekSessionId = sessionId
         panel.orderFrontRegardless()
         setExpanded(true)
