@@ -14,7 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MockSessions.seed(into: store)
         } else {
             TerminalPersistence.load(into: store)
-            SessionBootstrap.adoptRecentSessions(into: store)
+            if !VIMapImport.adopt(into: store) {
+                SessionBootstrap.adoptRecentSessions(into: store)
+            }
             SessionBootstrap.adoptCodexSessions(into: store)
             JumpService.installVSCodeExtension()
             UsageModel.shared.start()

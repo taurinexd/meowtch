@@ -87,8 +87,8 @@ struct NotchView: View {
                 StateIndicator(state: topState, scale: 0.75)
             }
             Spacer()
-            if !store.sessions.isEmpty {
-                Text("\(store.sessions.count)")
+            if !visibleSessions.isEmpty {
+                Text("\(visibleSessions.count)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.primaryText)
                     .padding(.trailing, collapsedFlare + 9)

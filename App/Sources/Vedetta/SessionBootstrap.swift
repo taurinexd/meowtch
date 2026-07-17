@@ -17,6 +17,11 @@ enum SessionBootstrap {
     @MainActor private static var scannedPaths: [String: String] = [:]
 
     @MainActor
+    static func registerScannedPath(_ path: String, for id: String) {
+        scannedPaths[id] = path
+    }
+
+    @MainActor
     static func adoptRecentSessions(into store: SessionStore) {
         let projectsDir = NSHomeDirectory() + "/.claude/projects"
         let fm = FileManager.default

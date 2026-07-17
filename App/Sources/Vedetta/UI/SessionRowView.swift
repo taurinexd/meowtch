@@ -110,10 +110,13 @@ struct SessionRowView: View {
                             .lineLimit(1)
                     }
                     if session.state != .running, let reply = session.lastAssistantMessage {
+                        // With the You: line above, the reply gets one line;
+                        // alone it can breathe up to three (both measured
+                        // on the original).
                         Text(reply)
                             .font(.system(size: 11.5))
                             .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(session.tasks?.isEmpty == false ? 1 : 3)
+                            .lineLimit(session.lastMessage != nil ? 1 : 3)
                     }
 
                     if session.state == .running, let tool = session.currentTool {
@@ -137,7 +140,10 @@ struct SessionRowView: View {
                     .padding(.top, 10)
             }
 
-            if let tasks = session.tasks, !tasks.isEmpty {
+            // The widget earns its space only while there is work left;
+            // an all-done list disappears, like the original.
+            if let tasks = session.tasks,
+               !tasks.inProgress.isEmpty || !tasks.open.isEmpty {
                 TasksWidget(tasks: tasks)
                     .padding(.top, 16)
             }
@@ -291,7 +297,9 @@ struct SessionRowView: View {
                 Chip(text: "⎇ \(branch)")
             }
             Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
-            if !isCompact {
+            // The host chip follows the terminal, not the row style: compact
+            // rows with a known window still show it, like the original.
+            if terminal?.termProgram == "vscode" || terminal?.bundleIdentifier == "com.microsoft.VSCode" {
                 Chip(text: "VS Code")
             }
             if isHovered {

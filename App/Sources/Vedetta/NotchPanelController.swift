@@ -93,8 +93,36 @@ final class NotchPanelController {
 
     // MARK: - Screen & geometry
 
+    /// Preference: keep the panel on an external display (floating bar)
+    /// instead of the notch screen — handy when comparing with another
+    /// notch app, or when the external is the main working display.
+    static var preferExternalDisplay: Bool {
+        get { UserDefaults.standard.bool(forKey: "panelDisplayExternal") }
+        set { UserDefaults.standard.set(newValue, forKey: "panelDisplayExternal") }
+    }
+
     private static func targetScreen() -> NSScreen? {
-        NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
+        let screens = NSScreen.screens
+        if preferExternalDisplay,
+           let external = screens.first(where: { $0.safeAreaInsets.top == 0 }) {
+            return external
+        }
+        return screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
+    }
+
+    /// Re-evaluates the target screen and geometry (display toggle).
+    func relocate() {
+        let rootView = NotchView(
+            store: store,
+            model: uiModel,
+            geometry: Self.notchGeometry(for: Self.targetScreen()),
+            onHoverChange: { [weak self] hovering in
+                self?.hoverChanged(hovering)
+            }
+        )
+        (panel.contentView as? NSHostingView<NotchView>)?.rootView = rootView
+        positionWindow()
+        panel.orderFrontRegardless()
     }
 
     private static func notchGeometry(for screen: NSScreen?) -> NotchGeometry {
