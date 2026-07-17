@@ -23,61 +23,82 @@ enum JumpService {
 
         if let bundleId,
            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
-            raise(app: app, trace: &trace)
+            raise(app: app, directoryName: session.directoryName, trace: &trace)
         } else {
             trace.append("app-not-running")
         }
 
         // Then the companion extension focuses the exact integrated
-        // terminal inside the now-frontmost VS Code.
+        // terminal. The URI is delivered to the FOCUSED window's extension
+        // host, and the extension only sees its own window's terminals:
+        // give the raise a beat so it lands in the session's window.
         if isVSCode, let pid = terminal.pid,
            let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)") {
-            NSWorkspace.shared.open(url)
-            trace.append("uri-opened")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSWorkspace.shared.open(url)
+            }
+            trace.append("uri-scheduled")
         }
     }
 
-    /// Brings the app to the front. Plain activate() from a background,
-    /// never-active caller is IGNORED by cooperative activation on modern
-    /// macOS: the reliable road is Accessibility (AXRaise + frontmost),
-    /// the same reason the original requires that permission. Restores
-    /// minimized windows when none is visible (best effort: without a
-    /// tracked windowId the exact window is the extension's job).
-    private static func raise(app: NSRunningApplication, trace: inout [String]) {
-        if AXIsProcessTrusted() {
-            let axApp = AXUIElementCreateApplication(app.processIdentifier)
-            var windowsRef: CFTypeRef?
-            let err = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
-            let windows = (windowsRef as? [AXUIElement]) ?? []
-            trace.append("axWindows=\(err == .success ? "\(windows.count)" : "err\(err.rawValue)")")
-
-            var target: AXUIElement?
-            var minimized: [AXUIElement] = []
-            for window in windows {
-                var value: CFTypeRef?
-                if AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success,
-                   (value as? Bool) == true {
-                    minimized.append(window)
-                } else if target == nil {
-                    target = window
-                }
-            }
-            if target == nil, !minimized.isEmpty {
-                for window in minimized {
-                    AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-                }
-                target = minimized.first
-                trace.append("restored=\(minimized.count)")
-            }
-            if let target {
-                AXUIElementPerformAction(target, kAXRaiseAction as CFString)
-            }
-            let front = AXUIElementSetAttributeValue(axApp, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
-            trace.append("axFront=\(front.rawValue)")
-        } else {
+    /// Brings the session's window to the front. Plain activate() from a
+    /// background, never-active caller is IGNORED by cooperative
+    /// activation on modern macOS: the reliable road is Accessibility
+    /// (AXRaise + frontmost), the same reason the original requires that
+    /// permission. The right window is matched by title — VS Code titles
+    /// carry the folder name ("file — folder") — and gets restored when
+    /// minimized, even while other windows stay visible.
+    private static func raise(app: NSRunningApplication, directoryName: String, trace: inout [String]) {
+        guard AXIsProcessTrusted() else {
             trace.append("ax-untrusted")
+            app.activate()
+            return
         }
-        app.activate(options: [.activateAllWindows])
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var windowsRef: CFTypeRef?
+        let err = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+        let windows = (windowsRef as? [AXUIElement]) ?? []
+        trace.append("axWindows=\(err == .success ? "\(windows.count)" : "err\(err.rawValue)")")
+
+        func title(_ window: AXUIElement) -> String {
+            var value: CFTypeRef?
+            AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &value)
+            return (value as? String) ?? ""
+        }
+        func isMinimized(_ window: AXUIElement) -> Bool {
+            var value: CFTypeRef?
+            return AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success
+                && (value as? Bool) == true
+        }
+
+        // Exact title segment first ("vedetta" must not grab the
+        // "vedetta-wt-topic" window), contains as fallback.
+        let name = directoryName.lowercased()
+        var target: AXUIElement?
+        if !name.isEmpty {
+            target = windows.first { window in
+                title(window).lowercased()
+                    .components(separatedBy: " — ")
+                    .contains { $0 == name }
+            } ?? windows.first { title($0).lowercased().contains(name) }
+        }
+        if let target {
+            trace.append("matched=\(title(target).prefix(40))")
+        } else {
+            target = windows.first { !isMinimized($0) } ?? windows.first
+            trace.append("fallback")
+        }
+
+        if let target {
+            if isMinimized(target) {
+                AXUIElementSetAttributeValue(target, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+                trace.append("restored")
+            }
+            AXUIElementPerformAction(target, kAXRaiseAction as CFString)
+        }
+        let front = AXUIElementSetAttributeValue(axApp, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        trace.append("axFront=\(front.rawValue)")
+        app.activate()
     }
 
     private static func log(_ line: String) {
