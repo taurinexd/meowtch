@@ -35,6 +35,13 @@ enum EventDispatcher {
         }
 
         SessionEventReducer.apply(envelope, to: store)
+
+        // Names and task lists live anywhere in the transcript: refresh
+        // them in the background at turn boundaries.
+        if ["Stop", "UserPromptSubmit", "SessionStart"].contains(name),
+           let path = event["transcript_path"] as? String {
+            FullScanScheduler.schedule(path: path, sessionId: sessionId)
+        }
         return empty
     }
 

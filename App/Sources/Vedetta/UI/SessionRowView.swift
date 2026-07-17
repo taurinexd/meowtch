@@ -6,7 +6,6 @@ import VedettaKit
 /// optionally followed by the inset tasks widget.
 struct SessionRowView: View {
     let session: AgentSession
-    var tasks: MockTaskList?
     /// Compact = the session has no visible terminal window to jump to
     /// (minimized, or adopted from transcripts with no live terminal).
     var isCompact = false
@@ -65,15 +64,22 @@ struct SessionRowView: View {
     private var fullRow: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 0) {
-                HStack(alignment: .center, spacing: 10) {
+                HStack(alignment: .center, spacing: 6) {
                     PixelSprite(
                         pattern: PixelSprite.lookout,
                         color: Theme.color(for: session.state),
                         pixelSize: 2.2
                     )
+                    if session.subagentCount > 0 {
+                        PixelSprite(
+                            pattern: PixelSprite.lookout,
+                            color: Theme.color(for: session.state).opacity(0.8),
+                            pixelSize: 1.4
+                        )
+                    }
                     StateIndicator(state: session.state)
                 }
-                .frame(width: 46, alignment: .leading)
+                .frame(minWidth: 46, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -103,7 +109,7 @@ struct SessionRowView: View {
                         Text(reply)
                             .font(.system(size: 11.5))
                             .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(tasks != nil ? 1 : 3)
+                            .lineLimit(session.tasks?.isEmpty == false ? 1 : 3)
                     }
 
                     if session.state == .running, let tool = session.currentTool {
@@ -127,7 +133,7 @@ struct SessionRowView: View {
                     .padding(.top, 10)
             }
 
-            if let tasks {
+            if let tasks = session.tasks, !tasks.isEmpty {
                 TasksWidget(tasks: tasks)
                     .padding(.top, 16)
             }
@@ -181,6 +187,9 @@ struct SessionRowView: View {
 
     private var chips: some View {
         HStack(spacing: 5) {
+            if let branch = session.gitBranch, branch != "main", branch != "master", !isCompact {
+                Chip(text: "⎇ \(branch)")
+            }
             Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
             if !isCompact {
                 Chip(text: "VS Code")
@@ -220,18 +229,13 @@ struct Chip: View {
     }
 }
 
-/// Mock of the session task list until real transcript data arrives (M4).
-struct MockTaskList {
-    var done: Int
-    var inProgress: String
-    var openVisible: [String] = []
-    var open: Int = 0
-    var completedVisible: [String]
-}
-
-/// Inset "Tasks" widget mirroring the original's anatomy.
+/// Inset "Tasks" widget mirroring the original's anatomy: in-progress
+/// items with a blue dot, open items with empty checkboxes (capped),
+/// the first completed ones struck through, the rest as a counter.
 struct TasksWidget: View {
-    let tasks: MockTaskList
+    let tasks: SessionTasks
+    private let openCap = 5
+    private let doneCap = 2
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -239,44 +243,48 @@ struct TasksWidget: View {
                 Text("Tasks")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.primaryText)
-                Text("(\(tasks.done) done, 1 in progress, \(tasks.open) open)")
+                Text("(\(tasks.done.count) done, \(tasks.inProgress.count) in progress, \(tasks.open.count) open)")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
             }
-            HStack(spacing: 8) {
-                Circle().fill(Theme.toolBlue).frame(width: 7, height: 7)
-                Text(tasks.inProgress)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
+            ForEach(tasks.inProgress, id: \.id) { item in
+                HStack(spacing: 8) {
+                    Circle().fill(Theme.toolBlue).frame(width: 7, height: 7)
+                    Text(item.subject)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.primaryText)
+                        .lineLimit(1)
+                }
             }
-            ForEach(tasks.openVisible, id: \.self) { item in
+            ForEach(tasks.open.prefix(openCap), id: \.id) { item in
                 HStack(spacing: 8) {
                     Image(systemName: "square")
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.secondaryText.opacity(0.6))
-                    Text(item)
+                    Text(item.subject)
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.primaryText.opacity(0.85))
                         .lineLimit(1)
                 }
             }
-            ForEach(tasks.completedVisible, id: \.self) { item in
+            ForEach(tasks.done.prefix(doneCap), id: \.id) { item in
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.square.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.secondaryText.opacity(0.6))
-                    Text(item)
+                    Text(item.subject)
                         .font(.system(size: 11.5))
                         .strikethrough()
                         .foregroundStyle(Theme.secondaryText)
                         .lineLimit(1)
                 }
             }
-            Text("… +\(max(tasks.done - tasks.completedVisible.count, 0)) completed")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.secondaryText.opacity(0.7))
-                .padding(.leading, 18)
+            if tasks.done.count > doneCap {
+                Text("… +\(tasks.done.count - doneCap) completed")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.secondaryText.opacity(0.7))
+                    .padding(.leading, 18)
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)

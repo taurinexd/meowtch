@@ -127,7 +127,7 @@ struct NotchView: View {
         VStack(alignment: .leading, spacing: 20) {
             topBar
             ForEach(fullSessions) { session in
-                SessionRowView(session: session, tasks: MockSessions.tasks[session.id])
+                SessionRowView(session: session)
             }
             ForEach(compactSessions) { session in
                 SessionRowView(session: session, isCompact: true)

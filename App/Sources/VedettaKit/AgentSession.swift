@@ -43,6 +43,10 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     /// True when the terminal window that hosts the session is minimized:
     /// the panel renders it as a compact single line at the bottom.
     public var isMinimized: Bool
+    /// The session's task list, rebuilt from the transcript.
+    public var tasks: SessionTasks?
+    /// Live subagents spawned by the session.
+    public var subagentCount: Int
 
     public init(
         id: String,
@@ -58,7 +62,9 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         state: SessionState,
         startedAt: Date,
         lastActivityAt: Date,
-        isMinimized: Bool = false
+        isMinimized: Bool = false,
+        tasks: SessionTasks? = nil,
+        subagentCount: Int = 0
     ) {
         self.id = id
         self.agent = agent
@@ -74,6 +80,8 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt
         self.isMinimized = isMinimized
+        self.tasks = tasks
+        self.subagentCount = subagentCount
     }
 
     /// Last path component of the working directory, used as the card title prefix.
