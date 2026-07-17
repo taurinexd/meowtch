@@ -27,7 +27,7 @@ struct SessionRowView: View {
                 + Text(" · ").foregroundStyle(Theme.secondaryText)
                 + Text(session.title).fontWeight(.bold)
             )
-            .font(.system(size: 13.5))
+            .font(.system(size: 12))
             .foregroundStyle(Theme.secondaryText)
             .lineLimit(1)
             Spacer(minLength: 8)
@@ -53,7 +53,7 @@ struct SessionRowView: View {
                 }
                 .frame(width: 46, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(session.directoryName)
                             .fontWeight(.bold)
@@ -64,7 +64,7 @@ struct SessionRowView: View {
                         Spacer(minLength: 8)
                         chips
                     }
-                    .font(.system(size: 13.5))
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
 
@@ -73,13 +73,13 @@ struct SessionRowView: View {
                     if session.state == .running || session.state == .needsApproval {
                         if let message = session.lastMessage {
                             Text("You: \(message)")
-                                .font(.system(size: 12.5))
+                                .font(.system(size: 11.5))
                                 .foregroundStyle(Theme.secondaryText)
                                 .lineLimit(1)
                         }
                     } else if let reply = session.lastAssistantMessage {
                         Text(reply)
-                            .font(.system(size: 12.5))
+                            .font(.system(size: 11.5))
                             .foregroundStyle(Theme.secondaryText)
                             .lineLimit(3)
                     }
@@ -95,7 +95,7 @@ struct SessionRowView: View {
                                     .lineLimit(1)
                             }
                         }
-                        .font(.system(size: 12.5))
+                        .font(.system(size: 11.5))
                     }
                 }
             }
@@ -136,7 +136,7 @@ struct Chip: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
@@ -160,16 +160,16 @@ struct TasksWidget: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text("Tasks")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.primaryText)
                 Text("(\(tasks.done) done, 1 in progress, 0 open)")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
             }
             HStack(spacing: 8) {
                 Circle().fill(Theme.toolBlue).frame(width: 7, height: 7)
                 Text(tasks.inProgress)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: 11.5))
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
             }
@@ -179,14 +179,14 @@ struct TasksWidget: View {
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.secondaryText.opacity(0.6))
                     Text(item)
-                        .font(.system(size: 12.5))
+                        .font(.system(size: 11.5))
                         .strikethrough()
                         .foregroundStyle(Theme.secondaryText)
                         .lineLimit(1)
                 }
             }
             Text("… +\(max(tasks.done - tasks.completedVisible.count, 0)) completed")
-                .font(.system(size: 12))
+                .font(.system(size: 11))
                 .foregroundStyle(Theme.secondaryText.opacity(0.7))
                 .padding(.leading, 18)
         }
