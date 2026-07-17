@@ -41,12 +41,28 @@ async function focusTerminalFor(pid) {
 	});
 }
 
+// The URI lands in ONE window (the focused one); this extension instance
+// only sees its own window's terminals. Vedetta raises the session's
+// window first and sends its workspace path along — an instance whose
+// workspace doesn't match stays silent instead of doing nothing useful.
+function ownsWorkspace(dir) {
+	const trim = (value) => String(value || "").replace(/\/+$/, "");
+	const target = trim(dir);
+	if (!target) return true;
+	const folders = vscode.workspace.workspaceFolders || [];
+	return folders.some((folder) => {
+		const base = trim(folder.uri.fsPath);
+		return base === target || target.startsWith(base + "/");
+	});
+}
+
 function activate(context) {
 	context.subscriptions.push(
 		vscode.window.registerUriHandler({
 			handleUri(uri) {
 				if (uri.path !== "/focus") return;
 				const params = new URLSearchParams(uri.query);
+				if (!ownsWorkspace(params.get("workspace"))) return;
 				const pid = Number(params.get("pid"));
 				if (pid) focusTerminalFor(pid);
 			},

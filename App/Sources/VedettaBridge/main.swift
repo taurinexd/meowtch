@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 // vedetta-bridge — invoked by agent CLI hooks. Reads the hook payload from
@@ -34,7 +35,46 @@ func terminalIdentity() -> [String: Any] {
     }
     info["pid"] = Int(getpid())
     info["ppid"] = Int(getppid())
+    if let windowId = frontWindowIdOfOwningApp() {
+        info["windowId"] = windowId
+    }
     return info
+}
+
+/// Parent pid via sysctl — the hook environment has no /proc.
+func parentPid(of pid: pid_t) -> pid_t? {
+    var info = kinfo_proc()
+    var size = MemoryLayout<kinfo_proc>.size
+    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+    guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+    return info.kp_eproc.e_ppid
+}
+
+/// The window that hosts this session: our process ancestry leads to the
+/// terminal app (VS Code's shells hang off its helper processes), and its
+/// frontmost on-screen window at hook time is where the user is typing —
+/// the app trusts this only on user-driven events. Nil when there is no
+/// window-server access (SSH) or no window is on screen.
+func frontWindowIdOfOwningApp() -> Int? {
+    var chain = Set<pid_t>()
+    var current = getpid()
+    for _ in 0..<30 {
+        chain.insert(current)
+        guard let parent = parentPid(of: current), parent > 1 else { break }
+        current = parent
+    }
+    guard let list = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+    ) as? [[String: Any]] else { return nil }
+    // Front-to-back: the first normal-layer window owned by an ancestor.
+    for entry in list {
+        guard (entry[kCGWindowLayer as String] as? Int) == 0,
+              let owner = entry[kCGWindowOwnerPID as String] as? Int,
+              chain.contains(pid_t(owner)),
+              let id = entry[kCGWindowNumber as String] as? Int else { continue }
+        return id
+    }
+    return nil
 }
 
 // 1. Read the hook payload.
