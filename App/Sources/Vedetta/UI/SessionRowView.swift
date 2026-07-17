@@ -109,16 +109,9 @@ struct SessionRowView: View {
                             .foregroundStyle(Theme.secondaryText)
                             .lineLimit(1)
                     }
-                    if session.state != .running, let reply = session.lastAssistantMessage {
-                        // With the You: line above, the reply gets one line;
-                        // alone it can breathe up to three (both measured
-                        // on the original).
-                        Text(reply)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(session.lastMessage != nil ? 1 : 3)
-                    }
-
+                    // While working, show the running tool; otherwise (or
+                    // when the tool is unknown) the agent's last reply — so
+                    // there is always a second line under You:, like VI.
                     if session.state == .running, let tool = session.currentTool {
                         HStack(spacing: 6) {
                             Text(tool)
@@ -131,6 +124,11 @@ struct SessionRowView: View {
                             }
                         }
                         .font(.system(size: 11.5))
+                    } else if let reply = session.lastAssistantMessage {
+                        Text(reply)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(session.lastMessage != nil ? 1 : 3)
                     }
                 }
             }
@@ -302,24 +300,34 @@ struct SessionRowView: View {
             if terminal?.termProgram == "vscode" || terminal?.bundleIdentifier == "com.microsoft.VSCode" {
                 Chip(text: "VS Code")
             }
-            if isHovered {
-                Button {
-                    ArchiveStore.shared.archive(session.id)
-                } label: {
-                    Image(systemName: "tray")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.secondaryText)
-                        .padding(.horizontal, 3)
+            trailingSlot
+        }
+    }
+
+    /// Trailing element (age / status dot / archive on hover). A hidden age
+    /// chip reserves the width so swapping content on hover never shifts the
+    /// chips to its left — the original keeps this space fixed.
+    private var trailingSlot: some View {
+        ZStack(alignment: .trailing) {
+            Chip(text: session.lastActivityAt.vedettaAge).hidden()
+            Group {
+                if isHovered {
+                    Button {
+                        ArchiveStore.shared.archive(session.id)
+                    } label: {
+                        Image(systemName: "tray")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    .buttonStyle(.plain)
+                } else if session.state == .waitingForInput && !isCompact {
+                    Circle()
+                        .fill(Theme.color(for: .waitingForInput))
+                        .frame(width: 7, height: 7)
+                        .padding(.trailing, 6)
+                } else {
+                    Chip(text: session.lastActivityAt.vedettaAge)
                 }
-                .buttonStyle(.plain)
-            } else if session.state == .waitingForInput && !isCompact {
-                Circle()
-                    .fill(Theme.color(for: .waitingForInput))
-                    .frame(width: 7, height: 7)
-                    .padding(.leading, 4)
-                    .padding(.trailing, 11)
-            } else {
-                Chip(text: session.lastActivityAt.vedettaAge)
             }
         }
     }

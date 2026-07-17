@@ -65,7 +65,10 @@ struct SessionEventReducerTests {
         )
         #expect(store.sessions.first?.currentTool == "Bash")
         #expect(store.sessions.first?.currentToolDetail == "swift test")
+        // The tool persists between calls (cleared only on Stop), like VI.
         SessionEventReducer.apply(envelope("PostToolUse", extra: ["tool_name": "Bash"]), to: store)
+        #expect(store.sessions.first?.currentTool == "Bash")
+        SessionEventReducer.apply(envelope("Stop"), to: store)
         #expect(store.sessions.first?.currentTool == nil)
     }
 

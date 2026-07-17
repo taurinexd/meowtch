@@ -84,8 +84,9 @@ public enum SessionEventReducer {
             session.currentToolDetail = toolDetail(from: event["tool_input"] as? [String: Any])
 
         case "PostToolUse":
-            session.currentTool = nil
-            session.currentToolDetail = nil
+            // Keep the last tool shown between calls, like the original —
+            // it's cleared only when the turn ends (Stop).
+            break
 
         case "Stop", "StopFailure":
             session.state = .waitingForInput
