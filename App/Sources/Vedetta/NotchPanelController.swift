@@ -66,6 +66,19 @@ final class NotchPanelController {
                 self.show()
             }
         }
+
+        // A card jump raises the target window: collapse right away so the
+        // panel gets out of the way, like the original.
+        NotificationCenter.default.addObserver(
+            forName: .vedettaDidJump,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.pinnedExpanded else { return }
+                self.setExpanded(false)
+            }
+        }
     }
 
     /// True while the user has explicitly hidden the panel from the menu.
@@ -175,7 +188,8 @@ final class NotchPanelController {
     private var cooldownUntil: Date?
     private let cooldown: TimeInterval = 0.5
     /// Hover-to-open delay, during which the bar swells slightly (prime).
-    private let primeDelay: TimeInterval = 0.15
+    /// ~3 frames on the original's recording before the expansion starts.
+    private let primeDelay: TimeInterval = 0.10
 
     private func hoverChanged(_ hovering: Bool) {
         if pinnedExpanded { return }
@@ -247,6 +261,11 @@ final class NotchPanelController {
         )
         return rect.contains(NSEvent.mouseLocation)
     }
+}
+
+extension Notification.Name {
+    /// Posted by a session card when the user jumps to its terminal.
+    static let vedettaDidJump = Notification.Name("vedettaDidJump")
 }
 
 /// Observable UI state shared between the controller and the SwiftUI views.

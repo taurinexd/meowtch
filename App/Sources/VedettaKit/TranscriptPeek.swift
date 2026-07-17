@@ -27,6 +27,10 @@ public struct TranscriptPeek: Sendable {
     /// "last activity", unlike the file mtime which background writes
     /// (repeated ai-title/agent-name entries) keep artificially fresh.
     public var lastActivity: Date?
+    /// Claude's "recap" (`away_summary` system entries), generated after a
+    /// turn while the user is away. Shown in place of the message lines,
+    /// like the original; any newer user message invalidates it.
+    public var awaySummary: String?
 
     /// Parses transcript JSONL content. Malformed lines are skipped.
     public static func parse(_ data: Data) -> TranscriptPeek {
@@ -40,6 +44,13 @@ public struct TranscriptPeek: Sendable {
             if let title = (entry["aiTitle"] as? String) ?? (entry["agentName"] as? String),
                !title.isEmpty {
                 peek.aiTitle = title
+            }
+
+            // The recap is a bare system entry (content string, no message).
+            if type == "system", entry["subtype"] as? String == "away_summary",
+               entry["isSidechain"] as? Bool != true,
+               let content = entry["content"] as? String, !content.isEmpty {
+                peek.awaySummary = content
             }
 
             guard let message = entry["message"] as? [String: Any] else { continue }
@@ -65,6 +76,8 @@ public struct TranscriptPeek: Sendable {
                 guard !text.hasPrefix("<") else { continue }
                 if peek.firstUserPrompt == nil { peek.firstUserPrompt = text }
                 peek.lastUserText = text
+                // A real user message outdates any earlier recap.
+                peek.awaySummary = nil
             case "assistant":
                 peek.lastAssistantText = text
             default:
@@ -124,6 +137,8 @@ public struct TranscriptPeek: Sendable {
         merged.lastUserText = tailPeek.lastUserText
         merged.lastAssistantText = tailPeek.lastAssistantText
         merged.lastActivity = tailPeek.lastActivity ?? headPeek.lastActivity
+        // Tail only: a recap buried in the head predates the tail's lines.
+        merged.awaySummary = tailPeek.awaySummary
 
         // Renames outside these windows are picked up by the async
         // TranscriptFullScan — never a synchronous full read here.

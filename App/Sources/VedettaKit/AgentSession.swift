@@ -41,6 +41,9 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var currentToolDetail: String?
     public var lastMessage: String?
     public var lastAssistantMessage: String?
+    /// Claude's away-recap: when present it replaces the You:/reply lines
+    /// on the card, like the original. Cleared by any new user prompt.
+    public var recap: String?
     public var state: SessionState
     public var startedAt: Date
     public var lastActivityAt: Date
@@ -68,6 +71,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         currentToolDetail: String? = nil,
         lastMessage: String? = nil,
         lastAssistantMessage: String? = nil,
+        recap: String? = nil,
         state: SessionState,
         startedAt: Date,
         lastActivityAt: Date,
@@ -85,6 +89,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.currentToolDetail = currentToolDetail
         self.lastMessage = lastMessage
         self.lastAssistantMessage = lastAssistantMessage
+        self.recap = recap
         self.state = state
         self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt

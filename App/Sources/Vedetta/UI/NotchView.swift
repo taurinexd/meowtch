@@ -51,27 +51,44 @@ struct NotchView: View {
                 )
                 .fill(.black)
 
-                Group {
-                    if model.isExpanded {
-                        expandedContent
-                            .transition(.opacity)
-                    } else {
-                        collapsedContent
-                            .transition(.opacity)
-                    }
-                }
-                // Asymmetric crossfade: on expand the content waits a beat
-                // so the panel grows first; on collapse it vanishes at once.
-                .animation(
-                    model.isExpanded
-                        ? .easeOut(duration: 0.18).delay(0.05)
-                        : .easeIn(duration: 0.10),
-                    value: model.isExpanded
-                )
+                // Both contents stay mounted: the original does not fade the
+                // expanded content on collapse — it stays put and the
+                // shrinking panel clips it away (measured frame-by-frame on
+                // a recording), with only a late fade near the end.
+                expandedContent
+                    .opacity(model.isExpanded ? 1 : 0)
+                    .allowsHitTesting(model.isExpanded)
+                    .animation(
+                        model.isExpanded
+                            ? .easeOut(duration: 0.10)
+                            : .easeIn(duration: 0.15).delay(0.30),
+                        value: model.isExpanded
+                    )
+                collapsedContent
+                    .opacity(model.isExpanded ? 0 : 1)
+                    .allowsHitTesting(!model.isExpanded)
+                    .animation(
+                        model.isExpanded
+                            ? .easeOut(duration: 0.10)
+                            : .easeOut(duration: 0.15).delay(0.35),
+                        value: model.isExpanded
+                    )
             }
-            .frame(width: model.isExpanded ? expandedWidth : collapsedWidth + primeBoost * 16)
-            .frame(height: model.isExpanded ? nil : collapsedHeight + primeBoost * 4)
+            .frame(width: model.isExpanded ? expandedWidth : collapsedWidth)
+            // The prime swell is height-only: on the recording the bar grows
+            // ~2.5pt taller on hover, width unchanged. Top-anchored so the
+            // clipped content stays put while the frame shrinks.
+            .frame(
+                height: model.isExpanded ? nil : collapsedHeight + primeBoost * 2.5,
+                alignment: .top
+            )
             .fixedSize(horizontal: false, vertical: true)
+            // The animated shape swallows/reveals the content while it
+            // resizes — this is what makes the collapse "compact".
+            .clipShape(NotchShape(
+                topRadius: topFlare,
+                bottomRadius: model.isExpanded ? 26 : 14
+            ))
             .offset(x: model.isExpanded ? 0 : collapsedOffset)
             // The collapsed bar reads as part of the bezel: no shadow at all.
             .shadow(
@@ -81,11 +98,15 @@ struct NotchView: View {
             )
             .contentShape(NotchShape(topRadius: topFlare))
             .onHover(perform: onHoverChange)
-            // Smooth, non-overshooting expand/collapse (critically damped);
-            // the hover "prime" below gives the slight pre-open growth.
-            .animation(.spring(response: 0.32, dampingFraction: 1), value: model.isExpanded)
-            // On hover the bar swells slightly BEFORE the full expansion,
-            // like the original's touch-feedback nudge.
+            // Both curves measured on the recording: expand ~0.35s with a
+            // barely-there overshoot; collapse slower (~0.6s), monotonic,
+            // with a long soft settle.
+            .animation(
+                model.isExpanded
+                    ? .spring(response: 0.35, dampingFraction: 0.8)
+                    : .spring(response: 0.55, dampingFraction: 1),
+                value: model.isExpanded
+            )
             .animation(.easeOut(duration: 0.12), value: model.isPrimed)
 
             Spacer(minLength: 0)

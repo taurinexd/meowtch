@@ -89,6 +89,21 @@ struct TranscriptPeekTests {
         #expect(TranscriptPeek.parse(Data(withAgent.utf8)).aiTitle == "kamal-crm-upgrade")
     }
 
+    @Test func awaySummaryIsCapturedAndInvalidatedByNewerUserMessage() {
+        let withRecap = fixture + "\n" + """
+        {"type":"system","subtype":"away_summary","content":"Checkout sistemato: CAP validato e test verdi.","uuid":"x"}
+        """
+        let peek = TranscriptPeek.parse(Data(withRecap.utf8))
+        #expect(peek.awaySummary == "Checkout sistemato: CAP validato e test verdi.")
+
+        // A user message AFTER the summary makes it stale.
+        let replied = withRecap + "\n" + """
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"ottimo, ora i test"}]}}
+        """
+        let peekReplied = TranscriptPeek.parse(Data(replied.utf8))
+        #expect(peekReplied.awaySummary == nil)
+    }
+
     @Test func emptyDataYieldsNothing() {
         let peek = TranscriptPeek.parse(Data())
         #expect(peek.firstUserPrompt == nil)
