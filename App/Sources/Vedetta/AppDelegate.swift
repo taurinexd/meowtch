@@ -13,11 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.arguments.contains("--mock") {
             MockSessions.seed(into: store)
         } else {
+            TerminalPersistence.load(into: store)
             SessionBootstrap.adoptRecentSessions(into: store)
+            JumpService.installVSCodeExtension()
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in
                 Task { @MainActor in
                     SessionBootstrap.refreshScannedSessions(in: store)
+                    TerminalPersistence.save(from: store)
                 }
             }
             RunLoop.main.add(timer, forMode: .common)

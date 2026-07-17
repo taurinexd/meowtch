@@ -127,10 +127,10 @@ struct NotchView: View {
         VStack(alignment: .leading, spacing: 20) {
             topBar
             ForEach(fullSessions) { session in
-                SessionRowView(session: session)
+                SessionRowView(session: session, terminal: store.terminal(for: session.id))
             }
             ForEach(compactSessions) { session in
-                SessionRowView(session: session, isCompact: true)
+                SessionRowView(session: session, terminal: store.terminal(for: session.id), isCompact: true)
             }
         }
         // +4: the reference crop sits 4pt inside the real flat edges.

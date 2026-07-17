@@ -6,6 +6,7 @@ import VedettaKit
 /// optionally followed by the inset tasks widget.
 struct SessionRowView: View {
     let session: AgentSession
+    var terminal: TerminalInfo?
     /// Compact = the session has no visible terminal window to jump to
     /// (minimized, or adopted from transcripts with no live terminal).
     var isCompact = false
@@ -35,6 +36,9 @@ struct SessionRowView: View {
         // rendered glyphs inside it.
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
+        .onTapGesture {
+            JumpService.jump(to: session, terminal: terminal)
+        }
     }
 
     /// Sessions whose terminal window is minimized collapse to one line.
