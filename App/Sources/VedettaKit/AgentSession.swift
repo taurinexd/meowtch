@@ -36,9 +36,13 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var currentTool: String?
     public var currentToolDetail: String?
     public var lastMessage: String?
+    public var lastAssistantMessage: String?
     public var state: SessionState
     public var startedAt: Date
     public var lastActivityAt: Date
+    /// True when the terminal window that hosts the session is minimized:
+    /// the panel renders it as a compact single line at the bottom.
+    public var isMinimized: Bool
 
     public init(
         id: String,
@@ -50,9 +54,11 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         currentTool: String? = nil,
         currentToolDetail: String? = nil,
         lastMessage: String? = nil,
+        lastAssistantMessage: String? = nil,
         state: SessionState,
         startedAt: Date,
-        lastActivityAt: Date
+        lastActivityAt: Date,
+        isMinimized: Bool = false
     ) {
         self.id = id
         self.agent = agent
@@ -63,9 +69,11 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.currentTool = currentTool
         self.currentToolDetail = currentToolDetail
         self.lastMessage = lastMessage
+        self.lastAssistantMessage = lastAssistantMessage
         self.state = state
         self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt
+        self.isMinimized = isMinimized
     }
 
     /// Last path component of the working directory, used as the card title prefix.

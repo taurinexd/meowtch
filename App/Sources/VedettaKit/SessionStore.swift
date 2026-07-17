@@ -32,6 +32,7 @@ public final class SessionStore: ObservableObject {
 
     private func sort() {
         sessions.sort {
+            if $0.isMinimized != $1.isMinimized { return !$0.isMinimized }
             if $0.state != $1.state { return $0.state < $1.state }
             return $0.lastActivityAt > $1.lastActivityAt
         }

@@ -9,12 +9,44 @@ struct SessionRowView: View {
     var tasks: MockTaskList?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            PixelSprite(
-                pattern: PixelSprite.lookout,
-                color: Theme.color(for: session.state),
-                pixelSize: 2.5
+        if session.isMinimized {
+            compactRow
+        } else {
+            fullRow
+        }
+    }
+
+    /// Sessions whose terminal window is minimized collapse to one line.
+    private var compactRow: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Theme.secondaryText.opacity(0.5))
+                .frame(width: 8, height: 8)
+                .padding(.leading, 6)
+            (
+                Text(session.directoryName).fontWeight(.bold)
+                + Text(" · ").foregroundStyle(Theme.secondaryText)
+                + Text(session.title).fontWeight(.bold)
             )
+            .font(.system(size: 13.5))
+            .foregroundStyle(Theme.secondaryText)
+            .lineLimit(1)
+            Spacer(minLength: 8)
+            chips
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var fullRow: some View {
+        HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .center, spacing: 6) {
+                PixelSprite(
+                    pattern: PixelSprite.lookout,
+                    color: Theme.color(for: session.state),
+                    pixelSize: 2.5
+                )
+                StateIndicator(state: session.state)
+            }
             .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -32,14 +64,23 @@ struct SessionRowView: View {
                 .foregroundStyle(Theme.primaryText)
                 .lineLimit(1)
 
-                if let message = session.lastMessage {
-                    Text("You: \(message)")
+                // While the agent waits, the panel shows its last words;
+                // while it works, what the user asked plus the running tool.
+                if session.state == .running || session.state == .needsApproval {
+                    if let message = session.lastMessage {
+                        Text("You: \(message)")
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                    }
+                } else if let reply = session.lastAssistantMessage {
+                    Text(reply)
                         .font(.system(size: 12.5))
                         .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+                        .lineLimit(3)
                 }
 
-                if let tool = session.currentTool {
+                if session.state == .running, let tool = session.currentTool {
                     HStack(spacing: 6) {
                         Text(tool)
                             .fontWeight(.semibold)
@@ -65,8 +106,17 @@ struct SessionRowView: View {
     private var chips: some View {
         HStack(spacing: 5) {
             Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
-            Chip(text: "VS Code")
-            Chip(text: session.startedAt.vedettaAge)
+            if !session.isMinimized {
+                Chip(text: "VS Code")
+            }
+            if session.state == .waitingForInput && !session.isMinimized {
+                Circle()
+                    .fill(Theme.color(for: .waitingForInput))
+                    .frame(width: 8, height: 8)
+                    .padding(.horizontal, 4)
+            } else {
+                Chip(text: session.startedAt.vedettaAge)
+            }
         }
     }
 }
