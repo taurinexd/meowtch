@@ -167,6 +167,9 @@ struct NotchView: View {
                         SessionRowView(session: session, terminal: store.terminal(for: session.id), isCompact: true)
                     }
                 }
+                // Breathing room so the first/last card (and their hover
+                // highlight) aren't shaved by the ScrollView clip edges.
+                .padding(.vertical, 8)
                 .background(
                     GeometryReader { proxy in
                         Color.clear.preference(
