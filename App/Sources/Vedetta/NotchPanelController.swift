@@ -38,6 +38,18 @@ final class NotchPanelController {
         panel.contentView = hostingView
         positionWindow()
 
+        // Approvals take over the notch: expand on arrival with a chirp,
+        // settle back once the queue drains.
+        ApprovalCenter.shared.onArrival = { [weak self] in
+            SoundEngine.shared.play(.approvalRequest)
+            self?.panel.orderFrontRegardless()
+            self?.setExpanded(true)
+        }
+        ApprovalCenter.shared.onDrain = { [weak self] in
+            guard let self, !self.pinnedExpanded else { return }
+            self.setExpanded(false)
+        }
+
         // Screen/session transitions (display changes, unlocks) can knock the
         // panel off screen: reposition and re-order it whenever they happen.
         NotificationCenter.default.addObserver(
