@@ -59,6 +59,50 @@ enum SessionBootstrap {
         }
     }
 
+    // MARK: - Codex
+
+    /// Adopts recent Codex CLI sessions from the rollout files, titled via
+    /// the session index. No hooks: mtime drives running/waiting.
+    @MainActor
+    static func adoptCodexSessions(into store: SessionStore) {
+        let fm = FileManager.default
+        let home = NSHomeDirectory()
+        let root = home + "/.codex/sessions"
+        guard let enumerator = fm.enumerator(atPath: root) else { return }
+
+        let cutoff = Date().addingTimeInterval(-recencyWindow)
+        var names: [String: String] = [:]
+        if let indexData = fm.contents(atPath: home + "/.codex/session_index.jsonl") {
+            names = CodexScan.parseIndex(indexData)
+        }
+
+        while let relative = enumerator.nextObject() as? String {
+            guard relative.hasSuffix(".jsonl") else { continue }
+            let path = root + "/" + relative
+            guard let attrs = try? fm.attributesOfItem(atPath: path),
+                  let modified = attrs[.modificationDate] as? Date,
+                  modified > cutoff,
+                  let data = fm.contents(atPath: path) else { continue }
+
+            let rollout = CodexScan.parseRollout(data)
+            guard let id = rollout.sessionId,
+                  !store.sessions.contains(where: { $0.id == id }) else { continue }
+            let created = attrs[.creationDate] as? Date ?? modified
+            scannedPaths[id] = path
+            store.upsert(AgentSession(
+                id: id,
+                agent: .codex,
+                title: names[id] ?? rollout.firstUserMessage ?? "",
+                directory: rollout.cwd ?? "",
+                lastMessage: rollout.lastUserMessage,
+                lastAssistantMessage: rollout.lastAgentMessage,
+                state: modified.timeIntervalSinceNow > -activeWindow ? .running : .waitingForInput,
+                startedAt: created,
+                lastActivityAt: modified
+            ))
+        }
+    }
+
     /// Periodic pass for sessions without live hook events (started before
     /// the hooks were installed): transcript mtime drives running/waiting
     /// and the message lines are re-peeked when the file changes.
@@ -75,10 +119,18 @@ enum SessionBootstrap {
             let changed = modified > session.lastActivityAt || newState != session.state
             guard changed else { continue }
 
-            let peek = TranscriptPeek.read(path: path)
-            if let name = peek.sessionName { session.title = name }
-            if let last = peek.lastUserText { session.lastMessage = last }
-            if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
+            if session.agent == .codex {
+                if let data = fm.contents(atPath: path) {
+                    let rollout = CodexScan.parseRollout(data)
+                    if let last = rollout.lastUserMessage { session.lastMessage = last }
+                    if let reply = rollout.lastAgentMessage { session.lastAssistantMessage = reply }
+                }
+            } else {
+                let peek = TranscriptPeek.read(path: path)
+                if let name = peek.sessionName { session.title = name }
+                if let last = peek.lastUserText { session.lastMessage = last }
+                if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
+            }
             session.state = newState
             session.lastActivityAt = modified
             store.upsert(session)
