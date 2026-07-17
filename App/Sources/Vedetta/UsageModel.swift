@@ -66,7 +66,8 @@ final class UsageModel: ObservableObject {
         keyPath: String,
         into result: inout [(key: String, window: Window)]
     ) {
-        let percent = (object["utilization"] as? NSNumber)?.intValue
+        let percent = (object["used_percentage"] as? NSNumber)?.intValue
+            ?? (object["utilization"] as? NSNumber)?.intValue
             ?? (object["used_percent"] as? NSNumber)?.intValue
         if let percent {
             var resetsAt: Date?
