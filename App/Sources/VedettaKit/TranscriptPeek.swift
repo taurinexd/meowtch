@@ -7,6 +7,9 @@ public struct TranscriptPeek: Sendable {
     public var firstUserPrompt: String?
     public var lastUserText: String?
     public var lastAssistantText: String?
+    /// The name the user gave the session (Claude Code records renames as
+    /// system-reminder entries); the last rename wins.
+    public var sessionName: String?
 
     /// Parses transcript JSONL content. Malformed lines are skipped.
     public static func parse(_ data: Data) -> TranscriptPeek {
@@ -23,6 +26,13 @@ public struct TranscriptPeek: Sendable {
             guard let text = textContent(of: message), !text.isEmpty else { continue }
             switch type {
             case "user":
+                if let name = namedSession(in: text) {
+                    peek.sessionName = name
+                    continue
+                }
+                // Command invocations, caveats and reminders are transport
+                // noise, not something the user typed.
+                guard !text.hasPrefix("<") else { continue }
                 if peek.firstUserPrompt == nil { peek.firstUserPrompt = text }
                 peek.lastUserText = text
             case "assistant":
@@ -32,6 +42,17 @@ public struct TranscriptPeek: Sendable {
             }
         }
         return peek
+    }
+
+    /// Extracts NAME from `The user named this session "NAME"`.
+    private static func namedSession(in text: String) -> String? {
+        guard let range = text.range(of: #"The user named this session "([^"]+)""#, options: .regularExpression) else {
+            return nil
+        }
+        let match = text[range]
+        guard let open = match.firstIndex(of: "\""),
+              let close = match.lastIndex(of: "\""), open < close else { return nil }
+        return String(match[match.index(after: open)..<close])
     }
 
     /// Reads a bounded window of the file: head for the title, tail for
