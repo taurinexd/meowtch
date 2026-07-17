@@ -14,7 +14,7 @@ final class NotchPanelController {
     private var collapseWorkItem: DispatchWorkItem?
 
     /// Window is sized to fit the expanded panel plus its shadow.
-    private static let windowSize = NSSize(width: 540, height: 560)
+    private static let windowSize = NSSize(width: 680, height: 620)
 
     init(store: SessionStore) {
         self.store = store
@@ -31,7 +31,11 @@ final class NotchPanelController {
                 self?.hoverChanged(hovering)
             }
         )
-        panel.contentView = NSHostingView(rootView: rootView)
+        let hostingView = NSHostingView(rootView: rootView)
+        // Never let SwiftUI resize the window: the panel must stay a fixed,
+        // notch-centered rect and animate only its drawn content.
+        hostingView.sizingOptions = []
+        panel.contentView = hostingView
         positionWindow()
 
         // Screen/session transitions (display changes, unlocks) can knock the
