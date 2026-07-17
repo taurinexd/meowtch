@@ -34,6 +34,13 @@ enum AXTitleReader {
         var visited = 0
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: options.bundleIdentifier) {
             let appElement = AXUIElementCreateApplication(app.processIdentifier)
+            // Electron collapses its accessibility tree until asked:
+            // this attribute makes VS Code expose the full DOM tree.
+            AXUIElementSetAttributeValue(
+                appElement,
+                "AXManualAccessibility" as CFString,
+                kCFBooleanTrue
+            )
             guard let windows: [AXUIElement] = array(appElement, kAXWindowsAttribute) else { continue }
             for window in windows {
                 let windowTitle = string(window, kAXTitleAttribute) ?? "?"
