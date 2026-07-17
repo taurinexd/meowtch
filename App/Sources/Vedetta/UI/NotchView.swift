@@ -127,24 +127,54 @@ struct NotchView: View {
 
     // MARK: - Expanded
 
+    @State private var listContentHeight: CGFloat = 0
+
+    /// Max height for the session list before it scrolls: the screen
+    /// minus the top bar and a bottom margin.
+    private var listHeightCap: CGFloat {
+        (NSScreen.main?.frame.height ?? 900) - geometry.barHeight - 140
+    }
+
     private var expandedContent: some View {
         // All paddings below are measured from the panel's flat edges, so
         // the flare inset is applied first (values pixel-measured on the
         // original: text column x=64, sprite x=18, sections every 26pt).
         VStack(alignment: .leading, spacing: 20) {
             topBar
-            ForEach(fullSessions) { session in
-                SessionRowView(session: session, terminal: store.terminal(for: session.id))
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    ForEach(fullSessions) { session in
+                        SessionRowView(session: session, terminal: store.terminal(for: session.id))
+                    }
+                    ForEach(compactSessions) { session in
+                        SessionRowView(session: session, terminal: store.terminal(for: session.id), isCompact: true)
+                    }
+                }
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: ListHeightKey.self,
+                            value: proxy.size.height
+                        )
+                    }
+                )
             }
-            ForEach(compactSessions) { session in
-                SessionRowView(session: session, terminal: store.terminal(for: session.id), isCompact: true)
-            }
+            .onPreferenceChange(ListHeightKey.self) { listContentHeight = $0 }
+            // Hug the content until the cap, then scroll like the original.
+            .frame(height: min(max(listContentHeight, 1), listHeightCap))
         }
         // +4: the reference crop sits 4pt inside the real flat edges.
         .padding(.horizontal, expandedFlare + 4)
         .padding(.bottom, 18)
         .frame(width: expandedWidth, alignment: .top)
         .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+    }
+
+    private struct ListHeightKey: PreferenceKey {
+        static let defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
     }
 
     /// Usage summary on the left, volume + settings icons on the right.
