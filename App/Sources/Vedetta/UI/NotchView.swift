@@ -51,19 +51,23 @@ struct NotchView: View {
                 )
                 .fill(.black)
 
-                // Both contents stay mounted: the original does not fade the
-                // expanded content on collapse — it stays put and the
+                // The expanded content stays mounted through the collapse:
+                // the original does not fade it — it stays put and the
                 // shrinking panel clips it away (measured frame-by-frame on
-                // a recording), with only a late fade near the end.
-                expandedContent
-                    .opacity(model.isExpanded ? 1 : 0)
-                    .allowsHitTesting(model.isExpanded)
-                    .animation(
-                        model.isExpanded
-                            ? .easeOut(duration: 0.10)
-                            : .easeIn(duration: 0.15).delay(0.30),
-                        value: model.isExpanded
-                    )
+                // a recording), with only a late fade near the end. Once
+                // settled it UNMOUNTS: its overflowing geometry would keep
+                // the hover tracking region panel-sized when collapsed.
+                if model.isExpanded || model.collapseSettling {
+                    expandedContent
+                        .opacity(model.isExpanded ? 1 : 0)
+                        .allowsHitTesting(model.isExpanded)
+                        .animation(
+                            model.isExpanded
+                                ? .easeOut(duration: 0.10)
+                                : .easeIn(duration: 0.15).delay(0.30),
+                            value: model.isExpanded
+                        )
+                }
                 collapsedContent
                     .opacity(model.isExpanded ? 0 : 1)
                     .allowsHitTesting(!model.isExpanded)
