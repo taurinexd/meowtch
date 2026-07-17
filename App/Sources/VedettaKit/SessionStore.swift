@@ -7,8 +7,19 @@ import Combine
 @MainActor
 public final class SessionStore: ObservableObject {
     @Published public private(set) var sessions: [AgentSession] = []
+    /// Terminal identity per session id, captured by the bridge (used by
+    /// the jump feature; persisted in M5).
+    @Published public private(set) var terminals: [String: TerminalInfo] = [:]
 
     public init() {}
+
+    public func setTerminal(_ info: TerminalInfo, for id: String) {
+        terminals[id] = info
+    }
+
+    public func terminal(for id: String) -> TerminalInfo? {
+        terminals[id]
+    }
 
     public func upsert(_ session: AgentSession) {
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {

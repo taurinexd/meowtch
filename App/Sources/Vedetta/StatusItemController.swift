@@ -26,6 +26,23 @@ final class StatusItemController {
         toggleItem.target = self
         menu.addItem(toggleItem)
         menu.addItem(.separator())
+
+        let installItem = NSMenuItem(
+            title: "Install Claude Code Hooks…",
+            action: #selector(installHooks),
+            keyEquivalent: ""
+        )
+        installItem.target = self
+        menu.addItem(installItem)
+        let removeItem = NSMenuItem(
+            title: "Remove Claude Code Hooks",
+            action: #selector(removeHooks),
+            keyEquivalent: ""
+        )
+        removeItem.target = self
+        menu.addItem(removeItem)
+        menu.addItem(.separator())
+
         let quitItem = NSMenuItem(
             title: "Quit Vedetta",
             action: #selector(NSApplication.terminate(_:)),
@@ -37,5 +54,37 @@ final class StatusItemController {
 
     @objc private func togglePanel() {
         panelController.toggleVisibility()
+    }
+
+    @objc private func installHooks() {
+        report {
+            try VedettaSetup.ensureRuntimeLayout()
+            let changed = try VedettaSetup.installClaudeHooks()
+            return changed
+                ? "Hook installati (backup in ~/.vedetta/backups).\nValgono per le sessioni Claude Code avviate da ora in poi."
+                : "Hook già installati, nessuna modifica."
+        }
+    }
+
+    @objc private func removeHooks() {
+        report {
+            let changed = try VedettaSetup.removeClaudeHooks()
+            return changed
+                ? "Hook rimossi (backup in ~/.vedetta/backups)."
+                : "Nessun hook Vedetta presente."
+        }
+    }
+
+    private func report(_ work: () throws -> String) {
+        let alert = NSAlert()
+        do {
+            alert.messageText = "Vedetta"
+            alert.informativeText = try work()
+        } catch {
+            alert.alertStyle = .warning
+            alert.messageText = "Operazione fallita"
+            alert.informativeText = error.localizedDescription
+        }
+        alert.runModal()
     }
 }

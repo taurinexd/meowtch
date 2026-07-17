@@ -9,13 +9,14 @@ VERSION="0.1.0"
 
 cd "$ROOT/App"
 swift build -c "$CONF"
-BIN="$(swift build -c "$CONF" --show-bin-path)/Vedetta"
+BINDIR="$(swift build -c "$CONF" --show-bin-path)"
 
 APP="$ROOT/dist/Vedetta.app"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 
-cp "$BIN" "$APP/Contents/MacOS/Vedetta"
+cp "$BINDIR/Vedetta" "$APP/Contents/MacOS/Vedetta"
+cp "$BINDIR/VedettaBridge" "$APP/Contents/Helpers/vedetta-bridge"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
