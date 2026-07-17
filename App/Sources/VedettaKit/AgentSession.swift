@@ -13,11 +13,13 @@ public enum AgentKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// Lifecycle state of an agent session, in display-priority order.
+/// Lifecycle state of an agent session, in display-priority order
+/// (the original ranks a working agent above one merely waiting):
+/// approval first, then running (blue), waiting (green), completed.
 public enum SessionState: Int, Codable, Sendable, Comparable, CaseIterable {
     case needsApproval = 0
-    case waitingForInput = 1
-    case running = 2
+    case running = 1
+    case waitingForInput = 2
     case completed = 3
 
     public static func < (lhs: SessionState, rhs: SessionState) -> Bool {
