@@ -100,9 +100,9 @@ final class NotchPanelController {
 
     private var peekCloseWorkItem: DispatchWorkItem?
     private var peekKeyMonitor: Any?
-    /// How long the peek stays open without interaction (measured ≥4.8s
-    /// on the original's recording; opening frames were cut).
-    private let peekDuration: TimeInterval = 6
+    /// How long the peek stays open without interaction (tuned live
+    /// against the original: 6s read as one second too long).
+    private let peekDuration: TimeInterval = 5
 
     private func maybePeek(sessionId: String) {
         guard !pinnedExpanded, !uiModel.isExpanded, !isHovering else { return }

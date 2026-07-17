@@ -215,7 +215,8 @@ struct NotchView: View {
     /// anatomy and colors measured on the original.
     @ViewBuilder
     private func peekContent(_ session: AgentSession) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        // Section gaps measured on the recording: 13.5pt card→inset→link.
+        VStack(alignment: .leading, spacing: 13) {
             SessionRowView(
                 session: session,
                 terminal: store.terminal(for: session.id),
@@ -252,11 +253,12 @@ struct NotchView: View {
             Text(session.lastAssistantMessage ?? "")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.78))
-                .lineSpacing(3)
+                // 14pt leading on the recording (11pt mono + ~1.5).
+                .lineSpacing(1.5)
                 .lineLimit(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
+        .padding(10)
         .background(Color.white.opacity(0.07))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
