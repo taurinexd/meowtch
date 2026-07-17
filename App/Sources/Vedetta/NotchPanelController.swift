@@ -13,8 +13,12 @@ final class NotchPanelController {
     private let uiModel = NotchUIModel()
     private var collapseWorkItem: DispatchWorkItem?
 
-    /// Window is sized to fit the expanded panel plus its shadow.
-    private static let windowSize = NSSize(width: 680, height: 620)
+    /// Window spans the full screen height so a long expanded panel can
+    /// scroll instead of clipping; transparent areas stay click-through.
+    private static var windowSize: NSSize {
+        let height = targetScreen()?.frame.height ?? 900
+        return NSSize(width: 680, height: height)
+    }
 
     init(store: SessionStore) {
         self.store = store
