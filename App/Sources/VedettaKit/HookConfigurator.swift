@@ -88,6 +88,32 @@ public enum HookConfigurator {
         return (settings, changed)
     }
 
+    // MARK: - StatusLine (usage harvest)
+
+    /// Claude Code feeds the statusline JSON that includes `rate_limits`:
+    /// harvesting it gives quota data with zero API calls. Installed only
+    /// when the user has no statusline of their own — never clobbered.
+    public static func installingStatusLine(
+        into settings: [String: Any],
+        command: String
+    ) -> ([String: Any], changed: Bool) {
+        var settings = settings
+        guard settings["statusLine"] == nil else { return (settings, false) }
+        settings["statusLine"] = ["type": "command", "command": command]
+        return (settings, true)
+    }
+
+    public static func removingStatusLine(
+        from settings: [String: Any]
+    ) -> ([String: Any], changed: Bool) {
+        var settings = settings
+        guard let statusLine = settings["statusLine"] as? [String: Any],
+              (statusLine["command"] as? String)?.contains("vedetta") == true
+        else { return (settings, false) }
+        settings.removeValue(forKey: "statusLine")
+        return (settings, true)
+    }
+
     // MARK: - State
 
     public static func isInstalled(in settings: [String: Any]) -> Bool {

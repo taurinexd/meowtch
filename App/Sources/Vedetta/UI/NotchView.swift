@@ -15,6 +15,7 @@ struct NotchGeometry {
 struct NotchView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var model: NotchUIModel
+    @ObservedObject private var usage = UsageModel.shared
     var geometry: NotchGeometry
     var onHoverChange: (Bool) -> Void
 
@@ -155,17 +156,37 @@ struct NotchView: View {
         .padding(.top, 8)
     }
 
-    /// Mock of the quota strip ("5h 67% 44m | 7d 23% 4d0h") until M7.
+    /// Real quota strip when rate_limits data is available; dots otherwise.
     private var usageSummary: some View {
         HStack(spacing: 5) {
-            Text("5h").bold().foregroundStyle(Theme.primaryText)
-            Text("67%").bold().foregroundStyle(Theme.claudeOrange)
-            Text("44m").foregroundStyle(Theme.secondaryText)
-            Text("|").foregroundStyle(Theme.secondaryText.opacity(0.5))
-            Text("7d").bold().foregroundStyle(Theme.primaryText)
-            Text("23%").bold().foregroundStyle(.green)
-            Text("4d0h").foregroundStyle(Theme.secondaryText)
+            if let fiveHour = usage.fiveHour {
+                usageWindow(label: "5h", window: fiveHour)
+            }
+            if usage.fiveHour != nil && usage.sevenDay != nil {
+                Text("|").foregroundStyle(Theme.secondaryText.opacity(0.5))
+            }
+            if let sevenDay = usage.sevenDay {
+                usageWindow(label: "7d", window: sevenDay)
+            }
+            if usage.fiveHour == nil && usage.sevenDay == nil {
+                Text("· · ·").foregroundStyle(Theme.secondaryText.opacity(0.5))
+            }
         }
         .font(.system(size: 11))
+    }
+
+    @ViewBuilder
+    private func usageWindow(label: String, window: UsageModel.Window) -> some View {
+        Text(label).bold().foregroundStyle(Theme.primaryText)
+        Text("\(window.percent)%").bold().foregroundStyle(usageColor(window.percent))
+        if let reset = window.resetLabel {
+            Text(reset).foregroundStyle(Theme.secondaryText)
+        }
+    }
+
+    private func usageColor(_ percent: Int) -> Color {
+        if percent >= 80 { return Color(red: 0.92, green: 0.34, blue: 0.34) }
+        if percent >= 50 { return Theme.claudeOrange }
+        return Color(red: 0.42, green: 0.78, blue: 0.48)
     }
 }

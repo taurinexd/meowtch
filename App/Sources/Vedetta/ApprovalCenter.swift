@@ -8,16 +8,23 @@ import Combine
 final class ApprovalCenter: ObservableObject {
     static let shared = ApprovalCenter()
 
+    enum Kind {
+        case tool
+        case question(text: String, options: [String])
+        case plan(markdown: String)
+    }
+
     struct Pending: Identifiable {
         let id: Int
         let sessionId: String
         let toolName: String
         let toolDetail: String?
+        let kind: Kind
         let receivedAt: Date
     }
 
     @Published private(set) var pending: [Pending] = []
-    private var continuations: [Int: CheckedContinuation<Bool, Never>] = [:]
+    private var continuations: [Int: CheckedContinuation<(allow: Bool, message: String?), Never>] = [:]
     private var nextId = 1
 
     /// Called when a new request arrives (expand the panel, play a sound).
@@ -28,8 +35,9 @@ final class ApprovalCenter: ObservableObject {
     func requestDecision(
         sessionId: String,
         toolName: String,
-        toolDetail: String?
-    ) async -> Bool {
+        toolDetail: String?,
+        kind: Kind = .tool
+    ) async -> (allow: Bool, message: String?) {
         let id = nextId
         nextId += 1
         pending.append(Pending(
@@ -37,6 +45,7 @@ final class ApprovalCenter: ObservableObject {
             sessionId: sessionId,
             toolName: toolName,
             toolDetail: toolDetail,
+            kind: kind,
             receivedAt: Date()
         ))
         onArrival?()
@@ -45,10 +54,10 @@ final class ApprovalCenter: ObservableObject {
         }
     }
 
-    func decide(id: Int, allow: Bool) {
+    func decide(id: Int, allow: Bool, message: String? = nil) {
         guard let continuation = continuations.removeValue(forKey: id) else { return }
         pending.removeAll { $0.id == id }
-        continuation.resume(returning: allow)
+        continuation.resume(returning: (allow, message))
         if pending.isEmpty { onDrain?() }
     }
 
