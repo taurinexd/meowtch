@@ -10,6 +10,8 @@ public struct TranscriptPeek: Sendable {
     /// The name the user gave the session (Claude Code records renames as
     /// system-reminder entries); the last rename wins.
     public var sessionName: String?
+    /// Working directory recorded in the entries.
+    public var cwd: String?
 
     /// Parses transcript JSONL content. Malformed lines are skipped.
     public static func parse(_ data: Data) -> TranscriptPeek {
@@ -23,6 +25,7 @@ public struct TranscriptPeek: Sendable {
             // its texts are not the session's own words.
             if entry["isSidechain"] as? Bool == true { continue }
 
+            if peek.cwd == nil, let cwd = entry["cwd"] as? String { peek.cwd = cwd }
             guard let text = textContent(of: message), !text.isEmpty else { continue }
             switch type {
             case "user":
@@ -55,8 +58,11 @@ public struct TranscriptPeek: Sendable {
         return String(match[match.index(after: open)..<close])
     }
 
-    /// Reads a bounded window of the file: head for the title, tail for
-    /// the latest messages. Files can be tens of MB; we never load them.
+    /// Reads a bounded window of the file: the head answers "how did this
+    /// session start" (first prompt, cwd), the tail answers "what happened
+    /// last" (latest messages). Keeping them separate avoids attributing a
+    /// head text as the latest message when the tail has none. Files can
+    /// be tens of MB; we never load them whole.
     public static func read(path: String, headBytes: Int = 128 << 10, tailBytes: Int = 256 << 10) -> TranscriptPeek {
         guard let handle = FileHandle(forReadingAtPath: path) else { return TranscriptPeek() }
         defer { try? handle.close() }
@@ -64,21 +70,71 @@ public struct TranscriptPeek: Sendable {
 
         try? handle.seek(toOffset: 0)
         let head = (try? handle.read(upToCount: min(headBytes, size))) ?? Data()
-        var combined = head
+        let headPeek = parse(head)
+        guard size > headBytes else { return headPeek }
 
-        if size > headBytes {
-            let tailStart = max(size - tailBytes, headBytes)
-            try? handle.seek(toOffset: UInt64(tailStart))
-            if var tail = (try? handle.read(upToCount: size - tailStart)) ?? nil {
-                // drop the (possibly truncated) first line of the tail
-                if let newline = tail.firstIndex(of: 0x0A) {
-                    tail = tail.suffix(from: newline + 1)
-                }
-                combined.append(0x0A)
-                combined.append(tail)
-            }
+        let tailStart = max(size - tailBytes, headBytes)
+        try? handle.seek(toOffset: UInt64(tailStart))
+        var tail = ((try? handle.read(upToCount: size - tailStart)) ?? nil) ?? Data()
+        if let newline = tail.firstIndex(of: 0x0A) {
+            // drop the (possibly truncated) first line
+            tail = tail.suffix(from: newline + 1)
         }
-        return parse(combined)
+        let tailPeek = parse(tail)
+
+        var merged = TranscriptPeek()
+        merged.firstUserPrompt = headPeek.firstUserPrompt
+        merged.cwd = headPeek.cwd ?? tailPeek.cwd
+        merged.sessionName = tailPeek.sessionName ?? headPeek.sessionName
+        merged.lastUserText = tailPeek.lastUserText
+        merged.lastAssistantText = tailPeek.lastAssistantText
+
+        // Renames can live anywhere in the file: when the windows missed
+        // one, stream the whole file looking only for the marker.
+        if merged.sessionName == nil, size > headBytes + tailBytes {
+            merged.sessionName = scanForSessionName(handle: handle, size: size)
+        }
+        return merged
+    }
+
+    /// Streaming search for the rename marker across the whole file
+    /// (chunked, constant memory); the last occurrence wins. The pattern
+    /// is anchored to the raw bytes of a genuine reminder entry — code or
+    /// conversation that merely QUOTES the phrase carries one more level
+    /// of JSON escaping and cannot match.
+    private static func scanForSessionName(handle: FileHandle, size: Int) -> String? {
+        guard size < 128 << 20 else { return nil }
+        // Both raw shapes are real: content as a plain string and content
+        // as an array of text blocks.
+        let markers = [
+            Data(#""content":"<system-reminder>\nThe user named this session \""#.utf8),
+            Data(#""text":"<system-reminder>\nThe user named this session \""#.utf8),
+        ]
+        let closer = Data(#"\""#.utf8)
+        let chunkSize = 4 << 20
+        var name: String?
+        var offset = 0
+        var carry = Data()
+        try? handle.seek(toOffset: 0)
+        while offset < size {
+            guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
+            offset += chunk.count
+            var window = carry
+            window.append(chunk)
+            for marker in markers {
+                var searchRange = window.startIndex..<window.endIndex
+                while let found = window.range(of: marker, in: searchRange) {
+                    if let end = window.range(of: closer, in: found.upperBound..<window.endIndex),
+                       let extracted = String(data: window[found.upperBound..<end.lowerBound], encoding: .utf8),
+                       !extracted.isEmpty, extracted.count < 120 {
+                        name = extracted
+                    }
+                    searchRange = found.upperBound..<window.endIndex
+                }
+            }
+            carry = window.suffix(markers[0].count + 256)
+        }
+        return name
     }
 
     /// Joins the text parts of a message's content (string or blocks).
