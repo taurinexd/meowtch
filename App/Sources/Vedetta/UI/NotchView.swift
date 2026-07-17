@@ -18,14 +18,22 @@ struct NotchView: View {
     var geometry: NotchGeometry
     var onHoverChange: (Bool) -> Void
 
-    /// Wing sizes measured against the original: the left wing hosts the
-    /// sprite and is wider than the right one, which only fits the counter.
-    private let leftWing: CGFloat = 46
-    private let rightWing: CGFloat = 30
+    /// Wing sizes measured pixel-exact against the original: the flat part
+    /// of the bar extends 40pt left and 23pt right of the physical notch
+    /// (asymmetric: the sprite needs more room than the counter), plus the
+    /// concave top flare on each side.
+    private let leftWing: CGFloat = 40
+    private let rightWing: CGFloat = 23
+    private let topFlare: CGFloat = 8
 
-    private var collapsedWidth: CGFloat { geometry.notchWidth + leftWing + rightWing }
-    private var collapsedHeight: CGFloat { geometry.barHeight + 4 }
-    private let expandedWidth: CGFloat = 605
+    private var collapsedWidth: CGFloat {
+        geometry.notchWidth + leftWing + rightWing + topFlare * 2
+    }
+    private var collapsedHeight: CGFloat { geometry.barHeight + 1 }
+    /// Keeps the notch centered while the bar extends asymmetrically.
+    private var collapsedOffset: CGFloat { (rightWing - leftWing) / 2 }
+    /// Flat width 605pt (measured on the original) + the top flare insets.
+    private var expandedWidth: CGFloat { 605 + topFlare * 2 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,7 +52,13 @@ struct NotchView: View {
             .frame(width: model.isExpanded ? expandedWidth : collapsedWidth)
             .frame(height: model.isExpanded ? nil : collapsedHeight)
             .fixedSize(horizontal: false, vertical: true)
-            .shadow(color: .black.opacity(0.55), radius: model.isExpanded ? 18 : 6, y: 4)
+            .offset(x: model.isExpanded ? 0 : collapsedOffset)
+            // The collapsed bar reads as part of the bezel: no shadow at all.
+            .shadow(
+                color: model.isExpanded ? .black.opacity(0.35) : .clear,
+                radius: model.isExpanded ? 24 : 0,
+                y: model.isExpanded ? 6 : 0
+            )
             .contentShape(NotchShape())
             .onHover(perform: onHoverChange)
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: model.isExpanded)
@@ -60,13 +74,13 @@ struct NotchView: View {
     private var collapsedContent: some View {
         HStack {
             PixelSprite(pattern: PixelSprite.lookout, color: statusColor, pixelSize: 2)
-                .padding(.leading, 12)
+                .padding(.leading, topFlare + 8)
             Spacer()
             if !store.sessions.isEmpty {
                 Text("\(store.sessions.count)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.primaryText)
-                    .padding(.trailing, 10)
+                    .padding(.trailing, topFlare + 9)
             }
         }
         .frame(width: collapsedWidth, height: collapsedHeight)
