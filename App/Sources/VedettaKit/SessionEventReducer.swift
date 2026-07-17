@@ -10,19 +10,25 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
     /// CGWindowID of the window hosting the session, captured by the
     /// bridge at hook time — the jump raises exactly this window.
     public var windowId: Int?
+    /// The bridge's process ancestry at hook time. The bridge itself is
+    /// gone by jump time, but the chain includes the terminal's live
+    /// shell — what the VS Code extension matches terminals against.
+    public var pidChain: [Int]?
 
     public init(
         tty: String? = nil,
         termProgram: String? = nil,
         bundleIdentifier: String? = nil,
         pid: Int32? = nil,
-        windowId: Int? = nil
+        windowId: Int? = nil,
+        pidChain: [Int]? = nil
     ) {
         self.tty = tty
         self.termProgram = termProgram
         self.bundleIdentifier = bundleIdentifier
         self.pid = pid
         self.windowId = windowId
+        self.pidChain = pidChain
     }
 }
 
@@ -51,7 +57,9 @@ public enum SessionEventReducer {
                 termProgram: terminal["termProgram"] as? String,
                 bundleIdentifier: terminal["bundleIdentifier"] as? String,
                 pid: (terminal["pid"] as? NSNumber)?.int32Value,
-                windowId: (terminal["windowId"] as? NSNumber)?.intValue
+                windowId: (terminal["windowId"] as? NSNumber)?.intValue,
+                pidChain: (terminal["pidChain"] as? [Any])?
+                    .compactMap { ($0 as? NSNumber)?.intValue }
             )
             // The window binding is trustworthy only when the user is
             // certainly typing in it: background events (the agent works

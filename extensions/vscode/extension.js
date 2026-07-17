@@ -1,7 +1,9 @@
 // Vedetta Terminal Focus — focuses the integrated terminal that hosts an
-// agent session. Vedetta opens vscode://vedetta.terminal-focus/focus?pid=N
-// where N is a pid inside the session's process tree; the terminal whose
-// shell is an ancestor of that pid is revealed.
+// agent session. Vedetta opens
+// vscode://vedetta.terminal-focus/focus?pid=A&pid=B&…&workspace=/path
+// where the pids are the session's process ancestry captured at hook time
+// (it includes the terminal's shell, matched directly against
+// terminal.processId); the ancestor walk remains as a fallback.
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 
@@ -28,9 +30,23 @@ function ancestorsOf(pid, parents) {
 	return chain;
 }
 
-async function focusTerminalFor(pid) {
+async function focusTerminalFor(pids) {
+	// Direct hit: the pid list already carries the terminal's shell.
+	const wanted = new Set(pids);
+	for (const terminal of vscode.window.terminals) {
+		const shellPid = await terminal.processId;
+		if (shellPid && wanted.has(shellPid)) {
+			terminal.show(false);
+			return;
+		}
+	}
+	// Fallback: one of the pids may still be alive with the shell as an
+	// ancestor (older Vedetta builds sent a single pid).
 	processParents(async (parents) => {
-		const chain = ancestorsOf(pid, parents);
+		const chain = new Set();
+		for (const pid of pids) {
+			for (const ancestor of ancestorsOf(pid, parents)) chain.add(ancestor);
+		}
 		for (const terminal of vscode.window.terminals) {
 			const shellPid = await terminal.processId;
 			if (shellPid && chain.has(shellPid)) {
@@ -63,8 +79,11 @@ function activate(context) {
 				if (uri.path !== "/focus") return;
 				const params = new URLSearchParams(uri.query);
 				if (!ownsWorkspace(params.get("workspace"))) return;
-				const pid = Number(params.get("pid"));
-				if (pid) focusTerminalFor(pid);
+				const pids = params
+					.getAll("pid")
+					.map((value) => Number(value))
+					.filter((pid) => Number.isInteger(pid) && pid > 0);
+				if (pids.length > 0) focusTerminalFor(pids);
 			},
 		})
 	);

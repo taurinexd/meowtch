@@ -37,16 +37,20 @@ enum JumpService {
         // terminal. The URI is delivered to the FOCUSED window's extension
         // host, and the extension only sees its own window's terminals:
         // give the raise a beat so it lands in the session's window (the
-        // workspace param lets a wrong window no-op harmlessly).
-        if isVSCode, let pid = terminal.pid {
+        // workspace param lets a wrong window no-op harmlessly). The pid
+        // list is the ancestry captured at hook time — it includes the
+        // terminal's live shell; the bridge pid alone is dead by now.
+        let pids = terminal.pidChain ?? terminal.pid.map { [Int($0)] } ?? []
+        if isVSCode, !pids.isEmpty {
+            let pidParams = pids.map { "pid=\($0)" }.joined(separator: "&")
             let workspace = session.directory.addingPercentEncoding(
                 withAllowedCharacters: .urlQueryAllowed
             ) ?? ""
-            if let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)&workspace=\(workspace)") {
+            if let url = URL(string: "vscode://vedetta.terminal-focus/focus?\(pidParams)&workspace=\(workspace)") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     NSWorkspace.shared.open(url)
                 }
-                trace.append("uri-scheduled")
+                trace.append("uri-scheduled pids=\(pids.count)")
             }
         }
     }
@@ -90,15 +94,21 @@ enum JumpService {
         // hook time. AX exposes no window id, so match by frame against
         // the window-list entry (same top-left global coordinates).
         var target: AXUIElement?
-        if let windowId, let bounds = cgWindowBounds(windowId) {
-            target = windows.first { window in
-                guard let frame = axFrame(window) else { return false }
-                return abs(frame.origin.x - bounds.origin.x) < 3
-                    && abs(frame.origin.y - bounds.origin.y) < 3
-                    && abs(frame.width - bounds.width) < 3
-                    && abs(frame.height - bounds.height) < 3
+        if let windowId {
+            if let bounds = cgWindowBounds(windowId) {
+                target = windows.first { window in
+                    guard let frame = axFrame(window) else { return false }
+                    return abs(frame.origin.x - bounds.origin.x) < 3
+                        && abs(frame.origin.y - bounds.origin.y) < 3
+                        && abs(frame.width - bounds.width) < 3
+                        && abs(frame.height - bounds.height) < 3
+                }
+                trace.append(target != nil
+                    ? "byWindowId=\(windowId)"
+                    : "noAxMatch cg=(\(Int(bounds.origin.x)),\(Int(bounds.origin.y)) \(Int(bounds.width))x\(Int(bounds.height)))")
+            } else {
+                trace.append("cgBounds=nil id=\(windowId)")
             }
-            if target != nil { trace.append("byWindowId=\(windowId)") }
         }
 
         // Title fallback: exact segment first ("vedetta" must not grab
@@ -173,10 +183,10 @@ enum JumpService {
     static func installVSCodeExtension() {
         let source = Bundle.main.bundlePath + "/Contents/Resources/vscode-extension"
         let extensionsDir = NSHomeDirectory() + "/.vscode/extensions"
-        let target = extensionsDir + "/vedetta.terminal-focus-0.2.0"
+        let target = extensionsDir + "/vedetta.terminal-focus-0.3.0"
         let fm = FileManager.default
         // Outdated versions go away so VS Code always loads the current one.
-        for stale in ["vedetta.terminal-focus-0.1.0"] {
+        for stale in ["vedetta.terminal-focus-0.1.0", "vedetta.terminal-focus-0.2.0"] {
             try? fm.removeItem(atPath: extensionsDir + "/" + stale)
         }
         guard fm.fileExists(atPath: source), !fm.fileExists(atPath: target) else { return }
