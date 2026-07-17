@@ -7,11 +7,14 @@ import VedettaKit
 struct SessionRowView: View {
     let session: AgentSession
     var tasks: MockTaskList?
+    /// Compact = the session has no visible terminal window to jump to
+    /// (minimized, or adopted from transcripts with no live terminal).
+    var isCompact = false
     @State private var isHovered = false
 
     var body: some View {
         Group {
-            if session.isMinimized {
+            if isCompact {
                 compactRow
             } else {
                 fullRow
@@ -130,22 +133,22 @@ struct SessionRowView: View {
     private var chips: some View {
         HStack(spacing: 5) {
             Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
-            if !session.isMinimized {
+            if !isCompact {
                 Chip(text: "VS Code")
             }
-            if isHovered && !session.isMinimized {
+            if isHovered && !isCompact {
                 Image(systemName: "tray")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.secondaryText)
                     .padding(.horizontal, 3)
-            } else if session.state == .waitingForInput && !session.isMinimized {
+            } else if session.state == .waitingForInput && !isCompact {
                 Circle()
                     .fill(Theme.color(for: .waitingForInput))
                     .frame(width: 7, height: 7)
                     .padding(.leading, 4)
                     .padding(.trailing, 11)
             } else {
-                Chip(text: session.startedAt.vedettaAge)
+                Chip(text: session.lastActivityAt.vedettaAge)
             }
         }
     }
