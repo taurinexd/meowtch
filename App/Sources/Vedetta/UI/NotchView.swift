@@ -52,10 +52,15 @@ struct NotchView: View {
                 Group {
                     if model.isExpanded {
                         expandedContent
+                            .transition(.opacity)
                     } else {
                         collapsedContent
+                            .transition(.opacity)
                     }
                 }
+                // Content crossfades faster than the shape springs, so it
+                // settles while the container is still doing its accordion.
+                .animation(.easeOut(duration: 0.16), value: model.isExpanded)
             }
             .frame(width: model.isExpanded ? expandedWidth : collapsedWidth)
             .frame(height: model.isExpanded ? nil : collapsedHeight)
@@ -69,7 +74,9 @@ struct NotchView: View {
             )
             .contentShape(NotchShape(topRadius: topFlare))
             .onHover(perform: onHoverChange)
-            .animation(.spring(response: 0.32, dampingFraction: 0.82), value: model.isExpanded)
+            // Bouncy spring gives the notch its accordion overshoot: it grows
+            // slightly past the target size, then settles (Dynamic Island feel).
+            .animation(.spring(response: 0.4, dampingFraction: 0.68), value: model.isExpanded)
 
             Spacer(minLength: 0)
         }
@@ -95,9 +102,6 @@ struct NotchView: View {
             }
         }
         .frame(width: collapsedWidth, height: collapsedHeight)
-        // Instant removal: a fading copy would linger over the expanded
-        // panel because the ticking TimelineView keeps invalidating it.
-        .transition(.identity)
     }
 
     /// Sessions with a visible terminal window render as full rows;
@@ -187,7 +191,6 @@ struct NotchView: View {
         .padding(.horizontal, expandedFlare + 4)
         .padding(.bottom, 18)
         .frame(width: expandedWidth, alignment: .top)
-        .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
     }
 
     private struct ListHeightKey: PreferenceKey {

@@ -38,6 +38,8 @@ enum VIMapImport {
                 agent: (info["source"] as? String) == "codex" ? .codex : .claude,
                 title: title,
                 directory: info["cwd"] as? String ?? "",
+                currentTool: state == .running ? info["currentTool"] as? String : nil,
+                currentToolDetail: state == .running ? info["toolTarget"] as? String : nil,
                 lastMessage: info["lastUserMessage"] as? String,
                 lastAssistantMessage: (info["lastAssistantMessageFull"] as? String)
                     ?? (info["lastAssistantMessage"] as? String),
