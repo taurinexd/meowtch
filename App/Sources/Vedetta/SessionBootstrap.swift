@@ -49,17 +49,20 @@ enum SessionBootstrap {
             guard peek.firstUserPrompt != nil || peek.sessionName != nil else { continue }
             scannedPaths[candidate.id] = candidate.path
             FullScanScheduler.schedule(path: candidate.path, sessionId: candidate.id)
-            let isActive = candidate.modified.timeIntervalSinceNow > -activeWindow
+            // Real activity is the last message timestamp, not the file
+            // mtime (background writes keep the mtime falsely fresh).
+            let activity = peek.lastActivity ?? candidate.modified
+            let isActive = activity.timeIntervalSinceNow > -activeWindow
             store.upsert(AgentSession(
                 id: candidate.id,
                 agent: .claude,
-                title: peek.sessionName ?? peek.firstUserPrompt ?? "",
+                title: peek.sessionName ?? peek.aiTitle ?? peek.firstUserPrompt ?? "",
                 directory: peek.cwd ?? "",
                 lastMessage: peek.lastUserText,
                 lastAssistantMessage: peek.lastAssistantText,
                 state: isActive ? .running : .waitingForInput,
                 startedAt: candidate.created,
-                lastActivityAt: candidate.modified
+                lastActivityAt: activity
             ))
         }
     }
@@ -124,6 +127,7 @@ enum SessionBootstrap {
             let changed = modified > session.lastActivityAt || newState != session.state
             guard changed else { continue }
 
+            var activity = modified
             if session.agent == .codex {
                 if let data = fm.contents(atPath: path) {
                     let rollout = CodexScan.parseRollout(data)
@@ -132,12 +136,13 @@ enum SessionBootstrap {
                 }
             } else {
                 let peek = TranscriptPeek.read(path: path)
-                if let name = peek.sessionName { session.title = name }
+                if let name = peek.sessionName ?? peek.aiTitle { session.title = name }
                 if let last = peek.lastUserText { session.lastMessage = last }
                 if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
+                if let real = peek.lastActivity { activity = real }
             }
-            session.state = newState
-            session.lastActivityAt = modified
+            session.state = activity.timeIntervalSinceNow > -activeWindow ? .running : .waitingForInput
+            session.lastActivityAt = activity
             store.upsert(session)
         }
     }
