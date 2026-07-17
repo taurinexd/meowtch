@@ -92,7 +92,9 @@ struct SessionRowView: View {
                     // lines truncate before the chips' left edge and never
                     // run under them (measured on the original). Only the
                     // recap below escapes the split and spans full width.
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    // Top-aligned; the chips strip is given the title line's
+                    // exact height so the chips center on the title line.
+                    HStack(alignment: .top, spacing: 6) {
                         VStack(alignment: .leading, spacing: 3) {
                             (
                                 Text(session.directoryName)
@@ -140,6 +142,7 @@ struct SessionRowView: View {
                         }
                         Spacer(minLength: 8)
                         chips
+                            .frame(height: Self.titleLineHeight)
                     }
 
                     // The away-recap replaces the You:/reply lines and runs
@@ -309,11 +312,15 @@ struct SessionRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
+    /// Height of the bold 12pt title line: the chips strip takes exactly
+    /// this height so its (taller) chips center on the title line.
+    private static let titleLineHeight: CGFloat = {
+        let font = NSFont.boldSystemFont(ofSize: 12)
+        return font.ascender - font.descender + font.leading
+    }()
+
     private var chips: some View {
         HStack(spacing: 5) {
-            if let branch = session.gitBranch, branch != "main", branch != "master", !isCompact {
-                Chip(text: "⎇ \(branch)")
-            }
             Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
             // The host chip follows the terminal, not the row style: compact
             // rows with a known window still show it, like the original.
@@ -327,10 +334,9 @@ struct SessionRowView: View {
     /// Trailing element (age / status dot / archive on hover). Hidden
     /// reference chips reserve a width that is the same on EVERY row (not
     /// this row's own age), so the chips to its left all start at the same
-    /// distance from the right edge across rows. Measured on the original:
-    /// the age chip is right-aligned in the slot, while the archive icon
-    /// and the status dot sit CENTERED in it (icon cx identical on full
-    /// cards and compact rows).
+    /// distance from the right edge across rows. Everything sits CENTERED
+    /// in the slot, measured on the original: archive icon cx identical to
+    /// the short age chips' cx (±1px) on full cards and compact rows alike.
     private var trailingSlot: some View {
         ZStack {
             Chip(text: "<1m").hidden()
@@ -350,12 +356,10 @@ struct SessionRowView: View {
                     .fill(Theme.color(for: .waitingForInput))
                     .frame(width: 7, height: 7)
             } else {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    Chip(text: session.lastActivityAt.vedettaAge)
-                }
+                Chip(text: session.lastActivityAt.vedettaAge)
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
