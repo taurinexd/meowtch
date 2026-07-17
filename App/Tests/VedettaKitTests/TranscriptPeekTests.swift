@@ -42,6 +42,36 @@ struct TranscriptPeekTests {
         #expect(peek.lastAssistantText == "Fatto: il checkout ora valida il CAP.")
     }
 
+    @Test func sessionNameComesFromNamingReminder() {
+        let named = """
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>\\nThe user named this session \\"early-access\\". This may indicate intent.</system-reminder>"}]}}
+        """ + "\n" + fixture
+        let peek = TranscriptPeek.parse(Data(named.utf8))
+        #expect(peek.sessionName == "early-access")
+        // il reminder non inquina il primo prompt vero
+        #expect(peek.firstUserPrompt == "sistema il checkout del sito")
+    }
+
+    @Test func laterRenameWins() {
+        let renamed = """
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>\\nThe user named this session \\"vecchio\\".</system-reminder>"}]}}
+        """ + "\n" + fixture + "\n" + """
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>\\nThe user named this session \\"nuovo\\".</system-reminder>"}]}}
+        """
+        let peek = TranscriptPeek.parse(Data(renamed.utf8))
+        #expect(peek.sessionName == "nuovo")
+    }
+
+    @Test func commandAndMetaEntriesAreNotPrompts() {
+        let meta = """
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"<local-command-caveat>Caveat: roba generata</local-command-caveat>"}]}}
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"<command-name>/theme</command-name>"}]}}
+        """ + "\n" + fixture
+        let peek = TranscriptPeek.parse(Data(meta.utf8))
+        #expect(peek.firstUserPrompt == "sistema il checkout del sito")
+        #expect(peek.lastUserText == "sistema il checkout del sito")
+    }
+
     @Test func emptyDataYieldsNothing() {
         let peek = TranscriptPeek.parse(Data())
         #expect(peek.firstUserPrompt == nil)

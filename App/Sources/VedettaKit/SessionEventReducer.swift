@@ -68,9 +68,14 @@ public enum SessionEventReducer {
 
         case "UserPromptSubmit":
             session.state = .running
-            if let prompt = event["prompt"] as? String, !prompt.isEmpty {
+            if let prompt = event["prompt"] as? String, !prompt.isEmpty,
+               !prompt.hasPrefix("<") {
                 session.lastMessage = prompt
-                if session.title.isEmpty { session.title = prompt }
+                // Slash commands make poor titles; a user-given session
+                // name (from enrich) always has priority anyway.
+                if session.title.isEmpty && !prompt.hasPrefix("/") {
+                    session.title = prompt
+                }
             }
 
         case "PreToolUse":
@@ -142,13 +147,16 @@ public enum SessionEventReducer {
     }
 
     /// Fills title and message lines from the transcript the hook points at.
+    /// A name the user gave the session always wins over the prompt fallback.
     private static func enrich(from event: [String: Any], into session: inout AgentSession) {
         guard let path = event["transcript_path"] as? String else { return }
         let peek = TranscriptPeek.read(path: path)
         if let reply = peek.lastAssistantText {
             session.lastAssistantMessage = reply
         }
-        if session.title.isEmpty, let first = peek.firstUserPrompt {
+        if let name = peek.sessionName {
+            session.title = name
+        } else if session.title.isEmpty, let first = peek.firstUserPrompt {
             session.title = first
         }
         if session.lastMessage == nil, let lastUser = peek.lastUserText {
