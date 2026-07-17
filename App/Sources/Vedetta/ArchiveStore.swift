@@ -19,6 +19,13 @@ final class ArchiveStore: ObservableObject {
         UserDefaults.standard.set(Array(archivedIds), forKey: key)
     }
 
+    /// New user action on an archived session brings its card back,
+    /// like the original.
+    func unarchive(_ sessionId: String) {
+        guard archivedIds.remove(sessionId) != nil else { return }
+        UserDefaults.standard.set(Array(archivedIds), forKey: key)
+    }
+
     func isArchived(_ sessionId: String) -> Bool {
         archivedIds.contains(sessionId)
     }

@@ -26,6 +26,12 @@ enum EventDispatcher {
 
         SessionBootstrap.liveEventIds.insert(sessionId)
 
+        // Archived cards resurface on new user action: a fresh prompt or a
+        // request waiting for a decision, like the original.
+        if name == "UserPromptSubmit" || name == "PermissionRequest" {
+            ArchiveStore.shared.unarchive(sessionId)
+        }
+
         if name == "PermissionRequest" {
             // The reducer first: it creates the session lazily (the request
             // can be the first thing we ever hear from a session), records
@@ -116,6 +122,7 @@ enum EventDispatcher {
                     "lastAssistantMessage": session.lastAssistantMessage ?? "",
                     "currentTool": session.currentTool ?? "",
                     "currentToolDetail": session.currentToolDetail ?? "",
+                    "recap": session.recap ?? "",
                 ]
             }
             return try? JSONSerialization.data(withJSONObject: ["sessions": sessions])

@@ -38,6 +38,8 @@ struct SessionRowView: View {
         .onHover { isHovered = $0 }
         .onTapGesture {
             JumpService.jump(to: session, terminal: terminal)
+            // Jumping collapses the panel at once, like the original.
+            NotificationCenter.default.post(name: .vedettaDidJump, object: nil)
         }
     }
 
@@ -100,37 +102,46 @@ struct SessionRowView: View {
                     .foregroundStyle(Theme.primaryText)
                     .lineLimit(1)
 
-                    // Like the original: the user's last words always
-                    // visible, then the running tool while working or the
-                    // agent's reply otherwise (1 line if a widget follows).
-                    if let message = session.lastMessage {
-                        Text("You: \(message)")
+                    // When Claude wrote an away-recap it replaces the
+                    // You:/reply lines entirely, like the original.
+                    if let recap = session.recap, !recap.isEmpty {
+                        Text(recap)
                             .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(1)
-                    }
-                    // While working, show the running tool; otherwise (or
-                    // when the tool is unknown) the agent's last reply — so
-                    // there is always a second line under You:, like VI.
-                    if session.state == .compacting {
-                        CompactingLine(startedAt: session.compactingStartedAt ?? session.lastActivityAt)
-                    } else if session.state == .running, let tool = session.currentTool {
-                        HStack(spacing: 6) {
-                            Text(tool)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(Theme.toolBlue)
-                            if let detail = session.currentToolDetail {
-                                Text(detail)
-                                    .foregroundStyle(Theme.secondaryText)
-                                    .lineLimit(1)
-                            }
+                            .foregroundStyle(Color.white.opacity(0.85))
+                            .lineLimit(3)
+                    } else {
+                        // Like the original: the user's last words always
+                        // visible, then the running tool while working or the
+                        // agent's reply otherwise (1 line if a widget follows).
+                        if let message = session.lastMessage {
+                            Text("You: \(message)")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Theme.secondaryText)
+                                .lineLimit(1)
                         }
-                        .font(.system(size: 11.5))
-                    } else if let reply = session.lastAssistantMessage {
-                        Text(reply)
+                        // While working, show the running tool; otherwise (or
+                        // when the tool is unknown) the agent's last reply — so
+                        // there is always a second line under You:, like VI.
+                        if session.state == .compacting {
+                            CompactingLine(startedAt: session.compactingStartedAt ?? session.lastActivityAt)
+                        } else if session.state == .running, let tool = session.currentTool {
+                            HStack(spacing: 6) {
+                                Text(tool)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(Theme.toolBlue)
+                                if let detail = session.currentToolDetail {
+                                    Text(detail)
+                                        .foregroundStyle(Theme.secondaryText)
+                                        .lineLimit(1)
+                                }
+                            }
                             .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(session.lastMessage != nil ? 1 : 3)
+                        } else if let reply = session.lastAssistantMessage {
+                            Text(reply)
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Theme.secondaryText)
+                                .lineLimit(session.lastMessage != nil ? 1 : 3)
+                        }
                     }
                 }
             }

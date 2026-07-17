@@ -60,6 +60,7 @@ enum SessionBootstrap {
                 directory: peek.cwd ?? "",
                 lastMessage: peek.lastUserText,
                 lastAssistantMessage: peek.lastAssistantText,
+                recap: peek.awaySummary,
                 state: isActive ? .running : .waitingForInput,
                 startedAt: candidate.created,
                 lastActivityAt: activity
@@ -140,6 +141,8 @@ enum SessionBootstrap {
                 if let last = peek.lastUserText { session.lastMessage = last }
                 if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
                 if let real = peek.lastActivity { activity = real }
+                // Unconditional: nil means the recap is stale or absent.
+                session.recap = peek.awaySummary
             }
             session.state = activity.timeIntervalSinceNow > -activeWindow ? .running : .waitingForInput
             session.lastActivityAt = activity

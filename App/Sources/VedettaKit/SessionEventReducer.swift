@@ -84,6 +84,8 @@ public enum SessionEventReducer {
 
         case "UserPromptSubmit":
             session.state = .running
+            // A new prompt starts a new turn: the previous recap is stale.
+            session.recap = nil
             if let prompt = event["prompt"] as? String, !prompt.isEmpty,
                !prompt.hasPrefix("<") {
                 session.lastMessage = prompt
@@ -179,6 +181,8 @@ public enum SessionEventReducer {
         if let reply = peek.lastAssistantText {
             session.lastAssistantMessage = reply
         }
+        // Unconditional: the transcript is the truth for recap presence.
+        session.recap = peek.awaySummary
         // Title priority mirrors the original: a name the user gave the
         // session wins, then Claude's auto-generated title, then the first
         // prompt as a last resort.
