@@ -17,6 +17,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 
 cp "$BINDIR/Vedetta" "$APP/Contents/MacOS/Vedetta"
 cp "$BINDIR/VedettaBridge" "$APP/Contents/Helpers/vedetta-bridge"
+cp -R "$ROOT/extensions/vscode" "$APP/Contents/Resources/vscode-extension"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
