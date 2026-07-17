@@ -151,15 +151,11 @@ final class NotchPanelController {
     private func positionWindow() {
         guard let screen = Self.targetScreen() else { return }
         let size = Self.windowSize
-        let geometry = Self.notchGeometry(for: screen)
-        // Flush with the top edge on notched screens; just below the menu
-        // bar on plain ones.
-        let topOffset: CGFloat = geometry.hasNotch
-            ? 0
-            : (screen.frame.maxY - screen.visibleFrame.maxY) + 6
+        // Flush with the top edge everywhere: the floating bar hugs the
+        // top of plain displays exactly like the notch extension does.
         let origin = NSPoint(
             x: screen.frame.midX - size.width / 2,
-            y: screen.frame.maxY - topOffset - size.height
+            y: screen.frame.maxY - size.height
         )
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
