@@ -134,7 +134,7 @@ struct NotchView: View {
             Image(systemName: "speaker.wave.2.fill")
             Image(systemName: "gearshape.fill")
         }
-        .font(.system(size: 14))
+        .font(.system(size: 12.5))
         .foregroundStyle(Theme.secondaryText)
         .padding(.leading, 18)
         .padding(.trailing, 21)
@@ -152,6 +152,6 @@ struct NotchView: View {
             Text("23%").bold().foregroundStyle(.green)
             Text("4d0h").foregroundStyle(Theme.secondaryText)
         }
-        .font(.system(size: 13))
+        .font(.system(size: 11))
     }
 }
