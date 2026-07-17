@@ -19,6 +19,9 @@ cp "$BINDIR/Vedetta" "$APP/Contents/MacOS/Vedetta"
 cp "$BINDIR/VedettaBridge" "$APP/Contents/Helpers/vedetta-bridge"
 cp -R "$ROOT/extensions/vscode" "$APP/Contents/Resources/vscode-extension"
 
+[ -f "$ROOT/dist/AppIcon.icns" ] || "$ROOT/Scripts/make-icon.sh"
+cp "$ROOT/dist/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -42,6 +45,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

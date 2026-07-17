@@ -54,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.panelController = panelController
         statusItemController = StatusItemController(panelController: panelController)
         panelController.show()
+
+        if !ProcessInfo.processInfo.arguments.contains("--mock") {
+            OnboardingController.shared.showIfNeeded()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
