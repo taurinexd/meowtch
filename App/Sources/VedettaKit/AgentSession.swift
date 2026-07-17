@@ -1,0 +1,75 @@
+import Foundation
+
+/// The CLI agent a session belongs to.
+public enum AgentKind: String, Codable, Sendable, CaseIterable {
+    case claude
+    case codex
+
+    public var displayName: String {
+        switch self {
+        case .claude: "Claude"
+        case .codex: "Codex"
+        }
+    }
+}
+
+/// Lifecycle state of an agent session, in display-priority order.
+public enum SessionState: Int, Codable, Sendable, Comparable, CaseIterable {
+    case needsApproval = 0
+    case waitingForInput = 1
+    case running = 2
+    case completed = 3
+
+    public static func < (lhs: SessionState, rhs: SessionState) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
+/// One live (or recently finished) agent session shown as a card in the panel.
+public struct AgentSession: Identifiable, Equatable, Sendable {
+    public let id: String
+    public var agent: AgentKind
+    public var title: String
+    public var directory: String
+    public var gitBranch: String?
+    public var model: String?
+    public var currentTool: String?
+    public var currentToolDetail: String?
+    public var lastMessage: String?
+    public var state: SessionState
+    public var startedAt: Date
+    public var lastActivityAt: Date
+
+    public init(
+        id: String,
+        agent: AgentKind,
+        title: String,
+        directory: String,
+        gitBranch: String? = nil,
+        model: String? = nil,
+        currentTool: String? = nil,
+        currentToolDetail: String? = nil,
+        lastMessage: String? = nil,
+        state: SessionState,
+        startedAt: Date,
+        lastActivityAt: Date
+    ) {
+        self.id = id
+        self.agent = agent
+        self.title = title
+        self.directory = directory
+        self.gitBranch = gitBranch
+        self.model = model
+        self.currentTool = currentTool
+        self.currentToolDetail = currentToolDetail
+        self.lastMessage = lastMessage
+        self.state = state
+        self.startedAt = startedAt
+        self.lastActivityAt = lastActivityAt
+    }
+
+    /// Last path component of the working directory, used as the card title prefix.
+    public var directoryName: String {
+        (directory as NSString).lastPathComponent
+    }
+}
