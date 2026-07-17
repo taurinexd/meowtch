@@ -35,10 +35,26 @@ func terminalIdentity() -> [String: Any] {
     }
     info["pid"] = Int(getpid())
     info["ppid"] = Int(getppid())
-    if let windowId = frontWindowIdOfOwningApp() {
+    // The whole ancestry, captured while it is alive: the bridge dies
+    // right away, but the chain includes the terminal's shell — what the
+    // VS Code extension matches terminals against at jump time.
+    let chain = ancestryChain()
+    info["pidChain"] = chain.map(Int.init)
+    if let windowId = frontWindowId(ancestry: chain) {
         info["windowId"] = windowId
     }
     return info
+}
+
+func ancestryChain() -> [pid_t] {
+    var chain: [pid_t] = []
+    var current = getpid()
+    for _ in 0..<15 {
+        chain.append(current)
+        guard let parent = parentPid(of: current), parent > 1 else { break }
+        current = parent
+    }
+    return chain
 }
 
 /// Parent pid via sysctl — the hook environment has no /proc.
@@ -55,14 +71,8 @@ func parentPid(of pid: pid_t) -> pid_t? {
 /// frontmost on-screen window at hook time is where the user is typing —
 /// the app trusts this only on user-driven events. Nil when there is no
 /// window-server access (SSH) or no window is on screen.
-func frontWindowIdOfOwningApp() -> Int? {
-    var chain = Set<pid_t>()
-    var current = getpid()
-    for _ in 0..<30 {
-        chain.insert(current)
-        guard let parent = parentPid(of: current), parent > 1 else { break }
-        current = parent
-    }
+func frontWindowId(ancestry: [pid_t]) -> Int? {
+    let chain = Set(ancestry)
     guard let list = CGWindowListCopyWindowInfo(
         [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
     ) as? [[String: Any]] else { return nil }
