@@ -166,11 +166,35 @@ final class NotchPanelController {
     /// of hover, so screenshots are deterministic.
     private let pinnedExpanded = ProcessInfo.processInfo.arguments.contains("--expanded")
 
+    private var isHovering = false
+    private var cooldownWorkItem: DispatchWorkItem?
+    /// After a collapse, a brief window during which returning the cursor
+    /// does not immediately re-expand — so a quick flick back into the
+    /// area the panel just vacated doesn't reopen it, like the original.
+    private var cooldownUntil: Date?
+    private let cooldown: TimeInterval = 0.5
+
     private func hoverChanged(_ hovering: Bool) {
         if pinnedExpanded { return }
+        isHovering = hovering
         collapseWorkItem?.cancel()
+        cooldownWorkItem?.cancel()
+
         if hovering {
-            setExpanded(true)
+            if let until = cooldownUntil, Date() < until {
+                // In cooldown: don't reopen now. Re-check when it ends and
+                // expand only if the cursor is still there (a deliberate
+                // hover), not a quick flick-through.
+                let remaining = until.timeIntervalSinceNow
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, self.isHovering else { return }
+                    self.setExpanded(true)
+                }
+                cooldownWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: work)
+            } else {
+                setExpanded(true)
+            }
         } else {
             // Small delay so the panel doesn't flicker when the pointer
             // grazes the edge.
@@ -185,6 +209,9 @@ final class NotchPanelController {
     private func setExpanded(_ expanded: Bool) {
         guard uiModel.isExpanded != expanded else { return }
         uiModel.isExpanded = expanded
+        if !expanded {
+            cooldownUntil = Date().addingTimeInterval(cooldown)
+        }
     }
 }
 
