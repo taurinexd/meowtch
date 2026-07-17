@@ -148,5 +148,18 @@ enum SessionBootstrap {
             session.lastActivityAt = activity
             store.upsert(session)
         }
+
+        // Live sessions get state and messages from hook events, but the
+        // recap is written out-of-band minutes AFTER Stop (while the user
+        // is away): re-peek just that, touching nothing the events own.
+        for (id, path) in scannedPaths where liveEventIds.contains(id) {
+            guard var session = store.sessions.first(where: { $0.id == id }),
+                  session.agent == .claude else { continue }
+            let recap = TranscriptPeek.read(path: path).awaySummary
+            if session.recap != recap {
+                session.recap = recap
+                store.upsert(session)
+            }
+        }
     }
 }
