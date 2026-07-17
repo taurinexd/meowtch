@@ -24,6 +24,37 @@ public struct SessionTasks: Sendable, Equatable {
     public var open: [Item] { items.filter { $0.status == "pending" } }
     public var inProgress: [Item] { items.filter { $0.status == "in_progress" } }
     public var isEmpty: Bool { items.isEmpty }
+
+    /// Claude Code persists the LIVE task list as `~/.claude/tasks/
+    /// <sessionId>/<taskId>.json` files, deleting them on cleanup — the
+    /// authoritative state, unlike a transcript rebuild which resurrects
+    /// tasks cleared before a compaction. Returns nil when the session has
+    /// no task directory at all; an existing-but-empty directory yields an
+    /// empty list (stale cards must clear).
+    public static func load(
+        sessionId: String,
+        baseDir: String = NSHomeDirectory() + "/.claude/tasks"
+    ) -> SessionTasks? {
+        let dir = baseDir + "/" + sessionId
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else {
+            return nil
+        }
+        var items: [Item] = []
+        for file in files where file.hasSuffix(".json") && !file.hasPrefix(".") {
+            guard let data = FileManager.default.contents(atPath: dir + "/" + file),
+                  let object = try? JSONSerialization.jsonObject(with: data),
+                  let entry = object as? [String: Any],
+                  let subject = entry["subject"] as? String else { continue }
+            let id = (entry["id"] as? String) ?? String(file.dropLast(5))
+            items.append(Item(
+                id: id,
+                subject: subject,
+                status: entry["status"] as? String ?? "pending"
+            ))
+        }
+        items.sort { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }
+        return SessionTasks(items: items)
+    }
 }
 
 /// Streaming full-file transcript scan: extracts what the bounded windows
