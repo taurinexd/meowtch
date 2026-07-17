@@ -81,16 +81,16 @@ struct NotchView: View {
     private var collapsedContent: some View {
         HStack(spacing: 6) {
             PixelSprite(pattern: PixelSprite.lookout, color: statusColor, pixelSize: 2)
-                .padding(.leading, collapsedFlare + 10)
+                .padding(.leading, collapsedFlare + 8)
             if let topState = store.sessions.filter({ !$0.isMinimized }).map(\.state).min() {
-                StateIndicator(state: topState)
+                StateIndicator(state: topState, scale: 0.75)
             }
             Spacer()
             if !store.sessions.isEmpty {
                 Text("\(store.sessions.count)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.primaryText)
-                    .padding(.trailing, collapsedFlare + 12)
+                    .padding(.trailing, collapsedFlare + 9)
             }
         }
         .frame(width: collapsedWidth, height: collapsedHeight)
@@ -110,13 +110,18 @@ struct NotchView: View {
     // MARK: - Expanded
 
     private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        // All paddings below are measured from the panel's flat edges, so
+        // the flare inset is applied first (values pixel-measured on the
+        // original: text column x=64, sprite x=18, sections every 26pt).
+        VStack(alignment: .leading, spacing: 20) {
             topBar
             ForEach(store.sessions) { session in
                 SessionRowView(session: session, tasks: MockSessions.tasks[session.id])
             }
         }
-        .padding(.bottom, 22)
+        // +4: the reference crop sits 4pt inside the real flat edges.
+        .padding(.horizontal, expandedFlare + 4)
+        .padding(.bottom, 18)
         .frame(width: expandedWidth, alignment: .top)
         .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
     }
@@ -131,8 +136,9 @@ struct NotchView: View {
         }
         .font(.system(size: 14))
         .foregroundStyle(Theme.secondaryText)
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
+        .padding(.leading, 18)
+        .padding(.trailing, 21)
+        .padding(.top, 8)
     }
 
     /// Mock of the quota strip ("5h 67% 44m | 7d 23% 4d0h") until M7.

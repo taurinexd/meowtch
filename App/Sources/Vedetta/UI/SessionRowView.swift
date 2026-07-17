@@ -22,7 +22,6 @@ struct SessionRowView: View {
             Circle()
                 .fill(Theme.secondaryText.opacity(0.5))
                 .frame(width: 8, height: 8)
-                .padding(.leading, 6)
             (
                 Text(session.directoryName).fontWeight(.bold)
                 + Text(" · ").foregroundStyle(Theme.secondaryText)
@@ -34,73 +33,80 @@ struct SessionRowView: View {
             Spacer(minLength: 8)
             chips
         }
-        .padding(.horizontal, 20)
+        .padding(.leading, 16)
+        .padding(.trailing, 18)
     }
 
+    /// Layout measured on the original: a 46pt sprite column (sprite at
+    /// x=18, vertically centered on the text block), text column at x=64,
+    /// tasks widget full-width below both.
     private var fullRow: some View {
-        HStack(alignment: .top, spacing: 10) {
-            HStack(alignment: .center, spacing: 6) {
-                PixelSprite(
-                    pattern: PixelSprite.lookout,
-                    color: Theme.color(for: session.state),
-                    pixelSize: 2.5
-                )
-                StateIndicator(state: session.state)
-            }
-            .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(session.directoryName)
-                        .fontWeight(.bold)
-                    + Text(" · ")
-                        .foregroundStyle(Theme.secondaryText)
-                    + Text(session.title)
-                        .fontWeight(.bold)
-                    Spacer(minLength: 8)
-                    chips
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 0) {
+                HStack(alignment: .center, spacing: 10) {
+                    PixelSprite(
+                        pattern: PixelSprite.lookout,
+                        color: Theme.color(for: session.state),
+                        pixelSize: 2.2
+                    )
+                    StateIndicator(state: session.state)
                 }
-                .font(.system(size: 13.5))
-                .foregroundStyle(Theme.primaryText)
-                .lineLimit(1)
+                .frame(width: 46, alignment: .leading)
 
-                // While the agent waits, the panel shows its last words;
-                // while it works, what the user asked plus the running tool.
-                if session.state == .running || session.state == .needsApproval {
-                    if let message = session.lastMessage {
-                        Text("You: \(message)")
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(1)
-                    }
-                } else if let reply = session.lastAssistantMessage {
-                    Text(reply)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(3)
-                }
-
-                if session.state == .running, let tool = session.currentTool {
+                VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
-                        Text(tool)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Theme.toolBlue)
-                        if let detail = session.currentToolDetail {
-                            Text(detail)
+                        Text(session.directoryName)
+                            .fontWeight(.bold)
+                        + Text(" · ")
+                            .foregroundStyle(Theme.secondaryText)
+                        + Text(session.title)
+                            .fontWeight(.bold)
+                        Spacer(minLength: 8)
+                        chips
+                    }
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+
+                    // While the agent waits, the panel shows its last words;
+                    // while it works, what the user asked plus the tool.
+                    if session.state == .running || session.state == .needsApproval {
+                        if let message = session.lastMessage {
+                            Text("You: \(message)")
+                                .font(.system(size: 12.5))
                                 .foregroundStyle(Theme.secondaryText)
                                 .lineLimit(1)
                         }
+                    } else if let reply = session.lastAssistantMessage {
+                        Text(reply)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(3)
                     }
-                    .font(.system(size: 12.5))
-                }
 
-                if let tasks {
-                    TasksWidget(tasks: tasks)
-                        .padding(.top, 6)
+                    if session.state == .running, let tool = session.currentTool {
+                        HStack(spacing: 6) {
+                            Text(tool)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Theme.toolBlue)
+                            if let detail = session.currentToolDetail {
+                                Text(detail)
+                                    .foregroundStyle(Theme.secondaryText)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .font(.system(size: 12.5))
+                    }
                 }
             }
+
+            if let tasks {
+                TasksWidget(tasks: tasks)
+                    .padding(.top, 16)
+            }
         }
-        .padding(.horizontal, 20)
+        .padding(.leading, 18)
+        .padding(.trailing, 15)
     }
 
     private var chips: some View {
@@ -112,8 +118,9 @@ struct SessionRowView: View {
             if session.state == .waitingForInput && !session.isMinimized {
                 Circle()
                     .fill(Theme.color(for: .waitingForInput))
-                    .frame(width: 8, height: 8)
-                    .padding(.horizontal, 4)
+                    .frame(width: 7, height: 7)
+                    .padding(.leading, 4)
+                    .padding(.trailing, 11)
             } else {
                 Chip(text: session.startedAt.vedettaAge)
             }
@@ -183,7 +190,7 @@ struct TasksWidget: View {
                 .foregroundStyle(Theme.secondaryText.opacity(0.7))
                 .padding(.leading, 18)
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12))
