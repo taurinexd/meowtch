@@ -73,33 +73,35 @@ struct PixelSpinner: View {
     var body: some View {
         let tick = clock.spinTick
         Canvas { gc, _ in
+            let inset = cell * 0.07
             for (i, (cx, cy)) in Self.ring.enumerated() {
                 let distance = (i - tick % 8 + 8) % 8
                 let alpha = 1.0 - Double(distance) * 0.13
                 let rect = CGRect(
-                    x: CGFloat(cx) * cell,
-                    y: CGFloat(cy) * cell,
-                    width: cell,
-                    height: cell
+                    x: CGFloat(cx) * cell + inset,
+                    y: CGFloat(cy) * cell + inset,
+                    width: cell - inset * 2,
+                    height: cell - inset * 2
                 )
                 gc.fill(Path(rect), with: .color(color.opacity(alpha)))
             }
         }
         .frame(width: cell * 3, height: cell * 3)
+        .shadow(color: color.opacity(0.8), radius: cell * 1.4)
     }
 }
 
-/// Hard on/off blinking vertical bar (waiting for input).
-/// 5.5×12pt with 2pt radius, measured on the original.
+/// Hard on/off blinking bar (waiting for input): a 2×4 grid of small
+/// squares with grid gaps and glow, like the original — not a solid pill.
 struct BlinkingBar: View {
     @ObservedObject private var clock = PixelClock.shared
     var color: Color
     var scale: CGFloat = 1
 
+    private static let glyph: [String] = ["##", "##", "##", "##"]
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 2 * scale)
-            .fill(color)
-            .frame(width: 5.5 * scale, height: 12 * scale)
+        PixelSprite(pattern: Self.glyph, color: color, pixelSize: 2.9 * scale)
             .opacity(clock.blinkOn ? 1 : 0)
     }
 }
@@ -123,9 +125,7 @@ struct BlinkingQuestionMark: View {
     var body: some View {
         VStack(spacing: pixel) {
             PixelSprite(pattern: Self.glyph, color: color, pixelSize: pixel)
-            Rectangle()
-                .fill(color)
-                .frame(width: pixel * 2, height: pixel * 2)
+            PixelSprite(pattern: ["##", "##"], color: color, pixelSize: pixel)
                 .opacity(clock.blinkOn ? 1 : 0)
         }
     }
