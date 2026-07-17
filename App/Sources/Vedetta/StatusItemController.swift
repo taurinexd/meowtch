@@ -49,6 +49,14 @@ final class StatusItemController {
         muteItem.target = self
         muteItem.state = SoundEngine.shared.isMuted ? .on : .off
         menu.addItem(muteItem)
+        let displayItem = NSMenuItem(
+            title: "Panel on External Display",
+            action: #selector(toggleDisplay),
+            keyEquivalent: ""
+        )
+        displayItem.target = self
+        displayItem.state = NotchPanelController.preferExternalDisplay ? .on : .off
+        menu.addItem(displayItem)
         let onboardingItem = NSMenuItem(
             title: "Show Onboarding",
             action: #selector(showOnboarding),
@@ -69,6 +77,12 @@ final class StatusItemController {
 
     @objc private func togglePanel() {
         panelController.toggleVisibility()
+    }
+
+    @objc private func toggleDisplay(_ sender: NSMenuItem) {
+        NotchPanelController.preferExternalDisplay.toggle()
+        sender.state = NotchPanelController.preferExternalDisplay ? .on : .off
+        panelController.relocate()
     }
 
     @objc private func showOnboarding() {
