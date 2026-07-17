@@ -9,16 +9,24 @@ public enum HookConfigurator {
     /// Substring that identifies our entries inside command strings.
     public static let markerToken = "vedetta-bridge"
 
-    /// Events Vedetta subscribes to in M2 (PermissionRequest arrives in M3).
+    /// Events Vedetta subscribes to.
     public static let claudeEvents = [
         "SessionStart", "SessionEnd", "UserPromptSubmit",
         "PreToolUse", "PostToolUse", "Notification",
         "Stop", "SubagentStart", "SubagentStop",
+        "PermissionRequest",
     ]
 
     /// Tool-scoped events need an explicit wildcard matcher.
     private static let matcherEvents: Set<String> = [
-        "PreToolUse", "PostToolUse", "Notification",
+        "PreToolUse", "PostToolUse", "Notification", "PermissionRequest",
+    ]
+
+    /// The approval hook blocks until the user decides from the notch:
+    /// its timeout (seconds) is the upper bound on that wait, after which
+    /// Claude Code falls back to its normal terminal prompt.
+    public static let blockingTimeouts: [String: Int] = [
+        "PermissionRequest": 86_400
     ]
 
     public static func bridgeCommand(source: String = "claude") -> String {
@@ -35,9 +43,11 @@ public enum HookConfigurator {
         for event in claudeEvents {
             var groups = hooks[event] as? [[String: Any]] ?? []
             guard !containsMarker(groups) else { continue }
-            var group: [String: Any] = [
-                "hooks": [["type": "command", "command": bridgeCommand()]]
-            ]
+            var entry: [String: Any] = ["type": "command", "command": bridgeCommand()]
+            if let timeout = blockingTimeouts[event] {
+                entry["timeout"] = timeout
+            }
+            var group: [String: Any] = ["hooks": [entry]]
             if matcherEvents.contains(event) {
                 group["matcher"] = "*"
             }

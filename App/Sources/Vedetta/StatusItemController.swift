@@ -41,6 +41,14 @@ final class StatusItemController {
         )
         removeItem.target = self
         menu.addItem(removeItem)
+        let muteItem = NSMenuItem(
+            title: "Mute Sounds",
+            action: #selector(toggleMute),
+            keyEquivalent: ""
+        )
+        muteItem.target = self
+        muteItem.state = SoundEngine.shared.isMuted ? .on : .off
+        menu.addItem(muteItem)
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
@@ -54,6 +62,11 @@ final class StatusItemController {
 
     @objc private func togglePanel() {
         panelController.toggleVisibility()
+    }
+
+    @objc private func toggleMute(_ sender: NSMenuItem) {
+        SoundEngine.shared.isMuted.toggle()
+        sender.state = SoundEngine.shared.isMuted ? .on : .off
     }
 
     @objc private func installHooks() {

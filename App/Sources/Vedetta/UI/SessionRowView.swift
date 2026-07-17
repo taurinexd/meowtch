@@ -11,6 +11,7 @@ struct SessionRowView: View {
     /// (minimized, or adopted from transcripts with no live terminal).
     var isCompact = false
     @State private var isHovered = false
+    @ObservedObject private var approvals = ApprovalCenter.shared
 
     var body: some View {
         Group {
@@ -121,6 +122,11 @@ struct SessionRowView: View {
                 }
             }
 
+            if let pending = approvals.firstPending(for: session.id) {
+                approvalBar(pending)
+                    .padding(.top, 10)
+            }
+
             if let tasks {
                 TasksWidget(tasks: tasks)
                     .padding(.top, 16)
@@ -128,6 +134,49 @@ struct SessionRowView: View {
         }
         .padding(.leading, 18)
         .padding(.trailing, 15)
+    }
+
+    /// Allow/Deny strip for a pending permission request.
+    private func approvalBar(_ pending: ApprovalCenter.Pending) -> some View {
+        HStack(spacing: 8) {
+            Text(pending.toolName)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Theme.color(for: .needsApproval))
+            if let detail = pending.toolDetail {
+                Text(detail)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 10)
+            Button {
+                ApprovalCenter.shared.decide(id: pending.id, allow: false)
+            } label: {
+                Text("Deny")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.primaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            Button {
+                ApprovalCenter.shared.decide(id: pending.id, allow: true)
+            } label: {
+                Text("Allow")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(Theme.color(for: .needsApproval).opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private var chips: some View {
