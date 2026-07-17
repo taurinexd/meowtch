@@ -21,6 +21,12 @@ public final class SessionStore: ObservableObject {
         terminals[id]
     }
 
+    /// Forces observers to re-render time-dependent derivations (row
+    /// partitioning by recency) even when no session changed.
+    public func touch() {
+        objectWillChange.send()
+    }
+
     public func upsert(_ session: AgentSession) {
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index] = session
