@@ -72,6 +72,33 @@ struct SessionEventReducerTests {
         #expect(store.sessions.first?.currentTool == nil)
     }
 
+    @Test func preCompactEntersCompactingAndSessionStartRestores() {
+        let store = SessionStore()
+        SessionEventReducer.apply(envelope("SessionStart"), to: store)
+        SessionEventReducer.apply(
+            envelope("PreToolUse", extra: ["tool_name": "Bash", "tool_input": ["command": "ls"]]),
+            to: store
+        )
+        // Manual /compact: purple while compacting, then back to waiting.
+        SessionEventReducer.apply(envelope("PreCompact", extra: ["trigger": "manual"]), to: store)
+        #expect(store.sessions.first?.state == .compacting)
+        #expect(store.sessions.first?.currentTool == nil)
+        #expect(store.sessions.first?.compactingStartedAt != nil)
+        SessionEventReducer.apply(envelope("SessionStart"), to: store)
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.compactingStartedAt == nil)
+        // Auto-compact happens mid-turn: the agent resumes working.
+        SessionEventReducer.apply(envelope("PreCompact", extra: ["trigger": "auto"]), to: store)
+        #expect(store.sessions.first?.state == .compacting)
+        SessionEventReducer.apply(envelope("SessionStart"), to: store)
+        #expect(store.sessions.first?.state == .running)
+    }
+
+    @Test func compactingRanksBelowRunningAboveWaiting() {
+        #expect(SessionState.running < SessionState.compacting)
+        #expect(SessionState.compacting < SessionState.waitingForInput)
+    }
+
     @Test func stopMeansWaitingForInput() {
         let store = SessionStore()
         SessionEventReducer.apply(envelope("SessionStart"), to: store)

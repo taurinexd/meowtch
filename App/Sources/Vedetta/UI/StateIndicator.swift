@@ -49,6 +49,8 @@ struct StateIndicator: View {
         switch state {
         case .running:
             PixelSpinner(cell: 3 * scale)
+        case .compacting:
+            PixelSpinner(color: Theme.color(for: .compacting), cell: 3 * scale)
         case .waitingForInput:
             BlinkingBar(color: Theme.color(for: .waitingForInput), scale: scale)
         case .needsApproval:

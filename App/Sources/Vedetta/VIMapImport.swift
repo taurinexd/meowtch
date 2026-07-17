@@ -23,6 +23,7 @@ enum VIMapImport {
             let state: SessionState
             switch info["status"] as? String {
             case "processing", "running_tool": state = .running
+            case "compacting": state = .compacting
             default: state = .waitingForInput
             }
 

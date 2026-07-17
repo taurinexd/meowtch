@@ -112,7 +112,9 @@ struct SessionRowView: View {
                     // While working, show the running tool; otherwise (or
                     // when the tool is unknown) the agent's last reply — so
                     // there is always a second line under You:, like VI.
-                    if session.state == .running, let tool = session.currentTool {
+                    if session.state == .compacting {
+                        CompactingLine(startedAt: session.compactingStartedAt ?? session.lastActivityAt)
+                    } else if session.state == .running, let tool = session.currentTool {
                         HStack(spacing: 6) {
                             Text(tool)
                                 .fontWeight(.semibold)
@@ -304,12 +306,15 @@ struct SessionRowView: View {
         }
     }
 
-    /// Trailing element (age / status dot / archive on hover). A hidden age
-    /// chip reserves the width so swapping content on hover never shifts the
-    /// chips to its left — the original keeps this space fixed.
+    /// Trailing element (age / status dot / archive on hover). Hidden
+    /// reference chips reserve a width that is the same on EVERY row (not
+    /// this row's own age), so the chips to its left all start at the same
+    /// distance from the right edge across rows, like the original.
     private var trailingSlot: some View {
         ZStack(alignment: .trailing) {
-            Chip(text: session.lastActivityAt.vedettaAge).hidden()
+            Chip(text: "<1m").hidden()
+            Chip(text: "59m").hidden()
+            Chip(text: "23h").hidden()
             Group {
                 if isHovered {
                     Button {
@@ -330,6 +335,26 @@ struct SessionRowView: View {
                 }
             }
         }
+    }
+}
+
+/// The context-compaction line shown in place of the tool line, like the
+/// original: "Compacting · 29s" in purple (text #8E2FA4, sampled), with
+/// the elapsed time ticking. Isolated in its own view so only this line
+/// re-renders on the clock, not the whole row.
+struct CompactingLine: View {
+    @ObservedObject private var clock = PixelClock.shared
+    let startedAt: Date
+
+    var body: some View {
+        let seconds = max(0, Int(clock.now.timeIntervalSince(startedAt)))
+        let label = seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m \(seconds % 60)s"
+        HStack(spacing: 6) {
+            Text("Compacting").fontWeight(.semibold)
+            Text("· \(label)")
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(Theme.compactingText)
     }
 }
 
@@ -416,10 +441,12 @@ struct TasksWidget: View {
 
 extension Date {
     /// Compact age label like the original's chips: "<1m", "9m", "2h".
+    /// Days above 24h keep the label within the fixed trailing slot.
     var vedettaAge: String {
         let minutes = Int(-timeIntervalSinceNow / 60)
         if minutes < 1 { return "<1m" }
         if minutes < 60 { return "\(minutes)m" }
-        return "\(minutes / 60)h"
+        if minutes < 60 * 24 { return "\(minutes / 60)h" }
+        return "\(minutes / (60 * 24))d"
     }
 }
