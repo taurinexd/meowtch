@@ -8,19 +8,24 @@ import VedettaKit
 @MainActor
 enum JumpService {
     static func jump(to session: AgentSession, terminal: TerminalInfo?) {
-        guard let terminal else { return }
+        var trace = ["jump \(session.id.prefix(8))"]
+        defer { log(trace.joined(separator: " ")) }
+
+        guard let terminal else {
+            trace.append("NO-TERMINAL")
+            return
+        }
         let isVSCode = terminal.termProgram == "vscode"
             || terminal.bundleIdentifier == "com.microsoft.VSCode"
         let bundleId = terminal.bundleIdentifier
             ?? (isVSCode ? "com.microsoft.VSCode" : nil)
+        trace.append("bundle=\(bundleId ?? "nil") pid=\(terminal.pid.map(String.init) ?? "-") ax=\(AXIsProcessTrusted())")
 
-        // Raise the hosting app first — restoring minimized windows needs
-        // Accessibility (the reason the original requires it too); without
-        // the grant this quietly degrades to a plain activate.
         if let bundleId,
            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
-            unminimizeIfNeeded(app: app)
-            app.activate(options: [.activateAllWindows])
+            raise(app: app, trace: &trace)
+        } else {
+            trace.append("app-not-running")
         }
 
         // Then the companion extension focuses the exact integrated
@@ -28,36 +33,62 @@ enum JumpService {
         if isVSCode, let pid = terminal.pid,
            let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)") {
             NSWorkspace.shared.open(url)
+            trace.append("uri-opened")
         }
     }
 
-    /// If the app has no visible window (all minimized), restores the
-    /// minimized ones and raises the first — best effort: without a
-    /// tracked windowId the exact window is the extension's job.
-    private static func unminimizeIfNeeded(app: NSRunningApplication) {
-        guard AXIsProcessTrusted() else { return }
-        let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        var windowsRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-              let windows = windowsRef as? [AXUIElement], !windows.isEmpty else { return }
+    /// Brings the app to the front. Plain activate() from a background,
+    /// never-active caller is IGNORED by cooperative activation on modern
+    /// macOS: the reliable road is Accessibility (AXRaise + frontmost),
+    /// the same reason the original requires that permission. Restores
+    /// minimized windows when none is visible (best effort: without a
+    /// tracked windowId the exact window is the extension's job).
+    private static func raise(app: NSRunningApplication, trace: inout [String]) {
+        if AXIsProcessTrusted() {
+            let axApp = AXUIElementCreateApplication(app.processIdentifier)
+            var windowsRef: CFTypeRef?
+            let err = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef)
+            let windows = (windowsRef as? [AXUIElement]) ?? []
+            trace.append("axWindows=\(err == .success ? "\(windows.count)" : "err\(err.rawValue)")")
 
-        var minimized: [AXUIElement] = []
-        var anyVisible = false
-        for window in windows {
-            var value: CFTypeRef?
-            if AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success,
-               (value as? Bool) == true {
-                minimized.append(window)
-            } else {
-                anyVisible = true
+            var target: AXUIElement?
+            var minimized: [AXUIElement] = []
+            for window in windows {
+                var value: CFTypeRef?
+                if AXUIElementCopyAttributeValue(window, kAXMinimizedAttribute as CFString, &value) == .success,
+                   (value as? Bool) == true {
+                    minimized.append(window)
+                } else if target == nil {
+                    target = window
+                }
             }
+            if target == nil, !minimized.isEmpty {
+                for window in minimized {
+                    AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+                }
+                target = minimized.first
+                trace.append("restored=\(minimized.count)")
+            }
+            if let target {
+                AXUIElementPerformAction(target, kAXRaiseAction as CFString)
+            }
+            let front = AXUIElementSetAttributeValue(axApp, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+            trace.append("axFront=\(front.rawValue)")
+        } else {
+            trace.append("ax-untrusted")
         }
-        guard !anyVisible else { return }
-        for window in minimized {
-            AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-        }
-        if let first = minimized.first {
-            AXUIElementPerformAction(first, kAXRaiseAction as CFString)
+        app.activate(options: [.activateAllWindows])
+    }
+
+    private static func log(_ line: String) {
+        let stamped = ISO8601DateFormatter().string(from: Date()) + " " + line + "\n"
+        let path = NSHomeDirectory() + "/.vedetta/run/jump.log"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(stamped.utf8))
+            try? handle.close()
+        } else {
+            try? stamped.write(toFile: path, atomically: true, encoding: .utf8)
         }
     }
 
