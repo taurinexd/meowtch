@@ -16,12 +16,33 @@ enum VedettaSetup {
 
     // MARK: - Runtime layout
 
+    static var cacheDir: String { rootDir + "/cache" }
+    static var statusLinePath: String { binDir + "/vedetta-statusline" }
+
     static func ensureRuntimeLayout() throws {
         let fm = FileManager.default
-        for dir in [binDir, runDir, backupsDir] {
+        for dir in [binDir, runDir, backupsDir, cacheDir, rootDir + "/custom-sounds"] {
             try fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
         }
         try writeLauncher()
+        try writeStatusLineScript()
+    }
+
+    /// Harvests `rate_limits` from the statusline JSON into the cache;
+    /// prints nothing (empty statusline) and leaves room for user code.
+    private static func writeStatusLineScript() throws {
+        let script = """
+        #!/bin/bash
+        # Vedetta statusline (auto-generated): captures rate_limits for the
+        # usage strip. Add your own status output below — this file is only
+        # rewritten if you delete it.
+        input=$(cat)
+        _rl=$(printf '%s' "$input" | /usr/bin/jq -c '.rate_limits // empty' 2>/dev/null)
+        [ -n "$_rl" ] && printf '%s\\n' "$_rl" > "$HOME/.vedetta/cache/rl.json"
+        """
+        guard !FileManager.default.fileExists(atPath: statusLinePath) else { return }
+        try script.write(toFile: statusLinePath, atomically: true, encoding: .utf8)
+        chmod(statusLinePath, 0o755)
     }
 
     /// The launcher resolves the real helper inside the app bundle, so the
@@ -51,10 +72,14 @@ enum VedettaSetup {
     @discardableResult
     static func installClaudeHooks() throws -> Bool {
         let settings = readClaudeSettings() ?? [:]
-        let (merged, changed) = HookConfigurator.mergingHooks(into: settings)
-        guard changed else { return false }
+        let (merged, hooksChanged) = HookConfigurator.mergingHooks(into: settings)
+        let (final, statusChanged) = HookConfigurator.installingStatusLine(
+            into: merged,
+            command: statusLinePath
+        )
+        guard hooksChanged || statusChanged else { return false }
         try backupClaudeSettings()
-        try writeClaudeSettings(merged)
+        try writeClaudeSettings(final)
         return true
     }
 

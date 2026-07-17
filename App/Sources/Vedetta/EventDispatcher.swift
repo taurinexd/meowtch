@@ -58,20 +58,40 @@ enum EventDispatcher {
             ?? (toolInput?["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
             ?? (toolInput?["description"] as? String)
 
+        // Questions and plan reviews ride the same channel with richer UI.
+        var kind: ApprovalCenter.Kind = .tool
+        if toolName == "AskUserQuestion",
+           let questions = toolInput?["questions"] as? [[String: Any]],
+           let first = questions.first,
+           let text = first["question"] as? String {
+            let options = (first["options"] as? [[String: Any]])?
+                .compactMap { $0["label"] as? String } ?? []
+            kind = .question(text: text, options: options)
+            SoundEngine.shared.play(.question)
+        } else if toolName == "ExitPlanMode" || toolName == "EnterPlanMode",
+                  let plan = toolInput?["plan"] as? String {
+            kind = .plan(markdown: plan)
+        }
+
         store.transition(id: sessionId, to: .needsApproval)
 
-        let allow = await ApprovalCenter.shared.requestDecision(
+        let decision = await ApprovalCenter.shared.requestDecision(
             sessionId: sessionId,
             toolName: toolName,
-            toolDetail: detail
+            toolDetail: detail,
+            kind: kind
         )
 
         store.transition(id: sessionId, to: .running)
 
+        var decisionObject: [String: Any] = ["behavior": decision.allow ? "allow" : "deny"]
+        if let message = decision.message, !decision.allow {
+            decisionObject["message"] = message
+        }
         let reply: [String: Any] = [
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
-                "decision": ["behavior": allow ? "allow" : "deny"],
+                "decision": decisionObject,
             ]
         ]
         return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
@@ -114,7 +134,11 @@ enum EventDispatcher {
         case "decide":
             guard let id = envelope["id"] as? Int else { return nil }
             let allow = envelope["allow"] as? Bool ?? false
-            ApprovalCenter.shared.decide(id: id, allow: allow)
+            ApprovalCenter.shared.decide(
+                id: id,
+                allow: allow,
+                message: envelope["message"] as? String
+            )
             return Data(#"{"ok":true}"#.utf8)
 
         default:

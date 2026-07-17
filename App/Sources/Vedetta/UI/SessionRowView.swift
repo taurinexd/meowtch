@@ -146,8 +146,104 @@ struct SessionRowView: View {
         .padding(.trailing, 15)
     }
 
-    /// Allow/Deny strip for a pending permission request.
+    /// Pending request UI: Allow/Deny strip for tools, option buttons for
+    /// questions, a Markdown preview with approve/reject for plans.
+    @ViewBuilder
     private func approvalBar(_ pending: ApprovalCenter.Pending) -> some View {
+        switch pending.kind {
+        case .tool:
+            toolApprovalBar(pending)
+        case .question(let text, let options):
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "questionmark.bubble.fill")
+                        .font(.system(size: 11))
+                    Text("Question")
+                        .font(.system(size: 11.5, weight: .bold))
+                }
+                .foregroundStyle(Theme.color(for: .needsApproval))
+                Text(text)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.primaryText)
+                ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                    Button {
+                        ApprovalCenter.shared.decide(
+                            id: pending.id,
+                            allow: false,
+                            message: "L'utente ha scelto: \(option)"
+                        )
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("\(index + 1)")
+                                .font(.system(size: 10, weight: .bold))
+                                .frame(width: 16, height: 16)
+                                .background(Theme.color(for: .needsApproval).opacity(0.8))
+                                .foregroundStyle(.black)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                            Text(option)
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundStyle(Theme.primaryText)
+                            Spacer()
+                        }
+                        .padding(8)
+                        .background(Color.white.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.color(for: .needsApproval).opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        case .plan(let markdown):
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Plan")
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(Theme.secondaryText)
+                ScrollView {
+                    Text((try? AttributedString(
+                        markdown: markdown,
+                        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                    )) ?? AttributedString(markdown))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.primaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 240)
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button {
+                        ApprovalCenter.shared.decide(id: pending.id, allow: false)
+                    } label: {
+                        Text("Reject")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(Theme.primaryText)
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(Color.white.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        ApprovalCenter.shared.decide(id: pending.id, allow: true)
+                    } label: {
+                        Text("Approve")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(Color.white)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private func toolApprovalBar(_ pending: ApprovalCenter.Pending) -> some View {
         HStack(spacing: 8) {
             Text(pending.toolName)
                 .font(.system(size: 11.5, weight: .semibold))

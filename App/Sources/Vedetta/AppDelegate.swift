@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SessionBootstrap.adoptRecentSessions(into: store)
             SessionBootstrap.adoptCodexSessions(into: store)
             JumpService.installVSCodeExtension()
+            UsageModel.shared.start()
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in
                 Task { @MainActor in
