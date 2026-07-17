@@ -49,6 +49,14 @@ final class StatusItemController {
         muteItem.target = self
         muteItem.state = SoundEngine.shared.isMuted ? .on : .off
         menu.addItem(muteItem)
+        let axItem = NSMenuItem(
+            title: "Enable Terminal Titles (Accessibility)…",
+            action: #selector(requestAccessibility),
+            keyEquivalent: ""
+        )
+        axItem.target = self
+        axItem.state = AXIsProcessTrusted() ? .on : .off
+        menu.addItem(axItem)
         let displayItem = NSMenuItem(
             title: "Panel on External Display",
             action: #selector(toggleDisplay),
@@ -77,6 +85,14 @@ final class StatusItemController {
 
     @objc private func togglePanel() {
         panelController.toggleVisibility()
+    }
+
+    @objc private func requestAccessibility(_ sender: NSMenuItem) {
+        // Prompts the system dialog and registers the app in the
+        // Accessibility list; used to read terminal tab titles.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        sender.state = AXIsProcessTrusted() ? .on : .off
     }
 
     @objc private func toggleDisplay(_ sender: NSMenuItem) {
