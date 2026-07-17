@@ -53,5 +53,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --sign - "$APP"
+# Stable self-signed identity when available: TCC grants (Accessibility)
+# survive rebuilds, unlike ad-hoc signing whose cdhash changes each build.
+IDENTITY="Vedetta Dev Signing"
+if security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+    codesign --force --sign "$IDENTITY" "$APP"
+else
+    codesign --force --sign - "$APP"
+fi
 echo "Built $APP"
