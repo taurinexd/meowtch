@@ -23,7 +23,12 @@ enum JumpService {
 
         if let bundleId,
            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
-            raise(app: app, directoryName: session.directoryName, trace: &trace)
+            raise(
+                app: app,
+                windowId: terminal.windowId,
+                directoryName: session.directoryName,
+                trace: &trace
+            )
         } else {
             trace.append("app-not-running")
         }
@@ -31,13 +36,18 @@ enum JumpService {
         // Then the companion extension focuses the exact integrated
         // terminal. The URI is delivered to the FOCUSED window's extension
         // host, and the extension only sees its own window's terminals:
-        // give the raise a beat so it lands in the session's window.
-        if isVSCode, let pid = terminal.pid,
-           let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                NSWorkspace.shared.open(url)
+        // give the raise a beat so it lands in the session's window (the
+        // workspace param lets a wrong window no-op harmlessly).
+        if isVSCode, let pid = terminal.pid {
+            let workspace = session.directory.addingPercentEncoding(
+                withAllowedCharacters: .urlQueryAllowed
+            ) ?? ""
+            if let url = URL(string: "vscode://vedetta.terminal-focus/focus?pid=\(pid)&workspace=\(workspace)") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    NSWorkspace.shared.open(url)
+                }
+                trace.append("uri-scheduled")
             }
-            trace.append("uri-scheduled")
         }
     }
 
@@ -48,7 +58,12 @@ enum JumpService {
     /// permission. The right window is matched by title — VS Code titles
     /// carry the folder name ("file — folder") — and gets restored when
     /// minimized, even while other windows stay visible.
-    private static func raise(app: NSRunningApplication, directoryName: String, trace: inout [String]) {
+    private static func raise(
+        app: NSRunningApplication,
+        windowId: Int?,
+        directoryName: String,
+        trace: inout [String]
+    ) {
         guard AXIsProcessTrusted() else {
             trace.append("ax-untrusted")
             app.activate()
@@ -71,20 +86,33 @@ enum JumpService {
                 && (value as? Bool) == true
         }
 
-        // Exact title segment first ("vedetta" must not grab the
-        // "vedetta-wt-topic" window), contains as fallback.
-        let name = directoryName.lowercased()
+        // The exact window first: the bridge recorded its CGWindowID at
+        // hook time. AX exposes no window id, so match by frame against
+        // the window-list entry (same top-left global coordinates).
         var target: AXUIElement?
-        if !name.isEmpty {
+        if let windowId, let bounds = cgWindowBounds(windowId) {
+            target = windows.first { window in
+                guard let frame = axFrame(window) else { return false }
+                return abs(frame.origin.x - bounds.origin.x) < 3
+                    && abs(frame.origin.y - bounds.origin.y) < 3
+                    && abs(frame.width - bounds.width) < 3
+                    && abs(frame.height - bounds.height) < 3
+            }
+            if target != nil { trace.append("byWindowId=\(windowId)") }
+        }
+
+        // Title fallback: exact segment first ("vedetta" must not grab
+        // the "vedetta-wt-topic" window), contains as a last resort.
+        let name = directoryName.lowercased()
+        if target == nil, !name.isEmpty {
             target = windows.first { window in
                 title(window).lowercased()
                     .components(separatedBy: " — ")
                     .contains { $0 == name }
             } ?? windows.first { title($0).lowercased().contains(name) }
+            if let target { trace.append("matched=\(title(target).prefix(40))") }
         }
-        if let target {
-            trace.append("matched=\(title(target).prefix(40))")
-        } else {
+        if target == nil {
             target = windows.first { !isMinimized($0) } ?? windows.first
             trace.append("fallback")
         }
@@ -99,6 +127,31 @@ enum JumpService {
         let front = AXUIElementSetAttributeValue(axApp, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         trace.append("axFront=\(front.rawValue)")
         app.activate()
+    }
+
+    /// Bounds of a window by CGWindowID (works for minimized ones too,
+    /// returning their last on-screen frame).
+    private static func cgWindowBounds(_ windowId: Int) -> CGRect? {
+        let ids = [CGWindowID(windowId)] as CFArray
+        guard let list = CGWindowListCreateDescriptionFromArray(ids) as? [[String: Any]],
+              let entry = list.first,
+              let dict = entry[kCGWindowBounds as String] as? [String: Any],
+              let bounds = CGRect(dictionaryRepresentation: dict as CFDictionary)
+        else { return nil }
+        return bounds
+    }
+
+    private static func axFrame(_ window: AXUIElement) -> CGRect? {
+        var positionRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionRef) == .success,
+              AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeRef) == .success
+        else { return nil }
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionRef as! AXValue, .cgPoint, &origin),
+              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) else { return nil }
+        return CGRect(origin: origin, size: size)
     }
 
     private static func log(_ line: String) {
@@ -119,13 +172,15 @@ enum JumpService {
     /// Idempotent per version; VS Code loads it at its next reload.
     static func installVSCodeExtension() {
         let source = Bundle.main.bundlePath + "/Contents/Resources/vscode-extension"
-        let target = NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.1.0"
+        let extensionsDir = NSHomeDirectory() + "/.vscode/extensions"
+        let target = extensionsDir + "/vedetta.terminal-focus-0.2.0"
         let fm = FileManager.default
+        // Outdated versions go away so VS Code always loads the current one.
+        for stale in ["vedetta.terminal-focus-0.1.0"] {
+            try? fm.removeItem(atPath: extensionsDir + "/" + stale)
+        }
         guard fm.fileExists(atPath: source), !fm.fileExists(atPath: target) else { return }
-        try? fm.createDirectory(
-            atPath: (target as NSString).deletingLastPathComponent,
-            withIntermediateDirectories: true
-        )
+        try? fm.createDirectory(atPath: extensionsDir, withIntermediateDirectories: true)
         try? fm.copyItem(atPath: source, toPath: target)
     }
 }

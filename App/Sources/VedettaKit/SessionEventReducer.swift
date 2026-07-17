@@ -7,17 +7,22 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
     public var termProgram: String?
     public var bundleIdentifier: String?
     public var pid: Int32?
+    /// CGWindowID of the window hosting the session, captured by the
+    /// bridge at hook time — the jump raises exactly this window.
+    public var windowId: Int?
 
     public init(
         tty: String? = nil,
         termProgram: String? = nil,
         bundleIdentifier: String? = nil,
-        pid: Int32? = nil
+        pid: Int32? = nil,
+        windowId: Int? = nil
     ) {
         self.tty = tty
         self.termProgram = termProgram
         self.bundleIdentifier = bundleIdentifier
         self.pid = pid
+        self.windowId = windowId
     }
 }
 
@@ -41,12 +46,22 @@ public enum SessionEventReducer {
         let cwd = event["cwd"] as? String
 
         if let terminal = envelope["terminal"] as? [String: Any] {
-            store.setTerminal(TerminalInfo(
+            var info = TerminalInfo(
                 tty: terminal["tty"] as? String,
                 termProgram: terminal["termProgram"] as? String,
                 bundleIdentifier: terminal["bundleIdentifier"] as? String,
-                pid: (terminal["pid"] as? NSNumber)?.int32Value
-            ), for: sessionId)
+                pid: (terminal["pid"] as? NSNumber)?.int32Value,
+                windowId: (terminal["windowId"] as? NSNumber)?.intValue
+            )
+            // The window binding is trustworthy only when the user is
+            // certainly typing in it: background events (the agent works
+            // while the user is in another window of the same app) must
+            // not rebind the session to whatever window is frontmost.
+            let userDriven = name == "UserPromptSubmit" || name == "SessionStart"
+            if !userDriven, let previous = store.terminal(for: sessionId)?.windowId {
+                info.windowId = previous
+            }
+            store.setTerminal(info, for: sessionId)
         }
 
         var session = store.sessions.first { $0.id == sessionId }
