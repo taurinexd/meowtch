@@ -15,8 +15,8 @@ enum Theme {
     static func color(for state: SessionState) -> Color {
         switch state {
         case .needsApproval: Color.orange
-        case .waitingForInput: Color.yellow
-        case .running: Color.green
+        case .waitingForInput: Color(red: 0.36, green: 0.84, blue: 0.42)
+        case .running: toolBlue
         case .completed: Color.gray
         }
     }

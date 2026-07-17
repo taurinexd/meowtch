@@ -21,25 +21,32 @@ struct NotchView: View {
     /// Wing sizes measured pixel-exact against the original: the flat part
     /// of the bar extends 40pt left and 23pt right of the physical notch
     /// (asymmetric: the sprite needs more room than the counter), plus the
-    /// concave top flare on each side.
+    /// concave top flare on each side. The flare deepens when expanded
+    /// (both measured on the original at identical capture scale).
     private let leftWing: CGFloat = 40
     private let rightWing: CGFloat = 23
-    private let topFlare: CGFloat = 8
+    private let collapsedFlare: CGFloat = 4
+    private let expandedFlare: CGFloat = 14
+
+    private var topFlare: CGFloat { model.isExpanded ? expandedFlare : collapsedFlare }
 
     private var collapsedWidth: CGFloat {
-        geometry.notchWidth + leftWing + rightWing + topFlare * 2
+        geometry.notchWidth + leftWing + rightWing + collapsedFlare * 2
     }
     private var collapsedHeight: CGFloat { geometry.barHeight + 1 }
     /// Keeps the notch centered while the bar extends asymmetrically.
     private var collapsedOffset: CGFloat { (rightWing - leftWing) / 2 }
-    /// Flat width 605pt (measured on the original) + the top flare insets.
-    private var expandedWidth: CGFloat { 605 + topFlare * 2 }
+    /// Flat width 602pt (measured on the original) + the top flare insets.
+    private var expandedWidth: CGFloat { 602 + expandedFlare * 2 }
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
-                NotchShape(bottomRadius: model.isExpanded ? 26 : 14)
-                    .fill(.black)
+                NotchShape(
+                    topRadius: topFlare,
+                    bottomRadius: model.isExpanded ? 26 : 14
+                )
+                .fill(.black)
 
                 Group {
                     if model.isExpanded {
@@ -59,7 +66,7 @@ struct NotchView: View {
                 radius: model.isExpanded ? 24 : 0,
                 y: model.isExpanded ? 6 : 0
             )
-            .contentShape(NotchShape())
+            .contentShape(NotchShape(topRadius: topFlare))
             .onHover(perform: onHoverChange)
             .animation(.spring(response: 0.32, dampingFraction: 0.82), value: model.isExpanded)
 
@@ -72,19 +79,24 @@ struct NotchView: View {
 
     /// Content flanks the physical notch: nothing may sit under the camera.
     private var collapsedContent: some View {
-        HStack {
+        HStack(spacing: 6) {
             PixelSprite(pattern: PixelSprite.lookout, color: statusColor, pixelSize: 2)
-                .padding(.leading, topFlare + 8)
+                .padding(.leading, collapsedFlare + 10)
+            if let topState = store.sessions.filter({ !$0.isMinimized }).map(\.state).min() {
+                StateIndicator(state: topState)
+            }
             Spacer()
             if !store.sessions.isEmpty {
                 Text("\(store.sessions.count)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundStyle(Theme.primaryText)
-                    .padding(.trailing, topFlare + 9)
+                    .padding(.trailing, collapsedFlare + 12)
             }
         }
         .frame(width: collapsedWidth, height: collapsedHeight)
-        .transition(.opacity)
+        // Instant removal: a fading copy would linger over the expanded
+        // panel because the ticking TimelineView keeps invalidating it.
+        .transition(.identity)
     }
 
     /// Color of the sprite: the most urgent state across sessions.

@@ -75,6 +75,16 @@ struct SessionStoreTests {
         #expect(store.sessions.first?.state == .running)
     }
 
+    @Test func minimizedSessionsSortLastRegardlessOfState() {
+        let store = SessionStore()
+        var minimized = makeSession(id: "min-appr", state: .needsApproval)
+        minimized.isMinimized = true
+        store.upsert(minimized)
+        store.upsert(makeSession(id: "done", state: .completed))
+        store.upsert(makeSession(id: "run", state: .running))
+        #expect(store.sessions.map(\.id) == ["run", "done", "min-appr"])
+    }
+
     @Test func removeClearsSession() {
         let store = SessionStore()
         store.upsert(makeSession(id: "a", state: .completed))
