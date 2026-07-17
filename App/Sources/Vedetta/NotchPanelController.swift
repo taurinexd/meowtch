@@ -254,12 +254,42 @@ final class NotchPanelController {
     /// does not immediately re-expand — so a quick flick back into the
     /// area the panel just vacated doesn't reopen it, like the original.
     private var cooldownUntil: Date?
-    private let cooldown: TimeInterval = 0.5
+    /// Must outlast the post-collapse content unmount (0.65s) so the
+    /// oversized settling hover region can never re-open the panel.
+    private let cooldown: TimeInterval = 0.7
+    private var unmountWorkItem: DispatchWorkItem?
     /// Hover-to-open delay, during which the bar swells slightly (prime).
     /// ~3 frames on the original's recording before the expansion starts.
     private let primeDelay: TimeInterval = 0.10
 
+    /// Debug trace of hover transitions: every event with the real cursor
+    /// position, panel frame and state — evidence for hover-region bugs.
+    /// Opt-in: launch with VEDETTA_HOVER_LOG=1 in the environment.
+    private func logHover(_ hovering: Bool) {
+        guard ProcessInfo.processInfo.environment["VEDETTA_HOVER_LOG"] != nil else { return }
+        let mouse = NSEvent.mouseLocation
+        let line = String(
+            format: "%@ hover=%d mouse=(%.0f,%.0f) panel=(%.0f,%.0f %.0fx%.0f) expanded=%d peek=%@\n",
+            ISO8601DateFormatter().string(from: Date()),
+            hovering ? 1 : 0,
+            mouse.x, mouse.y,
+            panel.frame.origin.x, panel.frame.origin.y,
+            panel.frame.width, panel.frame.height,
+            uiModel.isExpanded ? 1 : 0,
+            uiModel.peekSessionId ?? "-"
+        )
+        let path = NSHomeDirectory() + "/.vedetta/run/hover.log"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
+
     private func hoverChanged(_ hovering: Bool) {
+        logHover(hovering)
         if pinnedExpanded { return }
         isHovering = hovering
         collapseWorkItem?.cancel()
@@ -267,6 +297,11 @@ final class NotchPanelController {
 
         if hovering {
             guard !uiModel.isExpanded else { return }
+            // Trust the real cursor, not the tracking event: while the
+            // expanded content is mounted (transition settling) the hover
+            // region is larger than the visible bar, and spurious enters
+            // from that area must never open the panel.
+            guard cursorOverCollapsedBar() else { return }
             if let until = cooldownUntil, Date() < until {
                 // In cooldown: don't reopen now. Re-check when it ends and
                 // expand only if the cursor is REALLY on the bar. isHovering
@@ -313,10 +348,23 @@ final class NotchPanelController {
                 peekKeyMonitor = nil
             }
         }
+        unmountWorkItem?.cancel()
         guard uiModel.isExpanded != expanded else { return }
-        uiModel.isExpanded = expanded
-        if !expanded {
+        if expanded {
+            uiModel.collapseSettling = false
+            uiModel.isExpanded = true
+        } else {
+            // Keep the expanded content mounted while the shape shrinks
+            // over it (the original's swallow effect), then unmount so the
+            // hover tracking region goes back to just the bar.
+            uiModel.collapseSettling = true
+            uiModel.isExpanded = false
             cooldownUntil = Date().addingTimeInterval(cooldown)
+            let work = DispatchWorkItem { [weak self] in
+                self?.uiModel.collapseSettling = false
+            }
+            unmountWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
         }
     }
 
@@ -357,4 +405,8 @@ final class NotchUIModel: ObservableObject {
     /// session (auto-opened on Stop while the user is elsewhere) instead
     /// of the session list, like the original.
     @Published var peekSessionId: String?
+    /// True while the collapse animation swallows the expanded content:
+    /// it stays mounted through it, then unmounts so the hover tracking
+    /// region shrinks back to the bar alone.
+    @Published var collapseSettling = false
 }
