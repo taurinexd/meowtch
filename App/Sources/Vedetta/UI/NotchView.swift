@@ -83,7 +83,7 @@ struct NotchView: View {
         HStack(spacing: 6) {
             PixelSprite(pattern: PixelSprite.lookout, color: statusColor, pixelSize: 2)
                 .padding(.leading, collapsedFlare + 8)
-            if let topState = store.sessions.filter({ !$0.isMinimized }).map(\.state).min() {
+            if let topState = collapsedTopState {
                 StateIndicator(state: topState, scale: 0.75)
             }
             Spacer()
@@ -109,17 +109,44 @@ struct NotchView: View {
         store.sessions.filter { !archive.isArchived($0.id) }
     }
 
+    /// Full row = window known AND attention-worthy: working, awaiting a
+    /// decision, or active in the last ~30 minutes (measured against the
+    /// original's behavior); everything else collapses.
+    private func deservesFullRow(_ session: AgentSession) -> Bool {
+        guard !session.isMinimized, store.terminal(for: session.id) != nil else { return false }
+        if session.state == .running || session.state == .needsApproval { return true }
+        return session.lastActivityAt.timeIntervalSinceNow > -30 * 60
+    }
+
     private var fullSessions: [AgentSession] {
-        visibleSessions.filter { !$0.isMinimized && store.terminal(for: $0.id) != nil }
+        visibleSessions.filter { deservesFullRow($0) }
     }
 
     private var compactSessions: [AgentSession] {
-        visibleSessions.filter { $0.isMinimized || store.terminal(for: $0.id) == nil }
+        visibleSessions.filter { !deservesFullRow($0) }
+    }
+
+    /// Collapsed-bar priority, measured on the original: a pending
+    /// approval wins, then WORKING (blue) beats waiting (green) — one
+    /// busy agent turns the notch blue even if others idle.
+    private var collapsedTopState: SessionState? {
+        visibleSessions.map(\.state).min { lhs, rhs in
+            collapsedRank(lhs) < collapsedRank(rhs)
+        }
+    }
+
+    private func collapsedRank(_ state: SessionState) -> Int {
+        switch state {
+        case .needsApproval: 0
+        case .running: 1
+        case .waitingForInput: 2
+        case .completed: 3
+        }
     }
 
     /// Color of the sprite: the most urgent state across sessions.
     private var statusColor: Color {
-        guard let topState = store.sessions.map(\.state).min() else {
+        guard let topState = collapsedTopState else {
             return Theme.secondaryText
         }
         return Theme.color(for: topState)

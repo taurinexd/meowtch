@@ -131,6 +131,21 @@ enum EventDispatcher {
             }
             return try? JSONSerialization.data(withJSONObject: ["pending": items])
 
+        case "axdump":
+            var options = AXTitleReader.Options()
+            if let bundle = envelope["bundle"] as? String { options.bundleIdentifier = bundle }
+            if let maxNodes = envelope["maxNodes"] as? Int { options.maxNodes = maxNodes }
+            if let maxDepth = envelope["maxDepth"] as? Int { options.maxDepth = maxDepth }
+            if let window = envelope["window"] as? String { options.windowFilter = window }
+            if let role = envelope["role"] as? String { options.roleFilter = role }
+            let nodes = AXTitleReader.dump(options: options).map { node -> [String: Any] in
+                ["role": node.role, "title": node.title, "depth": node.depth, "window": node.window]
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "trusted": AXTitleReader.isTrusted,
+                "nodes": nodes,
+            ])
+
         case "decide":
             guard let id = envelope["id"] as? Int else { return nil }
             let allow = envelope["allow"] as? Bool ?? false

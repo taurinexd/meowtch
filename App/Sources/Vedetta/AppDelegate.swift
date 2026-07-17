@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor in
                     SessionBootstrap.refreshScannedSessions(in: store)
                     TerminalPersistence.save(from: store)
+                    store.touch()
                 }
             }
             RunLoop.main.add(timer, forMode: .common)
