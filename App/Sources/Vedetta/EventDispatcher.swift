@@ -57,6 +57,16 @@ enum EventDispatcher {
            (event["tool_name"] as? String)?.hasPrefix("Task") == true {
             FullScanScheduler.reloadTasks(sessionId: sessionId)
         }
+
+        // A finished turn may deserve the auto-opened peek (the panel
+        // controller decides based on what's frontmost).
+        if name == "Stop" {
+            NotificationCenter.default.post(
+                name: .vedettaSessionFinished,
+                object: nil,
+                userInfo: ["sessionId": sessionId]
+            )
+        }
         return empty
     }
 
