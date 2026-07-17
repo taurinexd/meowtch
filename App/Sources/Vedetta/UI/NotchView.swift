@@ -194,6 +194,74 @@ struct NotchView: View {
         // original: text column x=64, sprite x=18, sections every 26pt).
         VStack(alignment: .leading, spacing: 20) {
             topBar
+            if let peekId = model.peekSessionId,
+               let session = store.sessions.first(where: { $0.id == peekId }) {
+                peekContent(session)
+            } else {
+                sessionList
+            }
+        }
+        // +4: the reference crop sits 4pt inside the real flat edges.
+        .padding(.horizontal, expandedFlare + 4)
+        .padding(.bottom, 18)
+        .frame(width: expandedWidth, alignment: .top)
+    }
+
+    // MARK: - Finished-session peek
+
+    /// Auto-opened view for a just-finished session: its card (with the
+    /// ^G jump hint), an inset panel with the last prompt, "Done" and the
+    /// full reply in monospace, then a link back to the whole list —
+    /// anatomy and colors measured on the original.
+    @ViewBuilder
+    private func peekContent(_ session: AgentSession) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SessionRowView(
+                session: session,
+                terminal: store.terminal(for: session.id),
+                showJumpHint: true
+            )
+            peekReplyPanel(session)
+            HStack {
+                Spacer()
+                Button {
+                    model.peekSessionId = nil
+                } label: {
+                    Text("Show all \(visibleSessions.count) sessions")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+        }
+    }
+
+    private func peekReplyPanel(_ session: AgentSession) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("You: \(session.lastMessage ?? "")")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text("Done")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.32))
+            }
+            Text(session.lastAssistantMessage ?? "")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.78))
+                .lineSpacing(3)
+                .lineLimit(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var sessionList: some View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach(fullSessions) { session in
@@ -218,11 +286,6 @@ struct NotchView: View {
             .onPreferenceChange(ListHeightKey.self) { listContentHeight = $0 }
             // Hug the content until the cap, then scroll like the original.
             .frame(height: min(max(listContentHeight, 1), listHeightCap))
-        }
-        // +4: the reference crop sits 4pt inside the real flat edges.
-        .padding(.horizontal, expandedFlare + 4)
-        .padding(.bottom, 18)
-        .frame(width: expandedWidth, alignment: .top)
     }
 
     private struct ListHeightKey: PreferenceKey {

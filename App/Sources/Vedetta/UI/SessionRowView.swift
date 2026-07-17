@@ -10,6 +10,8 @@ struct SessionRowView: View {
     /// Compact = the session has no visible terminal window to jump to
     /// (minimized, or adopted from transcripts with no live terminal).
     var isCompact = false
+    /// Adds the teal "^G ↗" jump-shortcut chip (finished-session peek).
+    var showJumpHint = false
     @State private var isHovered = false
     @ObservedObject private var approvals = ApprovalCenter.shared
 
@@ -328,6 +330,13 @@ struct SessionRowView: View {
                 Chip(text: "VS Code")
             }
             trailingSlot
+            if showJumpHint {
+                Chip(
+                    text: "^G ↗",
+                    tint: Color(red: 0.31, green: 0.72, blue: 0.80),
+                    background: Color(red: 0.07, green: 0.20, blue: 0.23)
+                )
+            }
         }
     }
 

@@ -79,6 +79,65 @@ final class NotchPanelController {
                 self.setExpanded(false)
             }
         }
+
+        // A turn just finished: when the user is looking at another app,
+        // the notch auto-opens on a peek of that session for a few
+        // seconds, like the original.
+        NotificationCenter.default.addObserver(
+            forName: .vedettaSessionFinished,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let sessionId = note.userInfo?["sessionId"] as? String
+            Task { @MainActor in
+                guard let self, let sessionId else { return }
+                self.maybePeek(sessionId: sessionId)
+            }
+        }
+    }
+
+    // MARK: - Finished-session peek
+
+    private var peekCloseWorkItem: DispatchWorkItem?
+    private var peekKeyMonitor: Any?
+    /// How long the peek stays open without interaction (measured ≥4.8s
+    /// on the original's recording; opening frames were cut).
+    private let peekDuration: TimeInterval = 6
+
+    private func maybePeek(sessionId: String) {
+        guard !pinnedExpanded, !uiModel.isExpanded, !isHovering else { return }
+        // Only when the user is elsewhere: a Stop in the frontmost
+        // terminal needs no notification.
+        let terminal = store.terminal(for: sessionId)
+        if let bundleId = terminal?.bundleIdentifier,
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleId {
+            return
+        }
+        uiModel.peekSessionId = sessionId
+        panel.orderFrontRegardless()
+        setExpanded(true)
+
+        peekCloseWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isHovering else { return }
+            self.setExpanded(false)
+        }
+        peekCloseWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + peekDuration, execute: work)
+
+        // ^G jumps to the peeked session from anywhere (the chip hints it).
+        if peekKeyMonitor == nil {
+            peekKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard event.modifierFlags.contains(.control),
+                      event.charactersIgnoringModifiers?.lowercased() == "g" else { return }
+                Task { @MainActor in
+                    guard let self, let id = self.uiModel.peekSessionId,
+                          let session = self.store.sessions.first(where: { $0.id == id }) else { return }
+                    JumpService.jump(to: session, terminal: self.store.terminal(for: id))
+                    self.setExpanded(false)
+                }
+            }
+        }
     }
 
     /// True while the user has explicitly hidden the panel from the menu.
@@ -237,6 +296,14 @@ final class NotchPanelController {
 
     private func setExpanded(_ expanded: Bool) {
         uiModel.isPrimed = false
+        if !expanded {
+            uiModel.peekSessionId = nil
+            peekCloseWorkItem?.cancel()
+            if let monitor = peekKeyMonitor {
+                NSEvent.removeMonitor(monitor)
+                peekKeyMonitor = nil
+            }
+        }
         guard uiModel.isExpanded != expanded else { return }
         uiModel.isExpanded = expanded
         if !expanded {
@@ -266,6 +333,8 @@ final class NotchPanelController {
 extension Notification.Name {
     /// Posted by a session card when the user jumps to its terminal.
     static let vedettaDidJump = Notification.Name("vedettaDidJump")
+    /// Posted when a session's turn ends (Stop), for the finished peek.
+    static let vedettaSessionFinished = Notification.Name("vedettaSessionFinished")
 }
 
 /// Observable UI state shared between the controller and the SwiftUI views.
@@ -275,4 +344,8 @@ final class NotchUIModel: ObservableObject {
     /// Cursor is on the collapsed bar but the panel hasn't opened yet:
     /// the bar swells slightly as touch-style feedback.
     @Published var isPrimed = false
+    /// When set, the expanded panel shows the "finished" peek for this
+    /// session (auto-opened on Stop while the user is elsewhere) instead
+    /// of the session list, like the original.
+    @Published var peekSessionId: String?
 }
