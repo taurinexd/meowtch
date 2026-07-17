@@ -160,8 +160,13 @@ public enum SessionEventReducer {
         if let reply = peek.lastAssistantText {
             session.lastAssistantMessage = reply
         }
+        // Title priority mirrors the original: a name the user gave the
+        // session wins, then Claude's auto-generated title, then the first
+        // prompt as a last resort.
         if let name = peek.sessionName {
             session.title = name
+        } else if let aiTitle = peek.aiTitle {
+            session.title = aiTitle
         } else if session.title.isEmpty, let first = peek.firstUserPrompt {
             session.title = first
         }
