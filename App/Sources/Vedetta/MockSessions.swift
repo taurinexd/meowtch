@@ -7,22 +7,6 @@ import VedettaKit
 /// tool line, plus two minimized sessions rendered as compact lines.
 @MainActor
 enum MockSessions {
-    static let tasks: [String: MockTaskList] = [
-        "mock-vedetta": MockTaskList(
-            done: 8,
-            inProgress: "M2.3 — HookConfigurator: merge/backup/drift/uninstall (TDD)",
-            openVisible: [
-                "M2.1 — EventServer: socket Unix in-app (JSON line protocol)",
-                "M2.2 — vedetta-bridge: helper eseguibile + launcher zsh",
-            ],
-            open: 10,
-            completedVisible: [
-                "Esplorare contesto progetto (repo GitHub + sito vibeisland.app)",
-                "Fare domande di chiarimento per ridimensionare lo scope",
-            ]
-        ),
-    ]
-
     static func seed(into store: SessionStore) {
         let now = Date()
         store.upsert(AgentSession(
@@ -37,7 +21,13 @@ enum MockSessions {
             lastMessage: "ultime finezze UI prima di procedere con M2: 1)…",
             state: .needsApproval,
             startedAt: now.addingTimeInterval(-3600),
-            lastActivityAt: now.addingTimeInterval(-2)
+            lastActivityAt: now.addingTimeInterval(-2),
+            tasks: SessionTasks(items: [
+                SessionTasks.Item(id: "1", subject: "Esplorare contesto progetto", status: "completed"),
+                SessionTasks.Item(id: "2", subject: "Fare domande di chiarimento", status: "completed"),
+                SessionTasks.Item(id: "3", subject: "M2.3 — HookConfigurator (TDD)", status: "in_progress"),
+                SessionTasks.Item(id: "4", subject: "M2.1 — EventServer socket Unix", status: "pending"),
+            ])
         ))
         store.upsert(AgentSession(
             id: "mock-uptonica-integration",

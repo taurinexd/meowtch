@@ -102,6 +102,12 @@ public enum SessionEventReducer {
             session.currentToolDetail = nil
             enrich(from: event, into: &session)
 
+        case "SubagentStart":
+            session.subagentCount += 1
+
+        case "SubagentStop":
+            session.subagentCount = max(0, session.subagentCount - 1)
+
         case "Notification":
             let message = (event["message"] as? String)?.lowercased() ?? ""
             if message.contains("permission") {
@@ -161,6 +167,9 @@ public enum SessionEventReducer {
         }
         if session.lastMessage == nil, let lastUser = peek.lastUserText {
             session.lastMessage = lastUser
+        }
+        if !session.directory.isEmpty {
+            session.gitBranch = GitIdentity.branch(forDirectory: session.directory)
         }
     }
 

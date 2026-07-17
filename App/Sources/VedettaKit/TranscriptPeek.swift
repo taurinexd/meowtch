@@ -96,55 +96,11 @@ public struct TranscriptPeek: Sendable {
         merged.lastUserText = tailPeek.lastUserText
         merged.lastAssistantText = tailPeek.lastAssistantText
 
-        // Renames can live anywhere in the file: when the windows missed
-        // one, stream the whole file looking only for the marker.
-        if merged.sessionName == nil, size > headBytes + tailBytes {
-            merged.sessionName = scanForSessionName(handle: handle, size: size)
-        }
+        // Renames outside these windows are picked up by the async
+        // TranscriptFullScan — never a synchronous full read here.
         return merged
     }
 
-    /// Streaming search for the rename marker across the whole file
-    /// (chunked, constant memory); the last occurrence wins. The pattern
-    /// is anchored to the raw bytes of a genuine reminder entry — code or
-    /// conversation that merely QUOTES the phrase carries one more level
-    /// of JSON escaping and cannot match.
-    private static func scanForSessionName(handle: FileHandle, size: Int) -> String? {
-        guard size < 128 << 20 else { return nil }
-        // Both raw shapes are real: content as a plain string and content
-        // as an array of text blocks.
-        let markers = [
-            Data(#""content":"<system-reminder>\nThe user named this session \""#.utf8),
-            Data(#""text":"<system-reminder>\nThe user named this session \""#.utf8),
-        ]
-        let closer = Data(#"\""#.utf8)
-        let chunkSize = 4 << 20
-        var name: String?
-        var offset = 0
-        var carry = Data()
-        try? handle.seek(toOffset: 0)
-        while offset < size {
-            guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
-            offset += chunk.count
-            var window = carry
-            window.append(chunk)
-            for marker in markers {
-                var searchRange = window.startIndex..<window.endIndex
-                while let found = window.range(of: marker, in: searchRange) {
-                    if let end = window.range(of: closer, in: found.upperBound..<window.endIndex),
-                       let extracted = String(data: window[found.upperBound..<end.lowerBound], encoding: .utf8),
-                       !extracted.isEmpty, extracted.count < 120 {
-                        name = extracted
-                    }
-                    searchRange = found.upperBound..<window.endIndex
-                }
-            }
-            carry = window.suffix(markers[0].count + 256)
-        }
-        return name
-    }
-
-    /// Joins the text parts of a message's content (string or blocks).
     private static func textContent(of message: [String: Any]) -> String? {
         if let text = message["content"] as? String { return text }
         guard let blocks = message["content"] as? [[String: Any]] else { return nil }

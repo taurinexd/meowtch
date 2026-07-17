@@ -43,6 +43,7 @@ enum SessionBootstrap {
             let peek = TranscriptPeek.read(path: candidate.path)
             guard peek.firstUserPrompt != nil || peek.sessionName != nil else { continue }
             scannedPaths[candidate.id] = candidate.path
+            FullScanScheduler.schedule(path: candidate.path, sessionId: candidate.id)
             let isActive = candidate.modified.timeIntervalSinceNow > -activeWindow
             store.upsert(AgentSession(
                 id: candidate.id,
