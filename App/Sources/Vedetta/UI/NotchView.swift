@@ -99,6 +99,17 @@ struct NotchView: View {
         .transition(.identity)
     }
 
+    /// Sessions with a visible terminal window render as full rows;
+    /// the rest (minimized, or adopted with no live terminal) collapse
+    /// to compact lines at the bottom, like the original.
+    private var fullSessions: [AgentSession] {
+        store.sessions.filter { !$0.isMinimized && store.terminal(for: $0.id) != nil }
+    }
+
+    private var compactSessions: [AgentSession] {
+        store.sessions.filter { $0.isMinimized || store.terminal(for: $0.id) == nil }
+    }
+
     /// Color of the sprite: the most urgent state across sessions.
     private var statusColor: Color {
         guard let topState = store.sessions.map(\.state).min() else {
@@ -115,8 +126,11 @@ struct NotchView: View {
         // original: text column x=64, sprite x=18, sections every 26pt).
         VStack(alignment: .leading, spacing: 20) {
             topBar
-            ForEach(store.sessions) { session in
+            ForEach(fullSessions) { session in
                 SessionRowView(session: session, tasks: MockSessions.tasks[session.id])
+            }
+            ForEach(compactSessions) { session in
+                SessionRowView(session: session, isCompact: true)
             }
         }
         // +4: the reference crop sits 4pt inside the real flat edges.

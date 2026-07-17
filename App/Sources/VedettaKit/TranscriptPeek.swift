@@ -25,7 +25,7 @@ public struct TranscriptPeek: Sendable {
             // its texts are not the session's own words.
             if entry["isSidechain"] as? Bool == true { continue }
 
-            if peek.cwd == nil, let cwd = entry["cwd"] as? String { peek.cwd = cwd }
+            if let cwd = entry["cwd"] as? String { peek.cwd = cwd }
             guard let text = textContent(of: message), !text.isEmpty else { continue }
             switch type {
             case "user":
@@ -84,7 +84,14 @@ public struct TranscriptPeek: Sendable {
 
         var merged = TranscriptPeek()
         merged.firstUserPrompt = headPeek.firstUserPrompt
-        merged.cwd = headPeek.cwd ?? tailPeek.cwd
+        // The starting directory identifies the session (mid-session cd
+        // into subdirectories must not relabel it); fall back to the tail
+        // only when the original path no longer exists (dir renamed).
+        if let headCwd = headPeek.cwd, FileManager.default.fileExists(atPath: headCwd) {
+            merged.cwd = headCwd
+        } else {
+            merged.cwd = tailPeek.cwd ?? headPeek.cwd
+        }
         merged.sessionName = tailPeek.sessionName ?? headPeek.sessionName
         merged.lastUserText = tailPeek.lastUserText
         merged.lastAssistantText = tailPeek.lastAssistantText
