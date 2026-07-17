@@ -25,8 +25,9 @@ enum FullScanScheduler {
         guard let store = EventDispatcher.store,
               var session = store.sessions.first(where: { $0.id == sessionId }) else { return }
         var changed = false
-        if let name = result.sessionName, session.title != name {
-            session.title = name
+        let bestTitle = result.sessionName ?? result.aiTitle
+        if let bestTitle, session.title != bestTitle {
+            session.title = bestTitle
             changed = true
         }
         if let tasks = result.tasks, session.tasks != tasks {

@@ -10,6 +10,9 @@ public struct TranscriptPeek: Sendable {
     /// The name the user gave the session (Claude Code records renames as
     /// system-reminder entries); the last rename wins.
     public var sessionName: String?
+    /// Claude's auto-generated title (`ai-title` / `agent-name` entries),
+    /// what the original shows when the user didn't name the session.
+    public var aiTitle: String?
     /// Working directory recorded in the entries.
     public var cwd: String?
 
@@ -19,8 +22,15 @@ public struct TranscriptPeek: Sendable {
         for lineData in data.split(separator: 0x0A) {
             guard let object = try? JSONSerialization.jsonObject(with: Data(lineData)),
                   let entry = object as? [String: Any],
-                  let type = entry["type"] as? String,
-                  let message = entry["message"] as? [String: Any] else { continue }
+                  let type = entry["type"] as? String else { continue }
+
+            // Claude's auto title: standalone entries with no message body.
+            if let title = (entry["aiTitle"] as? String) ?? (entry["agentName"] as? String),
+               !title.isEmpty {
+                peek.aiTitle = title
+            }
+
+            guard let message = entry["message"] as? [String: Any] else { continue }
             // Subagent (sidechain) traffic interleaves with the main loop:
             // its texts are not the session's own words.
             if entry["isSidechain"] as? Bool == true { continue }
@@ -93,6 +103,7 @@ public struct TranscriptPeek: Sendable {
             merged.cwd = tailPeek.cwd ?? headPeek.cwd
         }
         merged.sessionName = tailPeek.sessionName ?? headPeek.sessionName
+        merged.aiTitle = tailPeek.aiTitle ?? headPeek.aiTitle
         merged.lastUserText = tailPeek.lastUserText
         merged.lastAssistantText = tailPeek.lastAssistantText
 

@@ -72,6 +72,23 @@ struct TranscriptPeekTests {
         #expect(peek.lastUserText == "sistema il checkout del sito")
     }
 
+    @Test func aiTitleEntriesAreCaptured() {
+        let withTitle = """
+        {"type":"ai-title","aiTitle":"integrate-ultraplan-bundle-review","sessionId":"s1"}
+        """ + "\n" + fixture
+        let peek = TranscriptPeek.parse(Data(withTitle.utf8))
+        #expect(peek.aiTitle == "integrate-ultraplan-bundle-review")
+        // it does not pollute the first real prompt
+        #expect(peek.firstUserPrompt == "sistema il checkout del sito")
+    }
+
+    @Test func agentNameCountsAsAiTitle() {
+        let withAgent = """
+        {"type":"agent-name","agentName":"kamal-crm-upgrade","sessionId":"s1"}
+        """ + "\n" + fixture
+        #expect(TranscriptPeek.parse(Data(withAgent.utf8)).aiTitle == "kamal-crm-upgrade")
+    }
+
     @Test func emptyDataYieldsNothing() {
         let peek = TranscriptPeek.parse(Data())
         #expect(peek.firstUserPrompt == nil)

@@ -33,6 +33,7 @@ public struct SessionTasks: Sendable, Equatable {
 public enum TranscriptFullScan {
     public struct Result: Sendable {
         public var sessionName: String?
+        public var aiTitle: String?
         public var tasks: SessionTasks?
     }
 
@@ -88,10 +89,19 @@ public enum TranscriptFullScan {
         let hasName = line.range(of: nameMarker) != nil
         let hasCreate = line.range(of: createMarker) != nil
         let hasUpdate = line.range(of: updateMarker) != nil
-        guard hasName || hasCreate || hasUpdate else { return }
+        let hasTitle = line.range(of: Data(#""aiTitle":"#.utf8)) != nil
+            || line.range(of: Data(#""agentName":"#.utf8)) != nil
+        guard hasName || hasCreate || hasUpdate || hasTitle else { return }
 
         guard let object = try? JSONSerialization.jsonObject(with: line),
               let entry = object as? [String: Any] else { return }
+
+        if hasTitle,
+           let title = (entry["aiTitle"] as? String) ?? (entry["agentName"] as? String),
+           !title.isEmpty {
+            result.aiTitle = title
+        }
+
         guard entry["isSidechain"] as? Bool != true else { return }
 
         // A genuine rename reminder STARTS with the marker; the same words
