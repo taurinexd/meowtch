@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             TerminalPersistence.load(into: store)
             SessionBootstrap.adoptRecentSessions(into: store)
+            SessionBootstrap.adoptCodexSessions(into: store)
             JumpService.installVSCodeExtension()
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in
