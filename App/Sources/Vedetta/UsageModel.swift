@@ -18,7 +18,14 @@ final class UsageModel: ObservableObject {
     @Published private(set) var sevenDay: Window?
 
     private var timer: Timer?
-    private static var cachePath: String { NSHomeDirectory() + "/.vedetta/cache/rl.json" }
+    /// Our harvest first; while the original is installed its statusline
+    /// owns the slot, so we read the same data from its cache.
+    private static var cachePaths: [String] {
+        [
+            NSHomeDirectory() + "/.vedetta/cache/rl.json",
+            NSHomeDirectory() + "/.vibe-island/cache/rl.json",
+        ]
+    }
 
     func start() {
         refresh()
@@ -30,7 +37,16 @@ final class UsageModel: ObservableObject {
     }
 
     func refresh() {
-        guard let data = FileManager.default.contents(atPath: Self.cachePath),
+        let fm = FileManager.default
+        let freshest = Self.cachePaths
+            .compactMap { path -> (path: String, modified: Date)? in
+                guard let attrs = try? fm.attributesOfItem(atPath: path),
+                      let modified = attrs[.modificationDate] as? Date else { return nil }
+                return (path, modified)
+            }
+            .max { $0.modified < $1.modified }
+        guard let freshest,
+              let data = fm.contents(atPath: freshest.path),
               let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any] else { return }
 
