@@ -48,6 +48,13 @@ enum EventDispatcher {
            let path = event["transcript_path"] as? String {
             FullScanScheduler.schedule(path: path, sessionId: sessionId)
         }
+
+        // Task tool calls mutate the live task files: refresh the widget
+        // right away so it tracks the agent's list mid-turn, like VI.
+        if name == "PostToolUse",
+           (event["tool_name"] as? String)?.hasPrefix("Task") == true {
+            FullScanScheduler.reloadTasks(sessionId: sessionId)
+        }
         return empty
     }
 
