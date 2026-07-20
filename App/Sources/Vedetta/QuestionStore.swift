@@ -96,13 +96,17 @@ final class QuestionStore: ObservableObject {
     }
 
     func dismiss(sessionId: String) {
+        // dismiss fires on every PostToolUse/Stop for ANY session, so only
+        // signal a resolve when a question was actually live here — otherwise
+        // routine background activity would keep collapsing the panel.
+        let hadQuestion = live.contains { $0.sessionId == sessionId }
         live.removeAll { $0.sessionId == sessionId }
         selections[sessionId] = nil
         questionIndex[sessionId] = nil
         // Unblock a still-suspended hook (abandoned, e.g. the session ended):
         // resuming with nil lets the caller fall back to the native picker.
         continuations.removeValue(forKey: sessionId)?.resume(returning: nil)
-        onResolve?()
+        if hadQuestion { onResolve?() }
     }
 
     func first(for sessionId: String) -> Live? {

@@ -359,7 +359,10 @@ final class NotchPanelController {
     /// draining must not close a panel that still has a question to answer,
     /// and vice versa.
     private func collapseIfNoInterrupt() {
+        // Never yank the panel out from under the cursor: if the user is
+        // hovering, the normal hover-exit collapse takes over when they leave.
         guard !pinnedExpanded,
+              !isHovering,
               ApprovalCenter.shared.pending.isEmpty,
               QuestionStore.shared.live.isEmpty else { return }
         setExpanded(false)
