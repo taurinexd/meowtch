@@ -336,23 +336,32 @@ struct NotchView: View {
         .padding(.top, 8)
     }
 
-    /// Real quota strip when rate_limits data is available; dots otherwise.
+    /// Real quota strip: Claude's 5h/7d windows plus any Codex windows (tagged
+    /// "cx"), separated by thin bars; dots when nothing is known yet.
     private var usageSummary: some View {
-        HStack(spacing: 5) {
-            if let fiveHour = usage.fiveHour {
-                usageWindow(label: "5h", window: fiveHour)
-            }
-            if usage.fiveHour != nil && usage.sevenDay != nil {
-                Text("|").foregroundStyle(Theme.secondaryText.opacity(0.5))
-            }
-            if let sevenDay = usage.sevenDay {
-                usageWindow(label: "7d", window: sevenDay)
-            }
-            if usage.fiveHour == nil && usage.sevenDay == nil {
+        let windows: [(label: String, window: UsageModel.Window)] = [
+            usage.fiveHour.map { (label: "5h", window: $0) },
+            usage.sevenDay.map { (label: "7d", window: $0) },
+            usage.codexPrimary.map { (label: codexLabel($0), window: $0) },
+            usage.codexSecondary.map { (label: codexLabel($0), window: $0) },
+        ].compactMap { $0 }
+        return HStack(spacing: 5) {
+            if windows.isEmpty {
                 Text("· · ·").foregroundStyle(Theme.secondaryText.opacity(0.5))
+            } else {
+                ForEach(Array(windows.enumerated()), id: \.offset) { index, entry in
+                    if index > 0 {
+                        Text("|").foregroundStyle(Theme.secondaryText.opacity(0.5))
+                    }
+                    usageWindow(label: entry.label, window: entry.window)
+                }
             }
         }
         .font(.system(size: 11))
+    }
+
+    private func codexLabel(_ window: UsageModel.Window) -> String {
+        window.durationLabel.isEmpty ? "cx" : "cx " + window.durationLabel
     }
 
     @ViewBuilder
