@@ -99,6 +99,28 @@ struct SessionEventReducerTests {
         #expect(SessionState.compacting < SessionState.waitingForInput)
     }
 
+    @Test func directoryStaysAtProjectRootWhenAgentCdsIntoSubfolder() {
+        let store = SessionStore()
+        SessionEventReducer.apply(
+            envelope("SessionStart", cwd: "/Users/x/Code/5om"), to: store
+        )
+        #expect(store.sessions.first?.directoryName == "5om")
+        // A cd into a subfolder must not relabel the card.
+        SessionEventReducer.apply(
+            envelope("PreToolUse", cwd: "/Users/x/Code/5om/theme", extra: [
+                "tool_name": "Bash", "tool_input": ["command": "ls"],
+            ]),
+            to: store
+        )
+        #expect(store.sessions.first?.directory == "/Users/x/Code/5om")
+        // A genuine switch to an unrelated project does update it.
+        SessionEventReducer.apply(
+            envelope("UserPromptSubmit", cwd: "/Users/x/Code/uptonica", extra: ["prompt": "vai"]),
+            to: store
+        )
+        #expect(store.sessions.first?.directoryName == "uptonica")
+    }
+
     @Test func stopMeansWaitingForInput() {
         let store = SessionStore()
         SessionEventReducer.apply(envelope("SessionStart"), to: store)

@@ -43,6 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try VedettaSetup.ensureRuntimeLayout()
+            // Repair hooks that drifted since install (new events shipped in
+            // an update won't otherwise reach the bridge). No-op unless we
+            // were already installed and something is now missing.
+            try VedettaSetup.healClaudeHooks()
             EventDispatcher.store = store
             let server = EventServer(socketPath: VedettaSetup.socketPath) { data in
                 await EventDispatcher.handle(data)

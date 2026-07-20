@@ -69,6 +69,19 @@ enum VedettaSetup {
         return HookConfigurator.isInstalled(in: settings)
     }
 
+    /// Self-heal on every launch: if we were installed but some events
+    /// drifted (e.g. new hook events shipped in an update, or another app
+    /// rewrote settings.json), re-merge the missing ones. Never installs
+    /// from scratch — a settings.json with no vedetta hook is left as is,
+    /// so a deliberate uninstall isn't undone.
+    @discardableResult
+    static func healClaudeHooks() throws -> Bool {
+        guard let settings = readClaudeSettings(),
+              HookConfigurator.hasAnyHook(in: settings),
+              !HookConfigurator.isInstalled(in: settings) else { return false }
+        return try installClaudeHooks()
+    }
+
     @discardableResult
     static func installClaudeHooks() throws -> Bool {
         let settings = readClaudeSettings() ?? [:]
