@@ -79,6 +79,21 @@ enum EventDispatcher {
     ) async -> Data {
         let toolName = event["tool_name"] as? String ?? "?"
         let toolInput = event["tool_input"] as? [String: Any]
+
+        // Opt-in capture of the raw request (VEDETTA_PR_LOG=1): the exact
+        // AskUserQuestion payload — single vs multi question — drives the
+        // remote-answer design.
+        if ProcessInfo.processInfo.environment["VEDETTA_PR_LOG"] != nil,
+           let data = try? JSONSerialization.data(withJSONObject: event, options: [.prettyPrinted]) {
+            let path = NSHomeDirectory() + "/.vedetta/run/permission.log"
+            let entry = "=== \(toolName) @ \(ISO8601DateFormatter().string(from: Date()))\n"
+                + (String(data: data, encoding: .utf8) ?? "") + "\n"
+            if let handle = FileHandle(forWritingAtPath: path) {
+                handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close()
+            } else {
+                try? entry.write(toFile: path, atomically: true, encoding: .utf8)
+            }
+        }
         let detail = (toolInput?["command"] as? String)
             ?? (toolInput?["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
             ?? (toolInput?["description"] as? String)
