@@ -514,7 +514,7 @@ private struct QuestionOption: View {
                         Text(detail)
                             .font(.system(size: 10.5))
                             .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 0)
