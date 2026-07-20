@@ -88,7 +88,8 @@ enum VedettaSetup {
         let (merged, hooksChanged) = HookConfigurator.mergingHooks(into: settings)
         let (final, statusChanged) = HookConfigurator.installingStatusLine(
             into: merged,
-            command: statusLinePath
+            command: statusLinePath,
+            canReplace: statusLineIsOrphan
         )
         guard hooksChanged || statusChanged else { return false }
         try backupClaudeSettings()
@@ -104,6 +105,21 @@ enum VedettaSetup {
         try backupClaudeSettings()
         try writeClaudeSettings(stripped)
         return true
+    }
+
+    /// A foreign statusLine is claimable only when it is an orphan: every
+    /// filesystem path it names is gone (e.g. another notch app that owned
+    /// the slot was uninstalled). A live command — anything still pointing
+    /// at an existing file — is left untouched.
+    private static func statusLineIsOrphan(_ command: String) -> Bool {
+        let fm = FileManager.default
+        let paths = command
+            .split(whereSeparator: { $0 == " " || $0 == "'" || $0 == "\"" })
+            .map { $0.hasPrefix("~") ? home + $0.dropFirst() : String($0) }
+            .filter { $0.hasPrefix("/") }
+        // No path at all is unusual; don't claim in that ambiguous case.
+        guard !paths.isEmpty else { return false }
+        return !paths.contains { fm.fileExists(atPath: $0) }
     }
 
     // MARK: - settings.json I/O

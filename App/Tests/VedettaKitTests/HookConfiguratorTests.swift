@@ -88,6 +88,30 @@ struct HookConfiguratorTests {
         #expect(HookConfigurator.isInstalled(in: healed))
     }
 
+    @Test func statusLineClaimsFreeAndOrphanSlotsButSparesLiveForeign() {
+        let ours = "/Users/x/.vedetta/bin/vedetta-statusline"
+        // Free slot: we take it.
+        let (a, ca) = HookConfigurator.installingStatusLine(into: [:], command: ours)
+        #expect(ca)
+        #expect(((a["statusLine"] as? [String: Any])?["command"] as? String) == ours)
+        // Already ours: idempotent no-op.
+        let (_, cb) = HookConfigurator.installingStatusLine(into: a, command: ours)
+        #expect(!cb)
+        // Live foreign statusLine: never clobbered (canReplace says no).
+        let foreign = ["statusLine": ["type": "command", "command": "/opt/other/statusline"]]
+        let (c, cc) = HookConfigurator.installingStatusLine(
+            into: foreign, command: ours, canReplace: { _ in false }
+        )
+        #expect(!cc)
+        #expect(((c["statusLine"] as? [String: Any])?["command"] as? String) == "/opt/other/statusline")
+        // Orphan foreign (its executable is gone): we take the slot.
+        let (d, cd) = HookConfigurator.installingStatusLine(
+            into: foreign, command: ours, canReplace: { _ in true }
+        )
+        #expect(cd)
+        #expect(((d["statusLine"] as? [String: Any])?["command"] as? String) == ours)
+    }
+
     @Test func toolEventsGetWildcardMatcher() {
         let (merged, _) = HookConfigurator.mergingHooks(into: [:])
         let pre = ((merged["hooks"] as? [String: Any])?["PreToolUse"] as? [[String: Any]])?.first
