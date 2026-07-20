@@ -18,6 +18,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 cp "$BINDIR/Vedetta" "$APP/Contents/MacOS/Vedetta"
 cp "$BINDIR/VedettaBridge" "$APP/Contents/Helpers/vedetta-bridge"
 cp -R "$ROOT/extensions/vscode" "$APP/Contents/Resources/vscode-extension"
+cp "$ROOT/App/Resources/"provider-*.png "$APP/Contents/Resources/"
 
 [ -f "$ROOT/dist/AppIcon.icns" ] || "$ROOT/Scripts/make-icon.sh"
 cp "$ROOT/dist/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"

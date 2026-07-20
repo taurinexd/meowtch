@@ -22,6 +22,50 @@ final class UsageModel: ObservableObject {
     @Published private(set) var codexSecondary: Window?
     private var lastCodexProbe: Date?
 
+    // MARK: - Provider switcher
+
+    /// One provider's windows show at a time (so the strip stays clear of the
+    /// physical notch); tapping the strip cycles Claude → Codex → … → Claude.
+    enum Provider: Equatable { case claude, codex }
+
+    @Published var selectedProvider: Provider = .claude
+
+    /// Providers that currently have any window to show.
+    var availableProviders: [Provider] {
+        var list: [Provider] = []
+        if fiveHour != nil || sevenDay != nil { list.append(.claude) }
+        if codexPrimary != nil || codexSecondary != nil { list.append(.codex) }
+        return list
+    }
+
+    /// The provider actually shown: the selection if it has data, else the
+    /// first available.
+    var displayProvider: Provider? {
+        let available = availableProviders
+        return available.contains(selectedProvider) ? selectedProvider : available.first
+    }
+
+    func cycleProvider() {
+        let available = availableProviders
+        guard available.count > 1, let current = displayProvider,
+              let index = available.firstIndex(of: current) else { return }
+        selectedProvider = available[(index + 1) % available.count]
+    }
+
+    /// The windows (with short labels) for a provider, in display order. The
+    /// provider icon disambiguates, so Codex needs no "cx" prefix.
+    func windows(for provider: Provider) -> [(label: String, window: Window)] {
+        switch provider {
+        case .claude:
+            return [fiveHour.map { (label: "5h", window: $0) },
+                    sevenDay.map { (label: "7d", window: $0) }].compactMap { $0 }
+        case .codex:
+            return [codexPrimary, codexSecondary]
+                .compactMap { $0 }
+                .map { (label: $0.durationLabel, window: $0) }
+        }
+    }
+
     private var timer: Timer?
     /// Our harvest first; while the original is installed its statusline
     /// owns the slot, so we read the same data from its cache.

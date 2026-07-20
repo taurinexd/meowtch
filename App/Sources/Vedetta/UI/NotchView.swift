@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import VedettaKit
 
@@ -285,6 +286,10 @@ struct NotchView: View {
         .padding(10)
         .background(Color.white.opacity(0.07))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        // Line the box up with the cards' content instead of running to the
+        // panel walls (same lateral inset as SessionRowView).
+        .padding(.leading, 18)
+        .padding(.trailing, 15)
     }
 
     private var sessionList: some View {
@@ -339,29 +344,54 @@ struct NotchView: View {
     /// Real quota strip: Claude's 5h/7d windows plus any Codex windows (tagged
     /// "cx"), separated by thin bars; dots when nothing is known yet.
     private var usageSummary: some View {
-        let windows: [(label: String, window: UsageModel.Window)] = [
-            usage.fiveHour.map { (label: "5h", window: $0) },
-            usage.sevenDay.map { (label: "7d", window: $0) },
-            usage.codexPrimary.map { (label: codexLabel($0), window: $0) },
-            usage.codexSecondary.map { (label: codexLabel($0), window: $0) },
-        ].compactMap { $0 }
+        let provider = usage.displayProvider
+        let entries = provider.map { usage.windows(for: $0) } ?? []
         return HStack(spacing: 5) {
-            if windows.isEmpty {
-                Text("· · ·").foregroundStyle(Theme.secondaryText.opacity(0.5))
-            } else {
-                ForEach(Array(windows.enumerated()), id: \.offset) { index, entry in
+            if let provider, !entries.isEmpty {
+                providerIcon(provider)
+                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                     if index > 0 {
                         Text("|").foregroundStyle(Theme.secondaryText.opacity(0.5))
                     }
                     usageWindow(label: entry.label, window: entry.window)
                 }
+            } else {
+                Text("· · ·").foregroundStyle(Theme.secondaryText.opacity(0.5))
             }
         }
-        .font(.system(size: 11))
+        .font(.system(size: 10))
+        // Tap anywhere on the strip to cycle providers (Claude → Codex → …),
+        // so only one fits left of the physical notch at a time.
+        .contentShape(Rectangle())
+        .onTapGesture { usage.cycleProvider() }
     }
 
-    private func codexLabel(_ window: UsageModel.Window) -> String {
-        window.durationLabel.isEmpty ? "cx" : "cx " + window.durationLabel
+    /// Provider badge (Claude / Codex) on a black rounded background, left of
+    /// the usage numbers, from the bundled PNGs.
+    private func providerIcon(_ provider: UsageModel.Provider) -> some View {
+        // Claude ships a full-colour logo; Codex ships a monochrome template
+        // mark, tinted white so it reads on the black badge.
+        let name = provider == .claude ? "provider-claude" : "provider-codex"
+        let isTemplate = provider == .codex
+        return Group {
+            if let url = Bundle.main.url(forResource: name, withExtension: "png"),
+               let image = NSImage(contentsOf: url) {
+                if isTemplate {
+                    Image(nsImage: image)
+                        .renderingMode(.template)
+                        .resizable()
+                        .foregroundStyle(.white)
+                } else {
+                    Image(nsImage: image).resizable().interpolation(.high)
+                }
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: 14, height: 14)
+        .padding(2)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
     @ViewBuilder
