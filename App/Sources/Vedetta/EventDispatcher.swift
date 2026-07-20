@@ -48,6 +48,8 @@ enum EventDispatcher {
         // clear our now-orphaned notch card.
         if ["PostToolUse", "Stop", "StopFailure", "SessionEnd", "UserPromptSubmit"].contains(name) {
             ApprovalCenter.shared.resolveStale(sessionId: sessionId)
+            // The question's picker is done (answered anywhere) or abandoned.
+            QuestionStore.shared.dismiss(sessionId: sessionId)
         }
 
         // Names and task lists live anywhere in the transcript: refresh
@@ -106,18 +108,22 @@ enum EventDispatcher {
             ?? (toolInput?["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
             ?? (toolInput?["description"] as? String)
 
-        // Questions and plan reviews ride the same channel with richer UI.
-        var kind: ApprovalCenter.Kind = .tool
-        if toolName == "AskUserQuestion",
-           let questions = toolInput?["questions"] as? [[String: Any]],
-           let first = questions.first,
-           let text = first["question"] as? String {
-            let options = (first["options"] as? [[String: Any]])?
-                .compactMap { $0["label"] as? String } ?? []
-            kind = .question(text: text, options: options)
+        // AskUserQuestion is not an allow/deny gate: it must be let through
+        // (allow) so its native picker appears in the terminal, which the
+        // notch then drives via synthesized keys. Blocking it or denying it
+        // (the old path) surfaced as an error. Mirror it in the QuestionStore
+        // and return immediately.
+        if toolName == "AskUserQuestion", let questions = QuestionStore.parse(toolInput) {
+            QuestionStore.shared.present(sessionId: sessionId, questions: questions)
+            store.transition(id: sessionId, to: .needsApproval)
             SoundEngine.shared.play(.question)
-        } else if toolName == "ExitPlanMode" || toolName == "EnterPlanMode",
-                  let plan = toolInput?["plan"] as? String {
+            return allowData()
+        }
+
+        // Plan reviews still ride the blocking allow/deny channel.
+        var kind: ApprovalCenter.Kind = .tool
+        if toolName == "ExitPlanMode" || toolName == "EnterPlanMode",
+           let plan = toolInput?["plan"] as? String {
             kind = .plan(markdown: plan)
         }
 
@@ -140,6 +146,17 @@ enum EventDispatcher {
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": decisionObject,
+            ]
+        ]
+        return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
+    }
+
+    /// The allow reply used to let AskUserQuestion proceed to its picker.
+    private static func allowData() -> Data {
+        let reply: [String: Any] = [
+            "hookSpecificOutput": [
+                "hookEventName": "PermissionRequest",
+                "decision": ["behavior": "allow"],
             ]
         ]
         return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
