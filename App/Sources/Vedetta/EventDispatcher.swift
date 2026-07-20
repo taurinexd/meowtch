@@ -108,16 +108,33 @@ enum EventDispatcher {
             ?? (toolInput?["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
             ?? (toolInput?["description"] as? String)
 
-        // AskUserQuestion is not an allow/deny gate: it must be let through
-        // (allow) so its native picker appears in the terminal, which the
-        // notch then drives via synthesized keys. Blocking it or denying it
-        // (the old path) surfaced as an error. Mirror it in the QuestionStore
-        // and return immediately.
+        // AskUserQuestion rides the SAME blocking channel as an approval: we
+        // hold the hook open, mirror the question in the notch, and when the
+        // user answers there we hand the answers back as DATA through
+        // decision.updatedInput.answers. Claude Code then resolves the tool
+        // with those answers and never shows its terminal picker — no
+        // keystroke injection, no focus, nothing to corrupt the terminal.
         if toolName == "AskUserQuestion", let questions = QuestionStore.parse(toolInput) {
-            QuestionStore.shared.present(sessionId: sessionId, questions: questions)
             store.transition(id: sessionId, to: .needsApproval)
             SoundEngine.shared.play(.question)
-            return allowData()
+            let answers = await QuestionStore.shared.awaitAnswer(
+                sessionId: sessionId, questions: questions
+            )
+            store.transition(id: sessionId, to: .running)
+            // Abandoned (nil): reply "{}" so the bridge stays silent and
+            // Claude Code falls back to its own picker.
+            guard let answers, var updatedInput = toolInput else { return Data("{}".utf8) }
+            updatedInput["answers"] = answers
+            let reply: [String: Any] = [
+                "hookSpecificOutput": [
+                    "hookEventName": "PermissionRequest",
+                    "decision": [
+                        "behavior": "allow",
+                        "updatedInput": updatedInput,
+                    ],
+                ],
+            ]
+            return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
         }
 
         // Plan reviews still ride the blocking allow/deny channel.
@@ -146,17 +163,6 @@ enum EventDispatcher {
             "hookSpecificOutput": [
                 "hookEventName": "PermissionRequest",
                 "decision": decisionObject,
-            ]
-        ]
-        return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
-    }
-
-    /// The allow reply used to let AskUserQuestion proceed to its picker.
-    private static func allowData() -> Data {
-        let reply: [String: Any] = [
-            "hookSpecificOutput": [
-                "hookEventName": "PermissionRequest",
-                "decision": ["behavior": "allow"],
             ]
         ]
         return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
