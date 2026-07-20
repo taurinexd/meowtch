@@ -193,30 +193,63 @@ struct SessionRowView: View {
     /// its options (with descriptions); clicking one raises the terminal
     /// and drives the native picker to that choice.
     private func questionBar(_ live: QuestionStore.Live) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(Array(live.questions.enumerated()), id: \.element.id) { _, question in
+        // A lone single-select question answers on click; multiSelect or
+        // several questions accumulate and answer on an explicit submit.
+        let immediate = questions.isImmediate(sessionId: live.sessionId)
+        return VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(live.questions.enumerated()), id: \.element.id) { qIndex, question in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "questionmark.bubble.fill")
                             .font(.system(size: 11))
                         Text(question.header ?? "Question")
                             .font(.system(size: 11.5, weight: .bold))
+                        if live.questions.count > 1 {
+                            Text("\(qIndex + 1)/\(live.questions.count)")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Theme.secondaryText)
+                        }
                     }
                     .foregroundStyle(Theme.color(for: .needsApproval))
                     Text(question.prompt)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(Theme.primaryText)
                     ForEach(Array(question.choices.enumerated()), id: \.element.id) { index, choice in
-                        QuestionOption(index: index, label: choice.label, detail: choice.detail) {
-                            questions.answer(
-                                sessionId: live.sessionId,
-                                optionIndex: index,
-                                session: session,
-                                terminal: terminal
+                        QuestionOption(
+                            index: index,
+                            label: choice.label,
+                            detail: choice.detail,
+                            selected: !immediate && questions.isSelected(
+                                sessionId: live.sessionId, questionIndex: qIndex, optionIndex: index
                             )
+                        ) {
+                            questions.toggle(
+                                sessionId: live.sessionId,
+                                questionIndex: qIndex,
+                                optionIndex: index,
+                                multiSelect: question.multiSelect
+                            )
+                            if immediate {
+                                questions.submit(sessionId: live.sessionId, session: session, terminal: terminal)
+                            }
                         }
                     }
                 }
+            }
+            if !immediate {
+                Button {
+                    questions.submit(sessionId: live.sessionId, session: session, terminal: terminal)
+                } label: {
+                    Text("Invia")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14).padding(.vertical, 5)
+                        .background(questions.canSubmit(sessionId: live.sessionId)
+                            ? Theme.color(for: .needsApproval) : Color.white.opacity(0.2))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!questions.canSubmit(sessionId: live.sessionId))
             }
         }
         .padding(10)
@@ -406,6 +439,7 @@ private struct QuestionOption: View {
     let index: Int
     let label: String
     var detail: String? = nil
+    var selected: Bool = false
     let action: () -> Void
     @State private var hovered = false
 
@@ -415,7 +449,7 @@ private struct QuestionOption: View {
                 Text("\(index + 1)")
                     .font(.system(size: 10, weight: .bold))
                     .frame(width: 16, height: 16)
-                    .background(Theme.color(for: .needsApproval).opacity(0.8))
+                    .background(Theme.color(for: .needsApproval).opacity(selected ? 1 : 0.8))
                     .foregroundStyle(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 VStack(alignment: .leading, spacing: 2) {
@@ -430,9 +464,18 @@ private struct QuestionOption: View {
                     }
                 }
                 Spacer(minLength: 0)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Theme.color(for: .needsApproval))
+                }
             }
             .padding(8)
-            .background(Color.white.opacity(hovered ? 0.15 : 0.05))
+            .background(Color.white.opacity(selected ? 0.13 : (hovered ? 0.15 : 0.05)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Theme.color(for: .needsApproval).opacity(selected ? 0.6 : 0), lineWidth: 1)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
