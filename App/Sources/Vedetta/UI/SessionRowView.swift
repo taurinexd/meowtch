@@ -14,8 +14,12 @@ struct SessionRowView: View {
     var showJumpHint = false
     @State private var isHovered = false
     @ObservedObject private var approvals = ApprovalCenter.shared
+    @ObservedObject private var questions = QuestionStore.shared
 
-    private var hasPending: Bool { approvals.firstPending(for: session.id) != nil }
+    private var hasPending: Bool {
+        approvals.firstPending(for: session.id) != nil
+            || questions.first(for: session.id) != nil
+    }
 
     var body: some View {
         Group {
@@ -168,6 +172,11 @@ struct SessionRowView: View {
                     .padding(.top, 10)
             }
 
+            if let live = questions.first(for: session.id) {
+                questionBar(live)
+                    .padding(.top, 10)
+            }
+
             // The widget earns its space only while there is work left;
             // an all-done list disappears, like the original.
             if let tasks = session.tasks,
@@ -180,39 +189,49 @@ struct SessionRowView: View {
         .padding(.trailing, 15)
     }
 
-    /// Pending request UI: Allow/Deny strip for tools, option buttons for
-    /// questions, a Markdown preview with approve/reject for plans.
+    /// The live AskUserQuestion(s) shown in the notch. Each question lists
+    /// its options (with descriptions); clicking one raises the terminal
+    /// and drives the native picker to that choice.
+    private func questionBar(_ live: QuestionStore.Live) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(live.questions.enumerated()), id: \.element.id) { _, question in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "questionmark.bubble.fill")
+                            .font(.system(size: 11))
+                        Text(question.header ?? "Question")
+                            .font(.system(size: 11.5, weight: .bold))
+                    }
+                    .foregroundStyle(Theme.color(for: .needsApproval))
+                    Text(question.prompt)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.primaryText)
+                    ForEach(Array(question.choices.enumerated()), id: \.element.id) { index, choice in
+                        QuestionOption(index: index, label: choice.label, detail: choice.detail) {
+                            questions.answer(
+                                sessionId: live.sessionId,
+                                optionIndex: index,
+                                session: session,
+                                terminal: terminal
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.color(for: .needsApproval).opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Pending request UI: Allow/Deny strip for tools, a Markdown preview
+    /// with approve/reject for plans.
     @ViewBuilder
     private func approvalBar(_ pending: ApprovalCenter.Pending) -> some View {
         switch pending.kind {
         case .tool:
             toolApprovalBar(pending)
-        case .question(let text, let options):
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "questionmark.bubble.fill")
-                        .font(.system(size: 11))
-                    Text("Question")
-                        .font(.system(size: 11.5, weight: .bold))
-                }
-                .foregroundStyle(Theme.color(for: .needsApproval))
-                Text(text)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Theme.primaryText)
-                ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                    QuestionOption(index: index, label: option) {
-                        ApprovalCenter.shared.decide(
-                            id: pending.id,
-                            allow: false,
-                            message: "L'utente ha scelto: \(option)"
-                        )
-                    }
-                }
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.color(for: .needsApproval).opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
         case .plan(let markdown):
             VStack(alignment: .leading, spacing: 8) {
                 Text("Plan")
@@ -386,22 +405,31 @@ struct CompactingLine: View {
 private struct QuestionOption: View {
     let index: Int
     let label: String
+    var detail: String? = nil
     let action: () -> Void
     @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
                 Text("\(index + 1)")
                     .font(.system(size: 10, weight: .bold))
                     .frame(width: 16, height: 16)
                     .background(Theme.color(for: .needsApproval).opacity(0.8))
                     .foregroundStyle(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
-                Text(label)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Theme.primaryText)
-                Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.primaryText)
+                    if let detail, !detail.isEmpty {
+                        Text(detail)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
             }
             .padding(8)
             .background(Color.white.opacity(hovered ? 0.15 : 0.05))

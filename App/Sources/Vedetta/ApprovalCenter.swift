@@ -10,8 +10,10 @@ final class ApprovalCenter: ObservableObject {
 
     enum Kind {
         case tool
-        case question(text: String, options: [String])
         case plan(markdown: String)
+        // AskUserQuestion is no longer a blocking approval: it is let
+        // through (allow) and mirrored in QuestionStore, answered by
+        // driving the native picker.
     }
 
     struct Pending: Identifiable {
