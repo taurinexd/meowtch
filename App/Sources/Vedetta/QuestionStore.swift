@@ -1,15 +1,14 @@
-import AppKit
 import Combine
-import CoreGraphics
 import Foundation
-import VedettaKit
 
-/// Live AskUserQuestion prompts shown in the notch. Unlike tool/plan
-/// approvals (which block the bridge on an allow/deny decision), a question
-/// is let through immediately with `allow` so its native picker appears in
-/// the terminal; this store only mirrors it in the notch so the user can
-/// answer from there (Step 2 synthesizes the keystrokes). It clears when
-/// the tool completes (PostToolUse) or the turn moves on.
+/// Live AskUserQuestion prompts shown in the notch. Like a plan approval,
+/// the request BLOCKS the bridge: Vedetta holds the PermissionRequest hook
+/// open, mirrors the question in the notch, and when the user answers there
+/// it hands the answer back to Claude Code as DATA through the hook's
+/// `decision.updatedInput.answers` — no terminal picker, no keystroke
+/// injection, no focus. Claude Code then resolves the tool with those
+/// answers exactly as if the native picker had been used. This is the same
+/// channel the original uses (askUserQuestion routeNative).
 @MainActor
 final class QuestionStore: ObservableObject {
     static let shared = QuestionStore()
@@ -36,14 +35,34 @@ final class QuestionStore: ObservableObject {
 
     @Published private(set) var live: [Live] = []
 
-    func present(sessionId: String, questions: [Question]) {
+    /// A suspended AskUserQuestion hook, keyed by session. It resumes with the
+    /// answers record (question text → chosen label(s)) once the user answers
+    /// from the notch, or nil when the question is abandoned — that nil lets
+    /// the caller fall through to Claude Code's own picker. Holding this
+    /// continuation is what keeps the bridge blocked meanwhile.
+    private var continuations: [String: CheckedContinuation<[String: [String]]?, Never>] = [:]
+
+    /// Presents the question in the notch and SUSPENDS until the user answers
+    /// from there. Returns the answers record for `updatedInput.answers`
+    /// (`{ question text: [chosen labels] }` — Claude Code joins the array
+    /// comma-separated, so a single-select is just a one-element array), or
+    /// nil if the question was abandoned before an answer.
+    func awaitAnswer(sessionId: String, questions: [Question]) async -> [String: [String]]? {
+        // A second prompt for the same session supersedes the first.
+        continuations.removeValue(forKey: sessionId)?.resume(returning: nil)
         live.removeAll { $0.sessionId == sessionId }
         live.append(Live(id: sessionId, sessionId: sessionId, questions: questions))
+        return await withCheckedContinuation { continuation in
+            continuations[sessionId] = continuation
+        }
     }
 
     func dismiss(sessionId: String) {
         live.removeAll { $0.sessionId == sessionId }
         selections[sessionId] = nil
+        // Unblock a still-suspended hook (abandoned, e.g. the session ended):
+        // resuming with nil lets the caller fall back to the native picker.
+        continuations.removeValue(forKey: sessionId)?.resume(returning: nil)
     }
 
     func first(for sessionId: String) -> Live? {
@@ -105,61 +124,30 @@ final class QuestionStore: ObservableObject {
         return questions.isEmpty ? nil : questions
     }
 
-    /// Answers all questions by INJECTING the picker's keys straight into
-    /// the terminal's stdin via the companion extension (terminal.sendText):
-    /// real input injection, not synthesized global keystrokes — atomic (one
-    /// write, can't be interrupted mid-sequence) and needing no window focus
-    /// (the URI opens with activates=false). For each question it navigates
-    /// to the chosen option(s) — arrows, Space-toggling each pick of a
-    /// multiSelect one — then Return; between questions Tab moves to the next
-    /// tab, and a final Return confirms the Submit tab.
-    func submit(sessionId: String, session: AgentSession, terminal: TerminalInfo?) {
+    /// Resolves the suspended hook with the chosen answers. The record is
+    /// keyed by question TEXT (what Claude Code expects) with the chosen
+    /// option LABELS as an array — Claude Code joins the array comma-
+    /// separated, so a single-select is a one-element array.
+    func submit(sessionId: String) {
         guard let live = first(for: sessionId), canSubmit(sessionId: sessionId) else { return }
         let chosen = selections[sessionId] ?? [:]
 
-        let down = "\u{1b}[B", enter = "\r", space = " ", tab = "\t"
-        var keys = ""
+        var answers: [String: [String]] = [:]
         for (index, question) in live.questions.enumerated() {
-            let picks = (chosen[index] ?? []).sorted()
-            var cursor = 0
-            if question.multiSelect {
-                for pick in picks {
-                    keys += String(repeating: down, count: max(0, pick - cursor))
-                    cursor = pick
-                    keys += space   // toggle this pick
-                }
-                keys += enter
-            } else {
-                keys += String(repeating: down, count: max(0, picks.first ?? 0))
-                keys += enter
+            let labels = (chosen[index] ?? []).sorted().compactMap { optionIndex -> String? in
+                question.choices.indices.contains(optionIndex) ? question.choices[optionIndex].label : nil
             }
-            // Multi-question picker is tabbed: advance to the next question.
-            if index < live.questions.count - 1 { keys += tab }
+            answers[question.prompt] = labels
         }
-        // A multi-question run lands on the Submit tab — confirm it.
-        if live.questions.count > 1 { keys += enter }
-
-        sendKeys(keys, session: session, terminal: terminal)
-        dismiss(sessionId: sessionId)
+        resolve(sessionId: sessionId, answers: answers)
     }
 
-    /// Delivers the key string to the session's terminal via the companion
-    /// extension's /answer URI, opened WITHOUT activating VS Code so the
-    /// user's focus is never stolen. The extension writes it to the exact
-    /// terminal's stdin (terminal.sendText).
-    private func sendKeys(_ keys: String, session: AgentSession, terminal: TerminalInfo?) {
-        guard let terminal else { return }
-        let pids = terminal.pidChain ?? terminal.pid.map { [Int($0)] } ?? []
-        guard !pids.isEmpty,
-              let encodedKeys = keys.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
-              let workspace = session.directory.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-        else { return }
-        let pidParams = pids.map { "pid=\($0)" }.joined(separator: "&")
-        guard let url = URL(string:
-            "vscode://vedetta.terminal-focus/answer?\(pidParams)&workspace=\(workspace)&keys=\(encodedKeys)")
-        else { return }
-        let config = NSWorkspace.OpenConfiguration()
-        config.activates = false
-        NSWorkspace.shared.open(url, configuration: config, completionHandler: nil)
+    /// Hands the answers to the suspended hook and clears the card. The
+    /// notch state resets to running as the reducer's PostToolUse would.
+    private func resolve(sessionId: String, answers: [String: [String]]?) {
+        let continuation = continuations.removeValue(forKey: sessionId)
+        live.removeAll { $0.sessionId == sessionId }
+        selections[sessionId] = nil
+        continuation?.resume(returning: answers)
     }
 }

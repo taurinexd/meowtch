@@ -230,7 +230,7 @@ struct SessionRowView: View {
                                 multiSelect: question.multiSelect
                             )
                             if immediate {
-                                questions.submit(sessionId: live.sessionId, session: session, terminal: terminal)
+                                questions.submit(sessionId: live.sessionId)
                             }
                         }
                     }
@@ -238,7 +238,7 @@ struct SessionRowView: View {
             }
             if !immediate {
                 Button {
-                    questions.submit(sessionId: live.sessionId, session: session, terminal: terminal)
+                    questions.submit(sessionId: live.sessionId)
                 } label: {
                     Text("Invia")
                         .font(.system(size: 11.5, weight: .semibold))

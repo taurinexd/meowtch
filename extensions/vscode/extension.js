@@ -1,14 +1,26 @@
 // Vedetta Terminal Focus — bridges Vedetta to the integrated terminal that
-// hosts an agent session. Two URIs, both carrying the session's process
-// ancestry (pid=A&pid=B&…, captured at hook time — includes the terminal's
-// shell, matched against terminal.processId) plus its workspace path so a
-// wrong window stays silent:
-//   /focus            reveals the terminal tab
-//   /answer?keys=…    writes keys straight into the terminal's stdin
-//                     (terminal.sendText) to drive a native picker — real
-//                     injection, no synthesized global keystrokes, no focus.
+// hosts an agent session, for the JUMP action only. Answering questions does
+// NOT go through here: Vedetta hands the answer straight back to the agent as
+// data on the hook (decision.updatedInput.answers), so nothing is ever typed
+// into the terminal.
+//
+// One URI, carrying the session's process ancestry (pid=A&pid=B&…, captured at
+// hook time — the terminal's live shell is matched against terminal.processId)
+// plus its workspace path so a wrong window stays silent:
+//   /focus   reveals the terminal tab (Vedetta raises the window first).
 const vscode = require("vscode");
 const { execFile } = require("child_process");
+const fs = require("fs");
+const os = require("os");
+
+function log(message) {
+	try {
+		fs.appendFileSync(
+			os.homedir() + "/.vedetta/run/ext.log",
+			new Date().toISOString() + " " + message + "\n"
+		);
+	} catch (e) {}
+}
 
 function processParents(callback) {
 	execFile("ps", ["-Ao", "pid=,ppid="], { maxBuffer: 4 << 20 }, (error, stdout) => {
@@ -60,9 +72,9 @@ async function withTerminal(pids, action) {
 	});
 }
 
-// The URI lands in ONE window (the focused one); this extension instance
-// only sees its own window's terminals. Vedetta sends the session's
-// workspace path so an instance whose workspace doesn't match stays silent.
+// The URI lands in ONE window (the focused one); this extension instance only
+// sees its own window's terminals. Vedetta sends the session's workspace path
+// so an instance whose workspace doesn't contain it stays silent.
 function ownsWorkspace(dir) {
 	const trim = (value) => String(value || "").replace(/\/+$/, "");
 	const target = trim(dir);
@@ -79,21 +91,15 @@ function activate(context) {
 		vscode.window.registerUriHandler({
 			handleUri(uri) {
 				const params = new URLSearchParams(uri.query);
-				if (!ownsWorkspace(params.get("workspace"))) return;
+				const owns = ownsWorkspace(params.get("workspace"));
+				log(`uri path=${uri.path} owns=${owns} ws=${params.get("workspace")}`);
+				if (!owns) return;
 				const pids = params
 					.getAll("pid")
 					.map((value) => Number(value))
 					.filter((pid) => Number.isInteger(pid) && pid > 0);
 				if (pids.length === 0) return;
-
-				if (uri.path === "/focus") {
-					withTerminal(pids, (terminal) => terminal.show(false));
-				} else if (uri.path === "/answer") {
-					// URLSearchParams already percent-decodes; the keys string
-					// carries raw control bytes (arrows, CR, …) for the picker.
-					const keys = params.get("keys");
-					if (keys) withTerminal(pids, (terminal) => terminal.sendText(keys, false));
-				}
+				if (uri.path === "/focus") withTerminal(pids, (terminal) => terminal.show(false));
 			},
 		})
 	);
