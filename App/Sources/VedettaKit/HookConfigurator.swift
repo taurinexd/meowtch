@@ -123,6 +123,16 @@ public enum HookConfigurator {
         }
     }
 
+    /// True when at least one of our hooks is present: distinguishes "the
+    /// user installed us, now some events drifted" (heal) from "never
+    /// installed / deliberately uninstalled" (leave alone).
+    public static func hasAnyHook(in settings: [String: Any]) -> Bool {
+        guard let hooks = settings["hooks"] as? [String: Any] else { return false }
+        return claudeEvents.contains { event in
+            containsMarker(hooks[event] as? [[String: Any]] ?? [])
+        }
+    }
+
     // MARK: - Internals
 
     private static func containsMarker(_ groups: [[String: Any]]) -> Bool {

@@ -71,6 +71,23 @@ struct HookConfiguratorTests {
         #expect(hooks?["PreToolUse"] == nil)
     }
 
+    @Test func hasAnyHookDistinguishesDriftFromUninstalled() {
+        // Never installed: no vedetta hook at all.
+        #expect(!HookConfigurator.hasAnyHook(in: userSettings()))
+        // Drift: installed once, then one event lost its hook (e.g. a new
+        // event shipped later). isInstalled false, but hasAnyHook true.
+        var (merged, _) = HookConfigurator.mergingHooks(into: userSettings())
+        var hooks = merged["hooks"] as! [String: Any]
+        hooks["PreCompact"] = nil
+        merged["hooks"] = hooks
+        #expect(!HookConfigurator.isInstalled(in: merged))
+        #expect(HookConfigurator.hasAnyHook(in: merged))
+        // Re-merge heals only the missing event, leaving the rest intact.
+        let (healed, changed) = HookConfigurator.mergingHooks(into: merged)
+        #expect(changed)
+        #expect(HookConfigurator.isInstalled(in: healed))
+    }
+
     @Test func toolEventsGetWildcardMatcher() {
         let (merged, _) = HookConfigurator.mergingHooks(into: [:])
         let pre = ((merged["hooks"] as? [String: Any])?["PreToolUse"] as? [[String: Any]])?.first

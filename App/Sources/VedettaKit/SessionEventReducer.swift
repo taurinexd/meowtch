@@ -82,7 +82,11 @@ public enum SessionEventReducer {
                 startedAt: date,
                 lastActivityAt: date
             )
-        if let cwd { session.directory = cwd }
+        // The card shows the project root (VS Code's open folder), like the
+        // original — not wherever the agent cd'd to. A cwd that is a
+        // subdirectory of the one we have must not replace it; a shallower
+        // or unrelated cwd (a real project switch) does.
+        if let cwd { session.directory = rootDirectory(current: session.directory, cwd: cwd) }
         session.lastActivityAt = date
 
         switch name {
@@ -222,6 +226,17 @@ public enum SessionEventReducer {
         if !session.directory.isEmpty {
             session.gitBranch = GitIdentity.branch(forDirectory: session.directory)
         }
+    }
+
+    /// Keeps the shallower of two paths when one contains the other (the
+    /// project root survives a `cd` into a subfolder); an unrelated path
+    /// wins (the session moved to a different project).
+    private static func rootDirectory(current: String, cwd: String) -> String {
+        guard !current.isEmpty else { return cwd }
+        if cwd == current { return current }
+        if cwd.hasPrefix(current + "/") { return current }   // cwd is deeper
+        if current.hasPrefix(cwd + "/") { return cwd }        // cwd is shallower
+        return cwd
     }
 
     /// Compact one-line description of what the tool is touching,
