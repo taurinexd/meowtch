@@ -1,9 +1,12 @@
-// Vedetta Terminal Focus — focuses the integrated terminal that hosts an
-// agent session. Vedetta opens
-// vscode://vedetta.terminal-focus/focus?pid=A&pid=B&…&workspace=/path
-// where the pids are the session's process ancestry captured at hook time
-// (it includes the terminal's shell, matched directly against
-// terminal.processId); the ancestor walk remains as a fallback.
+// Vedetta Terminal Focus — bridges Vedetta to the integrated terminal that
+// hosts an agent session. Two URIs, both carrying the session's process
+// ancestry (pid=A&pid=B&…, captured at hook time — includes the terminal's
+// shell, matched against terminal.processId) plus its workspace path so a
+// wrong window stays silent:
+//   /focus            reveals the terminal tab
+//   /answer?keys=…    writes keys straight into the terminal's stdin
+//                     (terminal.sendText) to drive a native picker — real
+//                     injection, no synthesized global keystrokes, no focus.
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 
@@ -30,18 +33,18 @@ function ancestorsOf(pid, parents) {
 	return chain;
 }
 
-async function focusTerminalFor(pids) {
-	// Direct hit: the pid list already carries the terminal's shell.
+// Runs `action(terminal)` on the integrated terminal whose shell is in the
+// pid set (direct hit), falling back to an ancestor walk (older builds sent
+// a single pid whose shell is an ancestor).
+async function withTerminal(pids, action) {
 	const wanted = new Set(pids);
 	for (const terminal of vscode.window.terminals) {
 		const shellPid = await terminal.processId;
 		if (shellPid && wanted.has(shellPid)) {
-			terminal.show(false);
+			action(terminal);
 			return;
 		}
 	}
-	// Fallback: one of the pids may still be alive with the shell as an
-	// ancestor (older Vedetta builds sent a single pid).
 	processParents(async (parents) => {
 		const chain = new Set();
 		for (const pid of pids) {
@@ -50,7 +53,7 @@ async function focusTerminalFor(pids) {
 		for (const terminal of vscode.window.terminals) {
 			const shellPid = await terminal.processId;
 			if (shellPid && chain.has(shellPid)) {
-				terminal.show(false);
+				action(terminal);
 				return;
 			}
 		}
@@ -58,9 +61,8 @@ async function focusTerminalFor(pids) {
 }
 
 // The URI lands in ONE window (the focused one); this extension instance
-// only sees its own window's terminals. Vedetta raises the session's
-// window first and sends its workspace path along — an instance whose
-// workspace doesn't match stays silent instead of doing nothing useful.
+// only sees its own window's terminals. Vedetta sends the session's
+// workspace path so an instance whose workspace doesn't match stays silent.
 function ownsWorkspace(dir) {
 	const trim = (value) => String(value || "").replace(/\/+$/, "");
 	const target = trim(dir);
@@ -76,14 +78,22 @@ function activate(context) {
 	context.subscriptions.push(
 		vscode.window.registerUriHandler({
 			handleUri(uri) {
-				if (uri.path !== "/focus") return;
 				const params = new URLSearchParams(uri.query);
 				if (!ownsWorkspace(params.get("workspace"))) return;
 				const pids = params
 					.getAll("pid")
 					.map((value) => Number(value))
 					.filter((pid) => Number.isInteger(pid) && pid > 0);
-				if (pids.length > 0) focusTerminalFor(pids);
+				if (pids.length === 0) return;
+
+				if (uri.path === "/focus") {
+					withTerminal(pids, (terminal) => terminal.show(false));
+				} else if (uri.path === "/answer") {
+					// URLSearchParams already percent-decodes; the keys string
+					// carries raw control bytes (arrows, CR, …) for the picker.
+					const keys = params.get("keys");
+					if (keys) withTerminal(pids, (terminal) => terminal.sendText(keys, false));
+				}
 			},
 		})
 	);
