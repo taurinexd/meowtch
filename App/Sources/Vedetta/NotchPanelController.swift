@@ -46,12 +46,19 @@ final class NotchPanelController {
         // settle back once the queue drains.
         ApprovalCenter.shared.onArrival = { [weak self] in
             SoundEngine.shared.play(.approvalRequest)
-            self?.panel.orderFrontRegardless()
-            self?.setExpanded(true)
+            self?.focusInterrupt()
         }
         ApprovalCenter.shared.onDrain = { [weak self] in
-            guard let self, !self.pinnedExpanded else { return }
-            self.setExpanded(false)
+            self?.collapseIfNoInterrupt()
+        }
+        // Questions are interactive interrupts too — same take-over: expand
+        // focused on the single interrupting card (the chirp is played by the
+        // dispatcher), collapse once nothing is left to answer.
+        QuestionStore.shared.onArrival = { [weak self] in
+            self?.focusInterrupt()
+        }
+        QuestionStore.shared.onResolve = { [weak self] in
+            self?.collapseIfNoInterrupt()
         }
 
         // Screen/session transitions (display changes, unlocks) can knock the
@@ -338,10 +345,31 @@ final class NotchPanelController {
         }
     }
 
+    /// An interactive interrupt takes over the notch: bring it forward and
+    /// expand, focused on the single interrupting card (the expanded view
+    /// shows only the .needsApproval session). "Show all" is cleared so a
+    /// fresh interrupt always re-focuses, like the original's focusedSession.
+    private func focusInterrupt() {
+        panel.orderFrontRegardless()
+        uiModel.showAllSessions = false
+        setExpanded(true)
+    }
+
+    /// Collapse only once every interactive interrupt is gone — an approval
+    /// draining must not close a panel that still has a question to answer,
+    /// and vice versa.
+    private func collapseIfNoInterrupt() {
+        guard !pinnedExpanded,
+              ApprovalCenter.shared.pending.isEmpty,
+              QuestionStore.shared.live.isEmpty else { return }
+        setExpanded(false)
+    }
+
     private func setExpanded(_ expanded: Bool) {
         uiModel.isPrimed = false
         if !expanded {
             uiModel.peekSessionId = nil
+            uiModel.showAllSessions = false
             peekCloseWorkItem?.cancel()
             if let monitor = peekKeyMonitor {
                 NSEvent.removeMonitor(monitor)
@@ -405,6 +433,9 @@ final class NotchUIModel: ObservableObject {
     /// session (auto-opened on Stop while the user is elsewhere) instead
     /// of the session list, like the original.
     @Published var peekSessionId: String?
+    /// Set when the user taps "Show all" during an interrupt, to reveal the
+    /// whole list instead of the single focused card; reset on collapse.
+    @Published var showAllSessions = false
     /// True while the collapse animation swallows the expanded content:
     /// it stays mounted through it, then unmounts so the hover tracking
     /// region shrinks back to the bar alone.

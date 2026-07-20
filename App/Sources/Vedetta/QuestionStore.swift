@@ -14,6 +14,11 @@ import Foundation
 final class QuestionStore: ObservableObject {
     static let shared = QuestionStore()
 
+    /// The notch controller uses these to take the panel over when a question
+    /// arrives and to let it collapse once every question is answered.
+    var onArrival: (() -> Void)?
+    var onResolve: (() -> Void)?
+
     struct Choice: Identifiable {
         let id = UUID()
         let label: String
@@ -84,6 +89,7 @@ final class QuestionStore: ObservableObject {
         live.removeAll { $0.sessionId == sessionId }
         live.append(Live(id: sessionId, sessionId: sessionId, questions: questions))
         questionIndex[sessionId] = 0
+        onArrival?()
         return await withCheckedContinuation { continuation in
             continuations[sessionId] = continuation
         }
@@ -96,6 +102,7 @@ final class QuestionStore: ObservableObject {
         // Unblock a still-suspended hook (abandoned, e.g. the session ended):
         // resuming with nil lets the caller fall back to the native picker.
         continuations.removeValue(forKey: sessionId)?.resume(returning: nil)
+        onResolve?()
     }
 
     func first(for sessionId: String) -> Live? {
@@ -212,5 +219,6 @@ final class QuestionStore: ObservableObject {
         selections[sessionId] = nil
         questionIndex[sessionId] = nil
         continuation?.resume(returning: answers)
+        onResolve?()
     }
 }
