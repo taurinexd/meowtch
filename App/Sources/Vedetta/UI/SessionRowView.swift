@@ -15,6 +15,8 @@ struct SessionRowView: View {
     @State private var isHovered = false
     @ObservedObject private var approvals = ApprovalCenter.shared
 
+    private var hasPending: Bool { approvals.firstPending(for: session.id) != nil }
+
     var body: some View {
         Group {
             if isCompact {
@@ -30,7 +32,10 @@ struct SessionRowView: View {
             RoundedRectangle(cornerRadius: 13)
                 .fill(Color.white.opacity(0.07))
                 .padding(.horizontal, 8)
-                .opacity(isHovered ? 1 : 0)
+                // While a request is pending the interaction is with the
+                // buttons inside (each with its own hover), so the whole
+                // card must not light up under the cursor, like the original.
+                .opacity(isHovered && !hasPending ? 1 : 0)
         )
         .padding(.vertical, -8)
         .animation(.easeInOut(duration: 0.18), value: isHovered)
@@ -195,30 +200,13 @@ struct SessionRowView: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Theme.primaryText)
                 ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                    Button {
+                    QuestionOption(index: index, label: option) {
                         ApprovalCenter.shared.decide(
                             id: pending.id,
                             allow: false,
                             message: "L'utente ha scelto: \(option)"
                         )
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("\(index + 1)")
-                                .font(.system(size: 10, weight: .bold))
-                                .frame(width: 16, height: 16)
-                                .background(Theme.color(for: .needsApproval).opacity(0.8))
-                                .foregroundStyle(.black)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                            Text(option)
-                                .font(.system(size: 11.5, weight: .semibold))
-                                .foregroundStyle(Theme.primaryText)
-                            Spacer()
-                        }
-                        .padding(8)
-                        .background(Color.white.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(10)
@@ -389,6 +377,40 @@ struct CompactingLine: View {
         }
         .font(.system(size: 11.5))
         .foregroundStyle(Theme.compactingText)
+    }
+}
+
+/// One selectable answer in a Question card. Its own hover state so the
+/// cursor highlights the single option under it, not the whole card, like
+/// the original.
+private struct QuestionOption: View {
+    let index: Int
+    let label: String
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text("\(index + 1)")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 16, height: 16)
+                    .background(Theme.color(for: .needsApproval).opacity(0.8))
+                    .foregroundStyle(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                Text(label)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+            }
+            .padding(8)
+            .background(Color.white.opacity(hovered ? 0.15 : 0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: hovered)
     }
 }
 
