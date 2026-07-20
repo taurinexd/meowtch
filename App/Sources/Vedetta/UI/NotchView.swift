@@ -192,14 +192,28 @@ struct NotchView: View {
         (NSScreen.main?.frame.height ?? 900) - geometry.barHeight - 140
     }
 
+    /// The single card the panel focuses on: an interactive interrupt
+    /// (approval or question — i.e. `.needsApproval`) takes over, like the
+    /// original's focusedSession; otherwise the finished-session peek, if one
+    /// is open. "Show all" overrides both to reveal the whole list.
+    private var focusedSession: AgentSession? {
+        if model.showAllSessions { return nil }
+        if let interrupt = visibleSessions.first(where: { $0.state == .needsApproval }) {
+            return interrupt
+        }
+        if let peekId = model.peekSessionId {
+            return store.sessions.first { $0.id == peekId }
+        }
+        return nil
+    }
+
     private var expandedContent: some View {
         // All paddings below are measured from the panel's flat edges, so
         // the flare inset is applied first (values pixel-measured on the
         // original: text column x=64, sprite x=18, sections every 26pt).
         VStack(alignment: .leading, spacing: 20) {
             topBar
-            if let peekId = model.peekSessionId,
-               let session = store.sessions.first(where: { $0.id == peekId }) {
+            if let session = focusedSession {
                 peekContent(session)
             } else {
                 sessionList
@@ -217,20 +231,26 @@ struct NotchView: View {
     /// ^G jump hint), an inset panel with the last prompt, "Done" and the
     /// full reply in monospace, then a link back to the whole list —
     /// anatomy and colors measured on the original.
-    @ViewBuilder
     private func peekContent(_ session: AgentSession) -> some View {
-        // Section gaps measured on the recording: 13.5pt card→inset→link.
-        VStack(alignment: .leading, spacing: 13) {
+        // An interrupt (approval/question) shows ONLY its card — its Allow/Deny
+        // or question bar lives inside SessionRowView; a finished session also
+        // gets the prompt/reply inset. Section gaps measured on the recording:
+        // 13.5pt card→inset→link.
+        let isInterrupt = session.state == .needsApproval
+        return VStack(alignment: .leading, spacing: 13) {
             SessionRowView(
                 session: session,
                 terminal: store.terminal(for: session.id),
-                showJumpHint: true
+                showJumpHint: !isInterrupt
             )
-            peekReplyPanel(session)
+            if !isInterrupt {
+                peekReplyPanel(session)
+            }
             HStack {
                 Spacer()
                 Button {
                     model.peekSessionId = nil
+                    model.showAllSessions = true
                 } label: {
                     Text("Show all \(visibleSessions.count) sessions")
                         .font(.system(size: 12.5))
