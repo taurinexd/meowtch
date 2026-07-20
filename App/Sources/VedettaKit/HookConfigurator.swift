@@ -93,12 +93,22 @@ public enum HookConfigurator {
     /// Claude Code feeds the statusline JSON that includes `rate_limits`:
     /// harvesting it gives quota data with zero API calls. Installed only
     /// when the user has no statusline of their own — never clobbered.
+    /// Claims the single statusLine slot when it is free, already ours, or
+    /// held by a command whose executable is gone — `canReplace` reports
+    /// that last case (an orphan left behind by an uninstalled app). A
+    /// live foreign statusLine (the user's own, or the original while it is
+    /// installed) is never clobbered.
     public static func installingStatusLine(
         into settings: [String: Any],
-        command: String
+        command: String,
+        canReplace: (String) -> Bool = { _ in false }
     ) -> ([String: Any], changed: Bool) {
         var settings = settings
-        guard settings["statusLine"] == nil else { return (settings, false) }
+        if let existing = settings["statusLine"] as? [String: Any] {
+            let existingCommand = existing["command"] as? String ?? ""
+            if existingCommand.contains(markerToken) { return (settings, false) }
+            guard canReplace(existingCommand) else { return (settings, false) }
+        }
         settings["statusLine"] = ["type": "command", "command": command]
         return (settings, true)
     }
