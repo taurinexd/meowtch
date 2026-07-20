@@ -193,57 +193,75 @@ struct SessionRowView: View {
     /// its options (with descriptions); clicking one raises the terminal
     /// and drives the native picker to that choice.
     private func questionBar(_ live: QuestionStore.Live) -> some View {
-        // A lone single-select question answers on click; multiSelect or
-        // several questions accumulate and answer on an explicit submit.
-        let immediate = questions.isImmediate(sessionId: live.sessionId)
-        return VStack(alignment: .leading, spacing: 14) {
-            ForEach(Array(live.questions.enumerated()), id: \.element.id) { qIndex, question in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "questionmark.bubble.fill")
-                            .font(.system(size: 11))
-                        Text(question.header ?? "Question")
-                            .font(.system(size: 11.5, weight: .bold))
-                        if live.questions.count > 1 {
-                            Text("\(qIndex + 1)/\(live.questions.count)")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Theme.secondaryText)
-                        }
+        // One question at a time, like the original's WizardQuestionView and
+        // the terminal's tabbed picker — never stacked. Selections accumulate
+        // and answer on an explicit Invia (or Enter); Skip abandons the prompt
+        // and Terminale hands it back to the native picker.
+        let multi = live.questions.count > 1
+        let current = questions.currentIndex(sessionId: live.sessionId)
+        let qIndex = multi ? current : 0
+        let question = live.questions[qIndex]
+        return VStack(alignment: .leading, spacing: 10) {
+            if multi {
+                // Header chips as tabs: one per question, current highlighted,
+                // answered ones ticked; a chip jumps straight to that question.
+                HStack(spacing: 4) {
+                    ForEach(Array(live.questions.enumerated()), id: \.element.id) { index, q in
+                        questionTab(live, index: index, label: q.header ?? "Q\(index + 1)", isCurrent: index == current)
                     }
-                    .foregroundStyle(Theme.color(for: .needsApproval))
-                    Text(question.prompt)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(Theme.primaryText)
-                    ForEach(Array(question.choices.enumerated()), id: \.element.id) { index, choice in
-                        QuestionOption(
-                            index: index,
-                            label: choice.label,
-                            detail: choice.detail,
-                            selected: !immediate && questions.isSelected(
-                                sessionId: live.sessionId, questionIndex: qIndex, optionIndex: index
-                            )
-                        ) {
-                            questions.toggle(
-                                sessionId: live.sessionId,
-                                questionIndex: qIndex,
-                                optionIndex: index,
-                                multiSelect: question.multiSelect
-                            )
-                            if immediate {
-                                questions.submit(sessionId: live.sessionId)
-                            }
+                    Spacer(minLength: 4)
+                    Text("\(current + 1)/\(live.questions.count)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "questionmark.bubble.fill")
+                        .font(.system(size: 11))
+                    Text(question.header ?? "Question")
+                        .font(.system(size: 11.5, weight: .bold))
+                }
+                .foregroundStyle(Theme.color(for: .needsApproval))
+                Text(question.prompt)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.primaryText)
+                ForEach(Array(question.choices.enumerated()), id: \.element.id) { index, choice in
+                    QuestionOption(
+                        index: index,
+                        label: choice.label,
+                        detail: choice.detail,
+                        selected: questions.isSelected(
+                            sessionId: live.sessionId, questionIndex: qIndex, optionIndex: index
+                        )
+                    ) {
+                        questions.toggle(
+                            sessionId: live.sessionId,
+                            questionIndex: qIndex,
+                            optionIndex: index,
+                            multiSelect: question.multiSelect
+                        )
+                        // A single-select in the wizard advances to the next
+                        // unanswered question, like the original.
+                        if multi && !question.multiSelect {
+                            questions.advanceToNextUnanswered(sessionId: live.sessionId)
                         }
                     }
                 }
             }
-            if !immediate {
+            // Skip · Invia — one row. (No "Terminale" button: the native
+            // picker is already shown in the terminal while we block, so the
+            // user can answer there directly; a button for it is redundant.)
+            HStack(spacing: 8) {
+                questionFooterButton("Skip") { questions.skip(sessionId: live.sessionId) }
+                Spacer(minLength: 0)
                 Button {
                     questions.submit(sessionId: live.sessionId)
                 } label: {
                     Text("Invia")
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.black)
-                        .padding(.horizontal, 14).padding(.vertical, 5)
+                        .padding(.horizontal, 18).padding(.vertical, 5)
                         .background(questions.canSubmit(sessionId: live.sessionId)
                             ? Theme.color(for: .needsApproval) : Color.white.opacity(0.2))
                         .clipShape(Capsule())
@@ -256,6 +274,42 @@ struct SessionRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.color(for: .needsApproval).opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// A question tab in the multi-question wizard: shows the header, ticks it
+    /// when answered, highlights the current one; tapping switches to it.
+    private func questionTab(_ live: QuestionStore.Live, index: Int, label: String, isCurrent: Bool) -> some View {
+        let answered = questions.isAnswered(sessionId: live.sessionId, questionIndex: index)
+        return Button {
+            questions.setCurrentIndex(sessionId: live.sessionId, index)
+        } label: {
+            HStack(spacing: 3) {
+                if answered {
+                    Image(systemName: "checkmark").font(.system(size: 8, weight: .bold))
+                }
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .foregroundStyle(isCurrent ? Color.black : (answered ? Theme.color(for: .needsApproval) : Theme.secondaryText))
+            .background(isCurrent ? Theme.color(for: .needsApproval) : Color.white.opacity(0.06))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A subtle secondary action in the question footer (Skip / Terminale).
+    private func questionFooterButton(_ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.secondaryText)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Pending request UI: Allow/Deny strip for tools, a Markdown preview

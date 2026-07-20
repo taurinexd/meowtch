@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -33,7 +34,37 @@ final class QuestionStore: ObservableObject {
         let questions: [Question]
     }
 
-    @Published private(set) var live: [Live] = []
+    @Published private(set) var live: [Live] = [] {
+        didSet { updateEnterMonitor() }
+    }
+
+    // MARK: - Enter-to-submit
+
+    private var enterMonitor: Any?
+
+    /// A global Return monitor, live only while a question is pending, so
+    /// pressing Enter submits it just like clicking Invia — without the notch
+    /// panel ever taking focus. It fires only once every question is answered,
+    /// so a stray Enter elsewhere can't submit a half-filled prompt.
+    private func updateEnterMonitor() {
+        if live.isEmpty {
+            if let monitor = enterMonitor { NSEvent.removeMonitor(monitor); enterMonitor = nil }
+        } else if enterMonitor == nil {
+            enterMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+                guard event.keyCode == 36 || event.keyCode == 76 else { return }  // Return / keypad Enter
+                Task { @MainActor in
+                    let store = QuestionStore.shared
+                    if let ready = store.live.first(where: { store.canSubmit(sessionId: $0.sessionId) }) {
+                        store.submit(sessionId: ready.sessionId)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Abandons the prompt: replies "allow" with empty answers, so Claude Code
+    /// records "the user did not answer" and moves on.
+    func skip(sessionId: String) { resolve(sessionId: sessionId, answers: [:]) }
 
     /// A suspended AskUserQuestion hook, keyed by session. It resumes with the
     /// answers record (question text → chosen label(s)) once the user answers
@@ -52,6 +83,7 @@ final class QuestionStore: ObservableObject {
         continuations.removeValue(forKey: sessionId)?.resume(returning: nil)
         live.removeAll { $0.sessionId == sessionId }
         live.append(Live(id: sessionId, sessionId: sessionId, questions: questions))
+        questionIndex[sessionId] = 0
         return await withCheckedContinuation { continuation in
             continuations[sessionId] = continuation
         }
@@ -60,6 +92,7 @@ final class QuestionStore: ObservableObject {
     func dismiss(sessionId: String) {
         live.removeAll { $0.sessionId == sessionId }
         selections[sessionId] = nil
+        questionIndex[sessionId] = nil
         // Unblock a still-suspended hook (abandoned, e.g. the session ended):
         // resuming with nil lets the caller fall back to the native picker.
         continuations.removeValue(forKey: sessionId)?.resume(returning: nil)
@@ -74,6 +107,35 @@ final class QuestionStore: ObservableObject {
     /// Chosen option indices, keyed by session then question index. A
     /// single-select question keeps one index; a multiSelect one keeps many.
     @Published private(set) var selections: [String: [Int: Set<Int>]] = [:]
+
+    /// The question the wizard is showing, per session. Multi-question prompts
+    /// are stepped through one at a time (like the original's WizardQuestionView
+    /// and the terminal's tabbed picker), not stacked.
+    @Published private(set) var questionIndex: [String: Int] = [:]
+
+    func currentIndex(sessionId: String) -> Int {
+        let count = first(for: sessionId)?.questions.count ?? 1
+        return min(max(0, questionIndex[sessionId] ?? 0), max(0, count - 1))
+    }
+
+    func setCurrentIndex(sessionId: String, _ index: Int) {
+        questionIndex[sessionId] = index
+    }
+
+    func isAnswered(sessionId: String, questionIndex index: Int) -> Bool {
+        !(selections[sessionId]?[index]?.isEmpty ?? true)
+    }
+
+    /// Jumps to the next still-unanswered question after the current one
+    /// (wrapping once), so answering a single-select advances the wizard.
+    func advanceToNextUnanswered(sessionId: String) {
+        guard let live = first(for: sessionId), live.questions.count > 1 else { return }
+        let current = currentIndex(sessionId: sessionId)
+        let order = (1...live.questions.count).map { (current + $0) % live.questions.count }
+        if let next = order.first(where: { isAnswered(sessionId: sessionId, questionIndex: $0) == false }) {
+            questionIndex[sessionId] = next
+        }
+    }
 
     func isSelected(sessionId: String, questionIndex: Int, optionIndex: Int) -> Bool {
         selections[sessionId]?[questionIndex]?.contains(optionIndex) ?? false
@@ -148,6 +210,7 @@ final class QuestionStore: ObservableObject {
         let continuation = continuations.removeValue(forKey: sessionId)
         live.removeAll { $0.sessionId == sessionId }
         selections[sessionId] = nil
+        questionIndex[sessionId] = nil
         continuation?.resume(returning: answers)
     }
 }
