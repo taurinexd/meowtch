@@ -85,7 +85,11 @@ enum CodexUsageProbe {
             #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"vedetta","version":"0.1.0"}}}"#,
             #"{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}"#,
         ].joined(separator: "\n") + "\n"
-        stdinPipe.fileHandleForWriting.write(Data(requests.utf8))
+        // Guard the write: the throwing variant turns a broken pipe into a
+        // caught error rather than an exception (SIGPIPE is ignored app-wide).
+        if process.isRunning {
+            try? stdinPipe.fileHandleForWriting.write(contentsOf: Data(requests.utf8))
+        }
 
         let handle = stdoutPipe.fileHandleForReading
         var buffer = Data()
