@@ -42,6 +42,14 @@ enum EventDispatcher {
 
         SessionEventReducer.apply(envelope, to: store)
 
+        // A pending request goes stale when the tool proceeds without our
+        // decision (bypass mode) or the user answers in the terminal: the
+        // tool's PostToolUse — or the turn moving on — is the signal to
+        // clear our now-orphaned notch card.
+        if ["PostToolUse", "Stop", "StopFailure", "SessionEnd", "UserPromptSubmit"].contains(name) {
+            ApprovalCenter.shared.resolveStale(sessionId: sessionId)
+        }
+
         // Names and task lists live anywhere in the transcript: refresh
         // them in the background at turn boundaries. Registering the path
         // also lets the periodic pass re-peek the recap for live sessions.

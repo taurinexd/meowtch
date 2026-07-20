@@ -61,6 +61,20 @@ final class ApprovalCenter: ObservableObject {
         if pending.isEmpty { onDrain?() }
     }
 
+    /// The tool proceeded without us — bypass mode, or the user answered in
+    /// the terminal — so a request still on screen is stale. Drop it and
+    /// unblock the (now-ignored) bridge connection so nothing hangs.
+    func resolveStale(sessionId: String) {
+        let stale = pending.filter { $0.sessionId == sessionId }
+        guard !stale.isEmpty else { return }
+        for item in stale {
+            continuations.removeValue(forKey: item.id)?
+                .resume(returning: (allow: true, message: nil))
+        }
+        pending.removeAll { $0.sessionId == sessionId }
+        if pending.isEmpty { onDrain?() }
+    }
+
     func firstPending(for sessionId: String) -> Pending? {
         pending.first { $0.sessionId == sessionId }
     }
