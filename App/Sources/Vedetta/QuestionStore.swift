@@ -105,78 +105,61 @@ final class QuestionStore: ObservableObject {
         return questions.isEmpty ? nil : questions
     }
 
-    /// After answering, return focus to whatever app the user was in
-    /// before the terminal was raised (the user's choice for Option 1).
-    static var returnFocusAfterAnswer = true
-
-    /// Answers all questions by driving the native picker: raise the exact
-    /// terminal, then for each question in order navigate to the chosen
-    /// option(s) — Space-toggling each pick for a multiSelect question, then
-    /// Return to confirm and advance to the next — and finally return focus
-    /// to where the user was. The picker starts each question on its first
-    /// option; navigation is arrows + Space/Enter (measured on-screen).
+    /// Answers all questions by INJECTING the picker's keys straight into
+    /// the terminal's stdin via the companion extension (terminal.sendText):
+    /// real input injection, not synthesized global keystrokes — atomic (one
+    /// write, can't be interrupted mid-sequence) and needing no window focus
+    /// (the URI opens with activates=false). For each question it navigates
+    /// to the chosen option(s) — arrows, Space-toggling each pick of a
+    /// multiSelect one — then Return; between questions Tab moves to the next
+    /// tab, and a final Return confirms the Submit tab.
     func submit(sessionId: String, session: AgentSession, terminal: TerminalInfo?) {
         guard let live = first(for: sessionId), canSubmit(sessionId: sessionId) else { return }
         let chosen = selections[sessionId] ?? [:]
-        let plan: [(multiSelect: Bool, picks: [Int])] = live.questions.enumerated().map { index, question in
-            (question.multiSelect, (chosen[index] ?? []).sorted())
-        }
-        let previous = NSWorkspace.shared.frontmostApplication
-        let terminalBundle = terminal?.bundleIdentifier
-        let returnFocus = Self.returnFocusAfterAnswer
 
-        JumpService.jump(to: session, terminal: terminal)
-        dismiss(sessionId: sessionId)
-
-        Task { @MainActor in
-            // Let the raise/URI settle so the picker is the key responder.
-            try? await Task.sleep(for: .milliseconds(850))
-            for question in plan {
-                var cursor = 0
-                if question.multiSelect {
-                    for pick in question.picks {
-                        try await moveDown(pick - cursor)
-                        cursor = pick
-                        TerminalKeys.tap(TerminalKeys.space)
-                        try? await Task.sleep(for: .milliseconds(50))
-                    }
-                    TerminalKeys.tap(TerminalKeys.returnKey)
-                } else {
-                    try await moveDown((question.picks.first ?? 0) - cursor)
-                    TerminalKeys.tap(TerminalKeys.returnKey)
+        let down = "\u{1b}[B", enter = "\r", space = " ", tab = "\t"
+        var keys = ""
+        for (index, question) in live.questions.enumerated() {
+            let picks = (chosen[index] ?? []).sorted()
+            var cursor = 0
+            if question.multiSelect {
+                for pick in picks {
+                    keys += String(repeating: down, count: max(0, pick - cursor))
+                    cursor = pick
+                    keys += space   // toggle this pick
                 }
-                // Give the next question's picker time to appear.
-                try? await Task.sleep(for: .milliseconds(350))
+                keys += enter
+            } else {
+                keys += String(repeating: down, count: max(0, picks.first ?? 0))
+                keys += enter
             }
-            if returnFocus, let previous, previous.bundleIdentifier != terminalBundle {
-                try? await Task.sleep(for: .milliseconds(300))
-                previous.activate()
-            }
+            // Multi-question picker is tabbed: advance to the next question.
+            if index < live.questions.count - 1 { keys += tab }
         }
+        // A multi-question run lands on the Submit tab — confirm it.
+        if live.questions.count > 1 { keys += enter }
+
+        sendKeys(keys, session: session, terminal: terminal)
+        dismiss(sessionId: sessionId)
     }
 
-    private func moveDown(_ times: Int) async throws {
-        for _ in 0..<max(0, times) {
-            TerminalKeys.tap(TerminalKeys.downArrow)
-            try await Task.sleep(for: .milliseconds(50))
-        }
-    }
-}
-
-/// Synthesizes the keystrokes that drive Claude Code's native option picker
-/// in the focused terminal (arrow navigation + Return, keycodes measured
-/// against the real picker layout).
-@MainActor
-enum TerminalKeys {
-    static let downArrow: CGKeyCode = 125
-    static let returnKey: CGKeyCode = 36
-    static let space: CGKeyCode = 49
-
-    static func tap(_ key: CGKeyCode) {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true)?
-            .post(tap: .cghidEventTap)
-        CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false)?
-            .post(tap: .cghidEventTap)
+    /// Delivers the key string to the session's terminal via the companion
+    /// extension's /answer URI, opened WITHOUT activating VS Code so the
+    /// user's focus is never stolen. The extension writes it to the exact
+    /// terminal's stdin (terminal.sendText).
+    private func sendKeys(_ keys: String, session: AgentSession, terminal: TerminalInfo?) {
+        guard let terminal else { return }
+        let pids = terminal.pidChain ?? terminal.pid.map { [Int($0)] } ?? []
+        guard !pids.isEmpty,
+              let encodedKeys = keys.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+              let workspace = session.directory.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        else { return }
+        let pidParams = pids.map { "pid=\($0)" }.joined(separator: "&")
+        guard let url = URL(string:
+            "vscode://vedetta.terminal-focus/answer?\(pidParams)&workspace=\(workspace)&keys=\(encodedKeys)")
+        else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = false
+        NSWorkspace.shared.open(url, configuration: config, completionHandler: nil)
     }
 }
