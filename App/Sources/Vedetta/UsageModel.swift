@@ -9,13 +9,18 @@ import Combine
 final class UsageModel: ObservableObject {
     static let shared = UsageModel()
 
-    struct Window: Equatable {
+    struct Window: Equatable, Sendable {
         var percent: Int
         var resetsAt: Date?
+        var windowMinutes: Int?
     }
 
     @Published private(set) var fiveHour: Window?
     @Published private(set) var sevenDay: Window?
+    /// Codex quota (from `codex app-server`), shown alongside Claude's.
+    @Published private(set) var codexPrimary: Window?
+    @Published private(set) var codexSecondary: Window?
+    private var lastCodexProbe: Date?
 
     private var timer: Timer?
     /// Our harvest first; while the original is installed its statusline
@@ -59,6 +64,18 @@ final class UsageModel: ObservableObject {
         sevenDay = windows.first {
             $0.key.contains("7d") || $0.key.contains("seven_day") || $0.key.contains("secondary")
         }?.window
+
+        Task { await refreshCodex() }
+    }
+
+    /// Codex quota via `codex app-server`, throttled to a few minutes since it
+    /// spawns a process. Keeps the last-known windows on failure.
+    private func refreshCodex() async {
+        if let last = lastCodexProbe, Date().timeIntervalSince(last) < 240 { return }
+        guard let snapshot = await CodexUsageProbe.probe() else { return }
+        lastCodexProbe = Date()
+        codexPrimary = snapshot.primary
+        codexSecondary = snapshot.secondary
     }
 
     private func collectWindows(
@@ -87,6 +104,14 @@ final class UsageModel: ObservableObject {
 }
 
 extension UsageModel.Window {
+    /// Label from the window's own duration: "5h", "7d", "" when unknown.
+    var durationLabel: String {
+        guard let minutes = windowMinutes else { return "" }
+        if minutes % 1440 == 0 { return "\(minutes / 1440)d" }
+        if minutes % 60 == 0 { return "\(minutes / 60)h" }
+        return "\(minutes)m"
+    }
+
     /// Compact remaining-time label like the original: "1h44m", "3d6h".
     var resetLabel: String? {
         guard let resetsAt else { return nil }
