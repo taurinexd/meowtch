@@ -2,8 +2,9 @@ import Foundation
 import Combine
 
 /// Observable source of truth for the sessions shown in the panel.
-/// Kept sorted: approvals first, then waiting, running, completed;
-/// ties broken by most recent activity.
+/// Kept sorted: approvals first, then running, waiting, completed;
+/// same-state ties broken by when the state was entered (stable while
+/// a card merely stays busy).
 @MainActor
 public final class SessionStore: ObservableObject {
     @Published public private(set) var sessions: [AgentSession] = []
@@ -28,16 +29,27 @@ public final class SessionStore: ObservableObject {
     }
 
     public func upsert(_ session: AgentSession) {
+        var incoming = session
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-            sessions[index] = session
+            // stateChangedAt is stamped here, centrally, so every writer
+            // (reducer, coordinator, bootstrap) gets it for free.
+            if sessions[index].state == incoming.state {
+                incoming.stateChangedAt = sessions[index].stateChangedAt
+            } else {
+                incoming.stateChangedAt = incoming.lastActivityAt
+            }
+            sessions[index] = incoming
         } else {
-            sessions.append(session)
+            sessions.append(incoming)
         }
         sort()
     }
 
     public func transition(id: String, to state: SessionState, at date: Date = Date()) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        if sessions[index].state != state {
+            sessions[index].stateChangedAt = date
+        }
         sessions[index].state = state
         sessions[index].lastActivityAt = date
         sort()
@@ -61,6 +73,11 @@ public final class SessionStore: ObservableObject {
         sessions.sort {
             if $0.isMinimized != $1.isMinimized { return !$0.isMinimized }
             if $0.state != $1.state { return $0.state < $1.state }
+            // Same-state ties break on when the state was ENTERED, not on
+            // raw activity: per-hook bumps would shuffle running cards.
+            if $0.stateChangedAt != $1.stateChangedAt {
+                return $0.stateChangedAt > $1.stateChangedAt
+            }
             return $0.lastActivityAt > $1.lastActivityAt
         }
     }

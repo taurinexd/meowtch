@@ -58,6 +58,43 @@ struct SessionStoreTests {
         #expect(store.sessions.map(\.id) == ["new", "old"])
     }
 
+    @Test func activityBumpsDoNotReorderSameStateCards() {
+        let store = SessionStore()
+        var first = makeSession(id: "first", state: .running,
+                                lastActivityAt: Date(timeIntervalSince1970: 100))
+        first.stateChangedAt = Date(timeIntervalSince1970: 100)
+        var second = makeSession(id: "second", state: .running,
+                                 lastActivityAt: Date(timeIntervalSince1970: 200))
+        second.stateChangedAt = Date(timeIntervalSince1970: 200)
+        store.upsert(first)
+        store.upsert(second)
+        #expect(store.sessions.map(\.id) == ["second", "first"])
+
+        // A hook bump on the older card must not leapfrog it: same-state
+        // order follows when the state was entered, not raw activity.
+        var bumped = store.sessions.first { $0.id == "first" }!
+        bumped.lastActivityAt = Date(timeIntervalSince1970: 300)
+        store.upsert(bumped)
+        #expect(store.sessions.map(\.id) == ["second", "first"])
+    }
+
+    @Test func stateChangeRestampsStateChangedAtViaUpsert() {
+        let store = SessionStore()
+        store.upsert(makeSession(id: "a", state: .running,
+                                 lastActivityAt: Date(timeIntervalSince1970: 100)))
+        var finished = store.sessions[0]
+        finished.state = .waitingForInput
+        finished.lastActivityAt = Date(timeIntervalSince1970: 500)
+        store.upsert(finished)
+        #expect(store.sessions.first?.stateChangedAt == Date(timeIntervalSince1970: 500))
+
+        // Same-state updates keep the original stamp.
+        var bumped = store.sessions[0]
+        bumped.lastActivityAt = Date(timeIntervalSince1970: 900)
+        store.upsert(bumped)
+        #expect(store.sessions.first?.stateChangedAt == Date(timeIntervalSince1970: 500))
+    }
+
     @Test func transitionChangesStateAndBumpsActivity() {
         let store = SessionStore()
         store.upsert(makeSession(id: "a", state: .running,

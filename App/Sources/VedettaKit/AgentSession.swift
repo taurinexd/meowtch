@@ -55,6 +55,11 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     /// on the card, like the original. Cleared by any new user prompt.
     public var recap: String?
     public var state: SessionState
+    /// When the session entered its current state. The list sorts same-state
+    /// cards by this, not by lastActivityAt: per-hook activity bumps would
+    /// make concurrently running cards leapfrog each other constantly.
+    /// Stamped centrally by SessionStore on state changes.
+    public var stateChangedAt: Date
     public var startedAt: Date
     public var lastActivityAt: Date
     /// When the context compaction started (drives the "Compacting · 29s"
@@ -92,6 +97,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         lastAssistantMessage: String? = nil,
         recap: String? = nil,
         state: SessionState,
+        stateChangedAt: Date? = nil,
         startedAt: Date,
         lastActivityAt: Date,
         isMinimized: Bool = false,
@@ -119,6 +125,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.lastAssistantMessage = lastAssistantMessage
         self.recap = recap
         self.state = state
+        self.stateChangedAt = stateChangedAt ?? startedAt
         self.startedAt = startedAt
         self.lastActivityAt = lastActivityAt
         self.isMinimized = isMinimized
