@@ -97,6 +97,29 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.first?.state == .waitingForInput)
     }
 
+    @Test func postToolUseClearsATerminalDecidedApproval() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        coordinator.apply(hook: try hook("UserPromptSubmit", extra: ["prompt": "run it"]))
+        coordinator.apply(hook: try hook("PermissionRequest", extra: ["tool_name": "shell"]))
+        #expect(store.sessions.first?.state == .needsApproval)
+
+        // The user approved in the terminal: the executed tool's PostToolUse
+        // is the only Codex signal that the decision was made.
+        coordinator.apply(hook: try hook("PostToolUse", extra: ["tool_name": "shell"]))
+        #expect(store.sessions.first?.state == .running)
+    }
+
+    @Test func rolloutActivityPreservesAPendingApproval() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        coordinator.apply(hook: try hook("UserPromptSubmit", extra: ["prompt": "run it"]))
+        coordinator.apply(hook: try hook("PermissionRequest", extra: ["tool_name": "shell"]))
+
+        #expect(coordinator.apply(rollout: rollout(activeTurns: ["turn-1"])))
+        #expect(store.sessions.first?.state == .needsApproval)
+    }
+
     @Test func rejectsRolloutReadStartedBeforeNewerHookRevision() throws {
         let store = SessionStore()
         let coordinator = CodexIngressCoordinator(store: store)
