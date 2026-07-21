@@ -2,9 +2,12 @@ import Foundation
 import VedettaKit
 
 /// Filesystem-facing setup: runtime directories, the launcher script in
-/// `~/.vedetta/bin`, and hook install/removal in `~/.claude/settings.json`
-/// (always with a timestamped backup first).
+/// `~/.vedetta/bin`, and hook install/removal for Claude Code and Codex
+/// (always with a timestamped backup before an existing file changes).
 enum VedettaSetup {
+    private static let configStore = HookConfigFileStore()
+    private static let claudeRemovalKey = "hooks.deliberatelyRemoved.claude"
+    private static let codexRemovalKey = "hooks.deliberatelyRemoved.codex"
     static let home = NSHomeDirectory()
     static var rootDir: String { home + "/.vedetta" }
     static var binDir: String { rootDir + "/bin" }
@@ -14,6 +17,7 @@ enum VedettaSetup {
     static var launcherPath: String { binDir + "/vedetta-bridge" }
     static var orphanedPath: String { rootDir + "/.orphaned" }
     static var claudeSettingsPath: String { home + "/.claude/settings.json" }
+    static var codexHooksPath: String { home + "/.codex/hooks.json" }
 
     // MARK: - Runtime layout
 
@@ -77,6 +81,9 @@ enum VedettaSetup {
         if [ -f "$O" ]; then
           read -r T < "$O"
           if [ "$(( $(/bin/date +%s) - T ))" -ge 300 ]; then
+            S="$(/bin/date -u +%Y-%m-%dT%H-%M-%SZ).$$"
+            [ -f "$HOME/.claude/settings.json" ] && /bin/cp -p "$HOME/.claude/settings.json" "$HOME/.vedetta/backups/settings.json.$S"
+            [ -f "$HOME/.codex/hooks.json" ] && /bin/cp -p "$HOME/.codex/hooks.json" "$HOME/.vedetta/backups/hooks.json.$S"
             /usr/bin/osascript -l JavaScript <<'JSEOF' 2>/dev/null
         ObjC.import('Foundation')
         var h=ObjC.unwrap($.NSHomeDirectory()),m='vedetta'
@@ -84,6 +91,7 @@ enum VedettaSetup {
         function wr(p,s){$.NSString.alloc.initWithUTF8String(s).writeToFileAtomicallyEncodingError(p,true,$.NSUTF8StringEncoding,null)}
         function clean(p){var s=rd(p);if(!s)return;var j;try{j=JSON.parse(s)}catch(e){return}var ch=false;if(j.hooks){for(var ev in j.hooks){var a=j.hooks[ev];if(!Array.isArray(a))continue;var f=a.filter(function(e){if(Array.isArray(e.hooks)){e.hooks=e.hooks.filter(function(x){return(x.command||'').indexOf(m)===-1});if(!e.hooks.length)return false}return(e.command||'').indexOf(m)===-1});if(f.length!==a.length)ch=true;if(!f.length)delete j.hooks[ev];else j.hooks[ev]=f}if(!Object.keys(j.hooks).length)delete j.hooks}if(j.statusLine&&(j.statusLine.command||'').indexOf(m)!==-1){delete j.statusLine;ch=true}if(ch)wr(p,JSON.stringify(j,null,2))}
         clean(h+'/.claude/settings.json')
+        clean(h+'/.codex/hooks.json')
         JSEOF
             for cli in code code-insiders cursor windsurf; do
               command -v "$cli" >/dev/null 2>&1 && "$cli" --uninstall-extension vedetta.terminal-focus >/dev/null 2>&1 &
@@ -99,11 +107,16 @@ enum VedettaSetup {
         chmod(launcherPath, 0o755)
     }
 
-    // MARK: - Claude Code hooks
+    // MARK: - Coding-agent hooks
 
     static func claudeHooksInstalled() -> Bool {
-        guard let settings = readClaudeSettings() else { return false }
+        guard let settings = try? configStore.read(at: URL(fileURLWithPath: claudeSettingsPath)) else { return false }
         return HookConfigurator.isInstalled(in: settings)
+    }
+
+    static func codexHooksInstalled() -> Bool {
+        guard let settings = try? configStore.read(at: URL(fileURLWithPath: codexHooksPath)) else { return false }
+        return HookConfigurator.codexHooksInstalled(in: settings)
     }
 
     /// Self-heal on every launch: if we were installed but some events
@@ -113,35 +126,94 @@ enum VedettaSetup {
     /// so a deliberate uninstall isn't undone.
     @discardableResult
     static func healClaudeHooks() throws -> Bool {
-        guard let settings = readClaudeSettings(),
+        guard !UserDefaults.standard.bool(forKey: claudeRemovalKey),
+              let settings = try? configStore.read(at: URL(fileURLWithPath: claudeSettingsPath)),
               HookConfigurator.hasAnyHook(in: settings),
               !HookConfigurator.isInstalled(in: settings) else { return false }
         return try installClaudeHooks()
     }
 
     @discardableResult
+    static func healCodexHooks() throws -> Bool {
+        guard !UserDefaults.standard.bool(forKey: codexRemovalKey),
+              let settings = try? configStore.read(at: URL(fileURLWithPath: codexHooksPath)),
+              HookConfigurator.hasAnyCodexHook(in: settings),
+              !HookConfigurator.codexHooksInstalled(in: settings) else { return false }
+        return try installCodexHooks()
+    }
+
+    @discardableResult
     static func installClaudeHooks() throws -> Bool {
-        let settings = readClaudeSettings() ?? [:]
-        let (merged, hooksChanged) = HookConfigurator.mergingHooks(into: settings)
-        let (final, statusChanged) = HookConfigurator.installingStatusLine(
-            into: merged,
-            command: statusLinePath,
-            canReplace: statusLineIsOrphan
+        let result = try configStore.mutate(
+            at: URL(fileURLWithPath: claudeSettingsPath),
+            backupDirectory: URL(fileURLWithPath: backupsDir),
+            backupName: "settings.json"
+        ) { settings in
+            let (merged, hooksChanged) = HookConfigurator.mergingHooks(into: settings)
+            let (final, statusChanged) = HookConfigurator.installingStatusLine(
+                into: merged,
+                command: statusLinePath,
+                canReplace: statusLineIsOrphan
+            )
+            return (final, hooksChanged || statusChanged)
+        }
+        UserDefaults.standard.set(false, forKey: claudeRemovalKey)
+        return result.changed
+    }
+
+    @discardableResult
+    static func installCodexHooks() throws -> Bool {
+        let result = try configStore.mutate(
+            at: URL(fileURLWithPath: codexHooksPath),
+            backupDirectory: URL(fileURLWithPath: backupsDir),
+            backupName: "hooks.json",
+            transform: HookConfigurator.mergingCodexHooks
         )
-        guard hooksChanged || statusChanged else { return false }
-        try backupClaudeSettings()
-        try writeClaudeSettings(final)
-        return true
+        // Deliberately do not mutate ~/.codex/config.toml or synthesize
+        // trusted_hash values. Codex owns that trust decision and asks the
+        // user to review new hook commands on the next interactive launch.
+        UserDefaults.standard.set(false, forKey: codexRemovalKey)
+        return result.changed
+    }
+
+    @discardableResult
+    static func installAgentHooks() -> HookAgentOperationReport {
+        HookAgentOperationReport.run(
+            claude: installClaudeHooks,
+            codex: installCodexHooks
+        )
     }
 
     @discardableResult
     static func removeClaudeHooks() throws -> Bool {
-        guard let settings = readClaudeSettings() else { return false }
-        let (stripped, changed) = HookConfigurator.removingHooks(from: settings)
-        guard changed else { return false }
-        try backupClaudeSettings()
-        try writeClaudeSettings(stripped)
-        return true
+        defer { UserDefaults.standard.set(true, forKey: claudeRemovalKey) }
+        guard FileManager.default.fileExists(atPath: claudeSettingsPath) else { return false }
+        return try configStore.mutate(
+            at: URL(fileURLWithPath: claudeSettingsPath),
+            backupDirectory: URL(fileURLWithPath: backupsDir),
+            backupName: "settings.json",
+            transform: HookConfigurator.removingHooks
+        ).changed
+    }
+
+    @discardableResult
+    static func removeCodexHooks() throws -> Bool {
+        defer { UserDefaults.standard.set(true, forKey: codexRemovalKey) }
+        guard FileManager.default.fileExists(atPath: codexHooksPath) else { return false }
+        return try configStore.mutate(
+            at: URL(fileURLWithPath: codexHooksPath),
+            backupDirectory: URL(fileURLWithPath: backupsDir),
+            backupName: "hooks.json",
+            transform: HookConfigurator.removingCodexHooks
+        ).changed
+    }
+
+    @discardableResult
+    static func removeAgentHooks() -> HookAgentOperationReport {
+        HookAgentOperationReport.run(
+            claude: removeClaudeHooks,
+            codex: removeCodexHooks
+        )
     }
 
     /// A foreign statusLine is claimable only when it is an orphan: every
@@ -159,29 +231,4 @@ enum VedettaSetup {
         return !paths.contains { fm.fileExists(atPath: $0) }
     }
 
-    // MARK: - settings.json I/O
-
-    private static func readClaudeSettings() -> [String: Any]? {
-        guard let data = FileManager.default.contents(atPath: claudeSettingsPath) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    }
-
-    private static func backupClaudeSettings() throws {
-        guard FileManager.default.fileExists(atPath: claudeSettingsPath) else { return }
-        let stamp = ISO8601DateFormatter().string(from: Date())
-            .replacingOccurrences(of: ":", with: "-")
-        let destination = backupsDir + "/settings.json." + stamp
-        try FileManager.default.copyItem(
-            atPath: claudeSettingsPath,
-            toPath: destination
-        )
-    }
-
-    private static func writeClaudeSettings(_ settings: [String: Any]) throws {
-        let data = try JSONSerialization.data(
-            withJSONObject: settings,
-            options: [.prettyPrinted, .sortedKeys]
-        )
-        try data.write(to: URL(fileURLWithPath: claudeSettingsPath), options: .atomic)
-    }
 }

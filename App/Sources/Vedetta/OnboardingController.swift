@@ -48,8 +48,10 @@ final class OnboardingController {
 private struct OnboardingView: View {
     var onFinish: () -> Void
     @State private var step = 0
-    @State private var hooksInstalled = VedettaSetup.claudeHooksInstalled()
-    @State private var installError: String?
+    @State private var claudeInstalled = VedettaSetup.claudeHooksInstalled()
+    @State private var codexInstalled = VedettaSetup.codexHooksInstalled()
+    @State private var claudeError: String?
+    @State private var codexError: String?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -77,33 +79,40 @@ private struct OnboardingView: View {
                     }
                 case 1:
                     VStack(spacing: 12) {
-                        Text("Collega Claude Code")
+                        Text("Collega i coding agent")
                             .font(.system(size: 14, weight: .bold, design: .monospaced))
                             .foregroundStyle(Theme.primaryText)
-                        Text("Aggiunge gli hook a ~/.claude/settings.json\n(backup automatico, i tuoi hook restano intatti).")
+                        Text("Aggiunge gli hook di Claude Code e Codex\n(backup automatico; Codex chiederà conferma in /hooks).")
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(Theme.secondaryText)
                             .multilineTextAlignment(.center)
-                        if hooksInstalled {
-                            Label("Hook installati", systemImage: "checkmark.circle.fill")
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundStyle(Theme.color(for: .waitingForInput))
-                        } else {
-                            Button("Installa hook") {
-                                do {
-                                    try VedettaSetup.ensureRuntimeLayout()
-                                    try VedettaSetup.installClaudeHooks()
-                                    hooksInstalled = true
-                                } catch {
-                                    installError = error.localizedDescription
-                                }
+                        agentHookRow(
+                            name: "Claude Code",
+                            installed: claudeInstalled,
+                            error: claudeError
+                        ) {
+                            do {
+                                try VedettaSetup.ensureRuntimeLayout()
+                                try VedettaSetup.installClaudeHooks()
+                                claudeInstalled = true
+                                claudeError = nil
+                            } catch {
+                                claudeError = error.localizedDescription
                             }
-                            .buttonStyle(.borderedProminent)
                         }
-                        if let installError {
-                            Text(installError)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(.red)
+                        agentHookRow(
+                            name: "Codex",
+                            installed: codexInstalled,
+                            error: codexError
+                        ) {
+                            do {
+                                try VedettaSetup.ensureRuntimeLayout()
+                                try VedettaSetup.installCodexHooks()
+                                codexInstalled = true
+                                codexError = nil
+                            } catch {
+                                codexError = error.localizedDescription
+                            }
                         }
                     }
                 default:
@@ -146,5 +155,37 @@ private struct OnboardingView: View {
         .frame(width: 520, height: 440)
         .background(Color.black)
         .animation(.easeInOut(duration: 0.25), value: step)
+    }
+
+    @ViewBuilder
+    private func agentHookRow(
+        name: String,
+        installed: Bool,
+        error: String?,
+        install: @escaping () -> Void
+    ) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(name)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+                if installed {
+                    Label("Installato", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.color(for: .waitingForInput))
+                } else {
+                    Button("Installa", action: install)
+                        .buttonStyle(.bordered)
+                }
+            }
+            if let error {
+                Text(error)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.red)
+            }
+        }
+        .frame(maxWidth: 360)
     }
 }

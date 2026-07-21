@@ -19,8 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SessionBootstrap.adoptRecentSessions(into: store)
             }
             SessionBootstrap.adoptCodexSessions(into: store)
-            // Codex has no hooks: a file-events watcher on its rollouts keeps
-            // the cards live (state, tool, messages) between periodic passes.
+            // Keep watching Codex rollouts as a fallback for sessions that
+            // started before our hooks were installed. Hook events take
+            // ownership as soon as that session emits one.
             let codexWatcher = CodexWatcher(root: NSHomeDirectory() + "/.codex/sessions") { [weak self] path in
                 Task { @MainActor in
                     guard let self else { return }
@@ -46,19 +47,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.arguments.contains("--install-hooks") {
             do {
                 try VedettaSetup.ensureRuntimeLayout()
-                let changed = try VedettaSetup.installClaudeHooks()
-                NSLog("Vedetta: hooks \(changed ? "installed" : "already present")")
+                let report = VedettaSetup.installAgentHooks()
+                NSLog("Vedetta: hook install Claude=\(String(describing: report.claude)) Codex=\(String(describing: report.codex))")
             } catch {
-                NSLog("Vedetta: hook install failed: \(error)")
+                NSLog("Vedetta: runtime setup failed before hook install: \(error)")
             }
         }
 
         do {
             try VedettaSetup.ensureRuntimeLayout()
-            // Repair hooks that drifted since install (new events shipped in
-            // an update won't otherwise reach the bridge). No-op unless we
-            // were already installed and something is now missing.
+        } catch {
+            NSLog("Vedetta: runtime setup failed: \(error)")
+        }
+        // Heal each source independently: a malformed config for one agent
+        // must not disable the other agent or prevent the socket from starting.
+        do {
             try VedettaSetup.healClaudeHooks()
+        } catch {
+            NSLog("Vedetta: Claude hook heal failed: \(error)")
+        }
+        do {
+            try VedettaSetup.healCodexHooks()
+        } catch {
+            NSLog("Vedetta: Codex hook heal failed: \(error)")
+        }
+        do {
             EventDispatcher.store = store
             let server = EventServer(socketPath: VedettaSetup.socketPath) { data in
                 await EventDispatcher.handle(data)

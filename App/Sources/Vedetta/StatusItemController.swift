@@ -29,18 +29,32 @@ final class StatusItemController {
 
         let installItem = NSMenuItem(
             title: "Install Claude Code Hooks…",
-            action: #selector(installHooks),
+            action: #selector(installClaudeHooks),
             keyEquivalent: ""
         )
         installItem.target = self
         menu.addItem(installItem)
         let removeItem = NSMenuItem(
             title: "Remove Claude Code Hooks",
-            action: #selector(removeHooks),
+            action: #selector(removeClaudeHooks),
             keyEquivalent: ""
         )
         removeItem.target = self
         menu.addItem(removeItem)
+        let installCodexItem = NSMenuItem(
+            title: "Install Codex Hooks…",
+            action: #selector(installCodexHooks),
+            keyEquivalent: ""
+        )
+        installCodexItem.target = self
+        menu.addItem(installCodexItem)
+        let removeCodexItem = NSMenuItem(
+            title: "Remove Codex Hooks",
+            action: #selector(removeCodexHooks),
+            keyEquivalent: ""
+        )
+        removeCodexItem.target = self
+        menu.addItem(removeCodexItem)
         let muteItem = NSMenuItem(
             title: "Mute Sounds",
             action: #selector(toggleMute),
@@ -110,22 +124,41 @@ final class StatusItemController {
         sender.state = SoundEngine.shared.isMuted ? .on : .off
     }
 
-    @objc private func installHooks() {
+    @objc private func installClaudeHooks() {
         report {
             try VedettaSetup.ensureRuntimeLayout()
             let changed = try VedettaSetup.installClaudeHooks()
             return changed
-                ? "Hook installati (backup in ~/.vedetta/backups).\nValgono per le sessioni Claude Code avviate da ora in poi."
-                : "Hook già installati, nessuna modifica."
+                ? "Hook Claude Code installati (backup in ~/.vedetta/backups)."
+                : "Hook Claude Code già installati, nessuna modifica."
         }
     }
 
-    @objc private func removeHooks() {
+    @objc private func removeClaudeHooks() {
         report {
             let changed = try VedettaSetup.removeClaudeHooks()
             return changed
-                ? "Hook rimossi (backup in ~/.vedetta/backups)."
-                : "Nessun hook Vedetta presente."
+                ? "Hook Claude Code rimossi (backup in ~/.vedetta/backups)."
+                : "Nessun hook Claude Code di Vedetta presente."
+        }
+    }
+
+    @objc private func installCodexHooks() {
+        report {
+            try VedettaSetup.ensureRuntimeLayout()
+            let changed = try VedettaSetup.installCodexHooks()
+            return changed
+                ? "Hook Codex installati (backup in ~/.vedetta/backups).\nAl prossimo avvio Codex, verifica e autorizza Vedetta con /hooks."
+                : "Hook Codex già installati, nessuna modifica."
+        }
+    }
+
+    @objc private func removeCodexHooks() {
+        report {
+            let changed = try VedettaSetup.removeCodexHooks()
+            return changed
+                ? "Hook Codex rimossi (backup in ~/.vedetta/backups)."
+                : "Nessun hook Codex di Vedetta presente."
         }
     }
 
