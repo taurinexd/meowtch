@@ -89,7 +89,9 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
 - Strumenti: comando socket `setExpanded` (debug), telemetria opt-in
   `VEDETTA_ANIM_LOG`, pipeline screencapture -v + ffmpeg + misura del bordo
   inferiore della shape per frame.
-- Da confermare a mano (Matteo): feel dell'hover in richiusura e fluidità.
+- [x] Confermato a mano da Matteo: collapse fluido e riapertura immediata
+  sul notch anche mid-settle (dopo `acee803`, che ha chiuso l'ultimo caso:
+  enter perso nella regione sovradimensionata → poll cursore-vs-forma).
 
 ## Residui noti (non bloccanti)
 
