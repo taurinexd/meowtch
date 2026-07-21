@@ -408,11 +408,15 @@ final class NotchPanelController {
         // Wings + flares as drawn by NotchView, with a small margin.
         let barWidth = geometry.notchWidth + 40 + 23 + 8 + 24
         let barHeight = geometry.barHeight + 8
+        // Reach a few points PAST the screen top: NSRect.contains excludes its
+        // max edge, so without this a cursor glued to the very top edge
+        // (mouseLocation.y == maxY) reads as outside the bar and never opens it.
+        let topOverscan: CGFloat = 6
         let rect = NSRect(
             x: screen.frame.midX - barWidth / 2,
             y: screen.frame.maxY - barHeight,
             width: barWidth,
-            height: barHeight
+            height: barHeight + topOverscan
         )
         return rect.contains(NSEvent.mouseLocation)
     }
