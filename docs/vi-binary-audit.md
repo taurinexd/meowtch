@@ -21,7 +21,7 @@
 |---|---|---|---|
 | **Sound** | `SoundManager, SoundSynthesizer, SoundPackPlayer, SoundPackStore, SoundSourceStore, SoundFilter, CustomSoundStore, SoundOutputDeviceObserver` (8) | `SoundEngine` (8-bit base) | sound pack, suoni custom, filtri, observer device output |
 | **Usage/quota** | `UsageConsumptionService, UsageLimitService, UsagePricingSync, UsageRollupStore, UsageIngestionDatabase, UsageSQLiteConnection/Statement, UsageBehaviorRecorder`, `RemoteCodexUsageProbe`, `KimiUsageService` | `UsageModel` + `rate_limits` da statusline | consumption tracking, **DB SQLite**, limiti, pricing sync, quota Codex |
-| **Codex** | `CodexAppServerClient, CodexStdioAppServerClient, CodexRolloutFileEventMonitor, CodexRolloutIngressGate, CodexSessionIndexStore, CodexSessionWatcher, CodexTurnContextResolver, CodexHookTrustService, CodexResetSignalService` (9) | `CodexScan` (scan sessioni base) | app-server client, rollout monitor, turn context resolver, hook trust |
+| **Codex** | `CodexAppServerClient, CodexStdioAppServerClient, CodexRolloutFileEventMonitor, CodexRolloutIngressGate, CodexSessionIndexStore, CodexSessionWatcher, CodexTurnContextResolver, CodexHookTrustService, CodexResetSignalService` (9) | stack ibrido hook + rollout/index incrementali + app-server persistente | parità terminale raggiunta nel Pass 3; reset-signals cloud esclusi |
 | **Onboarding** | `Onboarding{CardWindow, DemoRunner, FullscreenWindow, ReadyWindow, WindowController, AnalyticsSession}` (6) | `OnboardingController` (base) | demo runner, multi-finestra, fullscreen |
 | **Session naming** | `SessionNamingBrain, SessionNamingCoordinator, SessionNamingNativeWriter` | titolo da `ai-title`/`agent-name` nel transcript | "naming brain" (generazione/normalizzazione titolo) |
 | **Settings/shortcut** | `SettingsWindow(Controller)`, `KeyboardShortcutManager`, `SilenceRulesStore` | settings parziali + monitor ENTER | pannello settings completo, shortcut manager (^G jump, nav tastiera), silence rules |
@@ -45,15 +45,15 @@
 - **Analytics/telemetria**: `Analytics, UsageBehaviorRecorder`, `OnboardingAnalyticsSession` — zero telemetria per privacy
 - **Altri agenti**: `Antigravity*, DeepSeek*, OpenCode*, Kimi*, GenericIntegrationStore` — solo Claude + Codex
 - **Quiet Scenes / Cowork**: `QuietSceneMonitor`, `ClaudeCoworkWatcher`, `ClaudeDesktopCodeTitleIndex`
-- Infra minori: `HookIngressRingBuffer`, `HookIngressGate` (buffering ingestione hook — noi abbiamo `EventServer` diretto)
+- `HookIngressRingBuffer` resta escluso; `HookIngressGate` **non era minore**: il test live ha dimostrato che connessioni detached possono consegnare `SessionStart` dopo `Stop`. Vedetta ora allega `capturedAt` nel bridge e rifiuta per-sessione le transizioni hook più vecchie (`6cc459b`).
 
 ## Verdetto Pass 1
 
-Il **core è in parità** (notch, sessioni, approvals, questions, jump, socket). I gap reali in-scope sono nei sottosistemi *ricchi* dove abbiamo la versione base — **Sound**, **Usage** (VI ha un DB SQLite di consumo), **Codex** (VI ha integrazione profonda), **Onboarding** — e in un blocco **privacy/display** non ancora iniziato (nascondere il notch in screen-share, silenzio in Focus mode).
+Il **core è in parità** (notch, sessioni, approvals, questions, jump, socket). Il gap Codex rilevato qui è stato chiuso nel Pass 3. Restano sottosistemi separati dal supporto terminale richiesto: **Sound**, **Onboarding** e il blocco **privacy/display**; il DB storico Usage di VI è intenzionalmente escluso come analytics locale.
 
 ## Prossimi passi possibili (audit analysis, Pass 2)
 
-- Deep-dive per sottosistema col metodo binario (come multi-domanda → `updatedInput.answers`): **Sound**, **Usage**, **Codex**, **Onboarding**.
+- Deep-dive futuri, separati dal piano terminale: **Sound**, **Onboarding**, privacy/display.
 - Verificare comportamenti fini del notch (espansione, glance, peek, collapse) contro VI a binario.
 - Confermare le esclusioni fuori-scope o riconsiderarne qualcuna (es. privacy/display).
 
@@ -67,7 +67,7 @@ Il **core è in parità** (notch, sessioni, approvals, questions, jump, socket).
 - **🚫 Fuori scope confermato:** `UsageIngestionDatabase`/`UsageRollupStore`/`usage_daily_rollups`/`UsageBehaviorDay/MonthFile` = **storico consumo** giornaliero/mensile (analytics), non serve allo strip live e va contro lo zero-telemetria.
 - Nota: VI ha un backend cloud `api.vibeisland.app` (`/api/codex-reset-signals`, `/api/instances`, `/v1/licenses`) — per licensing/instances/reset-signals, fuori scope.
 
-## Pass 3 — Codex HA gli hook (2026-07-21) — svolta per M6
+## Pass 3 — Codex terminal integration deep-dive (2026-07-21)
 
 **Il piano (2026-07-16) diceva "Codex config non toccato / niente hook". È SUPERATO: Codex CLI 0.144.6 espone hook stabili.**
 
@@ -77,11 +77,47 @@ Prove:
 - `~/.codex/hooks.json` **esiste già** e VI ci ha installato i suoi hook Codex: `'vibe-island-bridge' --source codex` su `PermissionRequest` (timeout 7200), `PostToolUse`, `SessionStart`, `Stop`, `UserPromptSubmit`, `SubagentStop`. **Formato e nomi evento IDENTICI a Claude** (`hooks: {NomeEvento: [{hooks:[{type:"command", command, timeout}], matcher?}]}`).
 - Schema app-server conferma il sottosistema: `HookEventName`, `ConfiguredHookHandler`, `HookCompletedNotification`, ecc.
 
-**Implicazione (correzione dell'audit Pass 1):** VI fa l'integrazione Codex **via HOOK**, non (solo) rollout-watching. Quindi Vedetta può ottenere **parità piena con Claude** installando hook Codex verso il proprio bridge (`vedetta-bridge --source codex`, già source-agnostic): eventi real-time + **identità terminale → JUMP** + **`PermissionRequest` → approvazioni remote Codex** (che il piano riteneva impossibili in v1).
+**Implicazione (correzione dell'audit Pass 1):** VI usa un ingresso ibrido, non una scelta fra hook e rollout. Gli hook sono la fonte real-time per lifecycle, identità terminale e approvazioni; i rollout aggiungono tool-start/detail, recupero di eventi mancanti e bootstrap delle sessioni già aperte. `session_index.jsonl` è autorevole per i rename; l'app-server lo è per usage e stato/trust degli hook.
 
-Il workaround rollout-watching costruito il 2026-07-20 (`CodexScan` + `CodexWatcher` + `SessionBootstrap.ingestCodexRollout`) resta come **fallback** per sessioni pre-hook (come `liveEventIds` per Claude). Scoperta emersa da Codex stesso (Matteo gli ha chiesto di analizzare il progetto → la sua risposta ha segnalato gli hook 0.144.6).
+### Matrice source-of-truth implementata
 
-**Stato: l'integrazione hook Codex è delegata all'agent `codex-rescue` (Codex la implementa; Claude aggiorna i doc).**
+| Dato | Fonte primaria | Ruolo delle altre fonti |
+|---|---|---|
+| lifecycle, prompt/finale, approval, terminale | hook | rollout recupera solo completion mancante con guardia su turn/revision |
+| tool-start, tool detail, chiamate parallele | rollout incrementale | `PostToolUse` conferma l'esito senza cancellare altri call ID |
+| titolo conversazione | `session_index.jsonl` incrementale | primo prompt è solo fallback iniziale |
+| usage, hook list/trust | app-server persistente | rate limits nel rollout sono last-resort |
+
+Il coordinatore Codex è l'unico writer di `SessionStore`: impedisce a letture rollout lente di sovrascrivere hook più recenti, deduplica Stop/completion, correla thread/turn/tool ID e rimuove atomicamente sessione + terminal mapping quando un titolo tardivo rivela un worker interno.
+
+### Esito implementazione
+
+- Manifest VI riprodotto esattamente: sei eventi; timeout `7200` solo su `PermissionRequest`, `5` sugli altri; matcher vuoto solo su `PostToolUse`.
+- Decoder tipizzato conserva gli ID Codex originali e normalizza gli alias shell senza loggare i payload.
+- Tailer rollout e session index append-only, con cursore, partial-line buffer e reset dopo truncate/replace.
+- Titoli rinominati aggiornati a caldo; filtri per `Codex Companion Task:` e metadati `task-worker`, inclusa riclassificazione tardiva.
+- App-server persistente multiplexato per request ID, con idle shutdown, backoff e last-known-good usage.
+- Routing approvazioni equivalente a VI: follow-focus, always-notch, always-terminal, native Codex; ogni errore/ambiguità lascia la decisione al terminale.
+- Home Codex default/custom indipendenti; nessuna scrittura di `notify`, hash di trust o `[features] hooks=false`.
+- UI card espone branch, model, permission mode e subagent parent-aware; Jump appare soltanto con host + identità processo/finestra verificabili.
+
+Commit di implementazione: `fa0e818`…`a35e671` (più `025eeab` per la rimozione degli handler Codex obsoleti).
+
+## Pass 4 — Verifica Claude terminal contro VI (2026-07-21)
+
+Binario verificato: `/Applications/Vibe Island.app/Contents/MacOS/vibe-island`, SHA-256 `f2fda8a0ccf112d19fc7545510d52689be634238700c25c74211627b496f3371`. Le fonti usate sono strings/simboli del binario, manifest installato reale e comportamento del bridge; il Desktop Claude resta intenzionalmente fuori scope.
+
+| Area | VI osservato | Vedetta dopo audit | Esito |
+|---|---|---|---|
+| manifest | 12 eventi; matcher `*` su Notification, PermissionRequest, PostToolUse, PreToolUse; timeout `86400` solo PermissionRequest | stesso descrittore source-specific | match |
+| lifecycle | SessionStart, prompt, pre/post tool, compact, stop/failure, subagent, end | reducer copre gli stessi eventi e preserva root cwd | match |
+| approval/question | risposta bloccante via `hookSpecificOutput.decision`, nessuna autorizzazione se il bridge non risponde | stessa shape; failure senza decisione | match |
+| approvazioni native | default notch, toggle `deferClaudeApprovalsToNative` | aggiunto toggle identico nel menu; native restituisce `{}` | corretto in `00070fc` |
+| configurazione | parser tollera commenti `//`, merge/rimozione marker-specific, statusline straniera viva preservata | parser JSON-with-comments aggiunto; merge atomico con backup | corretto in `00070fc` |
+| terminal identity | TERM_PROGRAM/bundle/process ancestry/window, jump al terminale IDE | VS Code riconosciuto anche senza `__CFBundleIdentifier`, purché esista identità processo/finestra | corretto in `00070fc` |
+| worker/desktop | Cowork/Desktop hanno watcher dedicati | esclusi per decisione di scope | intenzionale |
+
+I mismatch terminali emersi dall’audit (commenti nelle settings, toggle native approvals, VS Code senza bundle identifier e ordine delle connessioni hook) hanno test di regressione. Il test live ha riprodotto l’ultimo: un `SessionStart` tardivo ribaltava uno `Stop`; `capturedAt` + stale rejection lo correggono sia nel reducer Claude sia nel coordinatore Codex. La suite finale conta 100 test in 17 suite.
 
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
@@ -102,7 +138,7 @@ Tutto su `main` locale (nessun push). Commit principali:
 | `4fa32f5` | Fix hover: il notch si apre entrando dal bordo superiore dello schermo |
 | `5e6ae47` | **M6 workaround**: card Codex live via rollout watcher (stato/tool/messaggi) — poi fix `deservesFullRow` (card Codex senza terminale) |
 
-**Task aperti:** #33 M6 integrazione Codex completa (in corso, delegata a Codex — pivot a hook).
+**Stato corrente:** implementazione Codex e correzioni Claude completate nel codice; verifica live e packaging finale documentati separatamente in `docs/verification/2026-07-21-codex-terminal-parity.md`.
 
 ## Verifiche note incrociate (per non riscoprire)
 
