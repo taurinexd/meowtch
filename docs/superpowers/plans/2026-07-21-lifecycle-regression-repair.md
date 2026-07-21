@@ -29,10 +29,10 @@
 **Interfaces:**
 - Produces: `SessionRefreshPolicy.shouldApplyStateHeuristic(agent:hasLiveHook:) -> Bool`.
 
-- [ ] Add a failing test proving the heuristic is disabled for live Claude, enabled for adopted Claude, and enabled for Codex regardless of hook presence.
-- [ ] Run `make test`; expect compile failure because `SessionRefreshPolicy` does not exist.
-- [ ] Implement the pure policy and use it to skip the state-mutating first pass for live Claude sessions. Keep the existing second pass for recap/effort only.
-- [ ] Run `make test`; require green.
+- [x] Add a failing test proving the heuristic is disabled for live Claude, enabled for adopted Claude, and enabled for Codex regardless of hook presence.
+- [x] Run `make test`; expect compile failure because `SessionRefreshPolicy` does not exist.
+- [x] Implement the pure policy and use it to skip the state-mutating first pass for live Claude sessions. Keep the existing second pass for recap/effort only.
+- [x] Run `make test`; require green.
 
 ### Task 2: Close aborted and rolled-back Codex turns
 
@@ -44,10 +44,10 @@
 - Consumes: rollout `event_msg.payload.type`.
 - Produces: an empty `activeTurnIDs` set after `turn_aborted` or `thread_rolled_back`.
 
-- [ ] Add failing JSONL tests reproducing the observed aborted-turn leak and rollback cleanup.
-- [ ] Run `make test`; expect the snapshots to remain incorrectly `.running`.
-- [ ] Remove the matching turn on `turn_aborted`; clear active turns and open tools on `thread_rolled_back` because the rollback invalidates in-flight state.
-- [ ] Run `make test`; require green.
+- [x] Add failing JSONL tests reproducing the observed aborted-turn leak and rollback cleanup.
+- [x] Run `make test`; expect the snapshots to remain incorrectly `.running`.
+- [x] Remove the matching turn on `turn_aborted`; clear active turns and open tools on `thread_rolled_back` because the rollback invalidates in-flight state.
+- [x] Run `make test`; require green.
 
 ### Task 3: Adjacent regression scan and final verification
 
@@ -58,8 +58,8 @@
 **Interfaces:**
 - Verifies every writer of `AgentSession.state` and every observed Codex terminal event type.
 
-- [ ] Compare all `session.state` writers against their authority boundary and enumerate real rollout event kinds from current JSONL files.
-- [ ] Inspect the diff from the pre-Codex-parity baseline through `HEAD` for state, active-turn, polling and metadata changes.
-- [ ] Run `make test && make build && make app`, then `codesign --verify --deep --strict dist/Vedetta.app`.
-- [ ] Restart Vedetta once and verify live Claude Stop remains green beyond one refresh interval and an aborted/completed Codex sequence converges to green without creating a synthetic session.
-- [ ] Record exact evidence, run `git diff --check`, confirm a clean worktree, and commit.
+- [x] Compare all `session.state` writers against their authority boundary and enumerate real rollout event kinds from current JSONL files.
+- [x] Inspect the diff from the pre-Codex-parity baseline through `HEAD` for state, active-turn, polling and metadata changes.
+- [x] Run `make test && make build && make app`, then `codesign --verify --deep --strict dist/Vedetta.app`.
+- [x] Restart Vedetta once; verify Claude Start/Stop remains stable beyond one refresh interval and replay the real aborted/completed Codex sequence in the rollout state machine.
+- [x] Record exact evidence, run `git diff --check`, confirm a clean worktree, and commit.
