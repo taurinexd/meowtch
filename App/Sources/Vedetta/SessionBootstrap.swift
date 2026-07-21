@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import VedettaKit
 
@@ -17,7 +18,7 @@ enum SessionBootstrap {
     @MainActor private static var scannedPaths: [String: String] = [:]
     @MainActor private static var codexTailers: [String: CodexRolloutTailer] = [:]
     @MainActor private static var codexIndexes: [String: CodexSessionIndexStore] = [:]
-    @MainActor private static var codexTerminalResolvedPaths: Set<String> = []
+    @MainActor private static var codexWriterPIDs: [String: Int32] = [:]
 
     @MainActor
     static func registerScannedPath(_ path: String, for id: String) {
@@ -115,7 +116,7 @@ enum SessionBootstrap {
                 }
                 if let terminal = openTerminals[path] {
                     coordinator.applyFallbackTerminal(threadID: rawID, terminal: terminal)
-                    codexTerminalResolvedPaths.insert(path)
+                    if let pid = terminal.pid { codexWriterPIDs[path] = Int32(pid) }
                 }
             }
         }
@@ -140,11 +141,19 @@ enum SessionBootstrap {
             rollout: rollout,
             observedRevision: knownThread == rawID ? observedRevision : nil
         )
-        if !codexTerminalResolvedPaths.contains(path),
+        let cachedWriter = codexWriterPIDs[path]
+        if CodexTerminalFallback.shouldRefreshWriter(
+            cachedOwnerPID: cachedWriter,
+            isProcessAlive: processIsAlive
+        ),
            let terminal = CodexTerminalDiscovery.openRollouts()[path] {
             coordinator.applyFallbackTerminal(threadID: rawID, terminal: terminal)
-            codexTerminalResolvedPaths.insert(path)
+            if let pid = terminal.pid { codexWriterPIDs[path] = Int32(pid) }
         }
+    }
+
+    private static func processIsAlive(_ pid: Int32) -> Bool {
+        kill(pid, 0) == 0 || errno == EPERM
     }
 
     @MainActor
