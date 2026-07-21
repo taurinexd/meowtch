@@ -13,6 +13,7 @@ public final class CodexIngressCoordinator {
         var rolloutSawActiveTurn = false
         var hasIndexTitle = false
         var suppressed = false
+        var lastHookAt: Date?
     }
 
     private let store: SessionStore
@@ -30,6 +31,8 @@ public final class CodexIngressCoordinator {
         let id = hook.sessionID
         var ledger = ledgers[id] ?? Ledger()
         guard !ledger.suppressed else { return }
+        let eventDate = hook.capturedAt ?? date
+        if let lastHookAt = ledger.lastHookAt, eventDate < lastHookAt { return }
         if hook.kind == .userPromptSubmit,
            !CodexAdmissionRules.shouldAdmit(title: hook.prompt) {
             suppress(id: id, ledger: &ledger)
@@ -44,8 +47,8 @@ public final class CodexIngressCoordinator {
                 directory: hook.cwd ?? "",
                 codexThreadID: hook.threadID,
                 state: .running,
-                startedAt: date,
-                lastActivityAt: date
+                startedAt: eventDate,
+                lastActivityAt: eventDate
             )
         session.agent = .codex
         session.codexThreadID = hook.threadID
@@ -62,7 +65,7 @@ public final class CodexIngressCoordinator {
         }
         session.subagentRole = hook.subagentRole ?? session.subagentRole
         session.subagentNickname = hook.subagentNickname ?? session.subagentNickname
-        session.lastActivityAt = date
+        session.lastActivityAt = eventDate
         store.setTerminal(hook.terminal, for: id)
 
         switch hook.kind {
@@ -95,6 +98,7 @@ public final class CodexIngressCoordinator {
         }
 
         ledger.hookSeen = true
+        ledger.lastHookAt = eventDate
         ledger.revision += 1
         ledgers[id] = ledger
         store.upsert(session)

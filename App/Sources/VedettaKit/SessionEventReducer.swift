@@ -54,6 +54,14 @@ public enum SessionEventReducer {
               let name = event["hook_event_name"] as? String,
               let sessionId = event["session_id"] as? String else { return }
 
+        let eventDate = (envelope["capturedAt"] as? NSNumber)
+            .map { Date(timeIntervalSince1970: $0.doubleValue) }
+            ?? date
+        if let previous = store.sessions.first(where: { $0.id == sessionId }),
+           eventDate < previous.lastActivityAt {
+            return
+        }
+
         let source = envelope["source"] as? String ?? "claude"
         let cwd = event["cwd"] as? String
 
@@ -85,8 +93,8 @@ public enum SessionEventReducer {
                 title: "",
                 directory: cwd ?? "",
                 state: .running,
-                startedAt: date,
-                lastActivityAt: date
+                startedAt: eventDate,
+                lastActivityAt: eventDate
             )
         // The card shows the project root (VS Code's open folder), like the
         // original — not wherever the agent cd'd to. A cwd that is a
@@ -103,7 +111,7 @@ public enum SessionEventReducer {
             session.currentToolUseID = event["tool_use_id"] as? String
             session.permissionMode = event["permission_mode"] as? String
         }
-        session.lastActivityAt = date
+        session.lastActivityAt = eventDate
 
         switch name {
         case "SessionStart":
@@ -120,7 +128,7 @@ public enum SessionEventReducer {
 
         case "PreCompact":
             session.state = .compacting
-            session.compactingStartedAt = date
+            session.compactingStartedAt = eventDate
             session.compactTrigger = event["trigger"] as? String
             session.currentTool = nil
             session.currentToolDetail = nil

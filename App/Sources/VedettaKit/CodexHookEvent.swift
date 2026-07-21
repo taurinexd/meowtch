@@ -89,6 +89,7 @@ public struct CodexHookEvent: Equatable, Sendable {
     public let sandboxPolicy: JSONValue?
     public let autoReviewed: Bool
     public let terminal: TerminalInfo
+    public let capturedAt: Date?
 
     public var sessionID: String { "codex-\(threadID)" }
 
@@ -142,6 +143,8 @@ public struct CodexHookEvent: Equatable, Sendable {
         sandboxPolicy = JSONValue(any: event["sandbox_policy"])
         autoReviewed = (event["auto_reviewed"] as? Bool) ?? false
         terminal = Self.decodeTerminal(envelope["terminal"] as? [String: Any])
+        capturedAt = (envelope["capturedAt"] as? NSNumber)
+            .map { Date(timeIntervalSince1970: $0.doubleValue) }
     }
 
     /// Transitional dictionary representation for existing presentation code.
@@ -173,12 +176,14 @@ public struct CodexHookEvent: Equatable, Sendable {
         if let sandboxPolicy { event["sandbox_policy"] = sandboxPolicy.anyValue }
         event["auto_reviewed"] = autoReviewed
 
-        return [
+        var envelope: [String: Any] = [
             "v": 1,
             "source": "codex",
             "terminal": terminal.dictionaryValue,
             "event": event,
         ]
+        if let capturedAt { envelope["capturedAt"] = capturedAt.timeIntervalSince1970 }
+        return envelope
     }
 
     private static func displayToolName(_ name: String?) -> String? {
