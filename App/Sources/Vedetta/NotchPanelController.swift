@@ -396,21 +396,19 @@ final class NotchPanelController {
             // event: while the expanded content is mounted (collapse
             // settling) the hover region is larger than the visible shape,
             // and an enter from the area the panel already vacated must
-            // never reopen it. The shape frame is live per animation tick,
+            // never reopen it. The shape frame is interpolated per query,
             // so mid-collapse the still-covered area legitimately reopens.
-            guard cursorOverShape() else { return }
-            // Prime first (slight swell), then open — like the original.
-            uiModel.isPrimed = true
-            let work = DispatchWorkItem { [weak self] in
-                guard let self, self.isHovering, self.cursorOverShape() else {
-                    self?.uiModel.isPrimed = false
-                    return
-                }
-                self.setExpanded(true)
+            if cursorOverShape() {
+                primeAndExpand()
+            } else {
+                // Entered the oversized settling region on the way to the
+                // bar: SwiftUI fires no further enter events while inside,
+                // so follow the cursor against the live shape until it
+                // lands on it (open) or leaves the region (stop).
+                startHoverPoll()
             }
-            primeWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + primeDelay, execute: work)
         } else {
+            stopHoverPoll()
             primeWorkItem?.cancel()
             uiModel.isPrimed = false
             // Small delay so the panel doesn't flicker when the pointer
@@ -421,6 +419,53 @@ final class NotchPanelController {
             collapseWorkItem = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
         }
+    }
+
+    /// Slight swell first, then open — like the original. Re-checked at
+    /// fire time: the shape may have shrunk away from the cursor during the
+    /// prime delay, in which case the poll takes over instead of opening.
+    private func primeAndExpand() {
+        uiModel.isPrimed = true
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.isHovering, self.cursorOverShape() else {
+                self.uiModel.isPrimed = false
+                if self.isHovering { self.startHoverPoll() }
+                return
+            }
+            self.setExpanded(true)
+        }
+        primeWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + primeDelay, execute: work)
+    }
+
+    /// Lightweight cursor-vs-shape tracker for the window in which hover
+    /// events can't help: inside the tracking region but not yet on the
+    /// shape. Self-terminates on exit, expansion, or when it opens.
+    private var hoverPollTimer: Timer?
+
+    private func startHoverPoll() {
+        guard hoverPollTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.03, repeats: true) { _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard self.isHovering, !self.uiModel.isExpanded else {
+                    self.stopHoverPoll()
+                    return
+                }
+                if self.cursorOverShape() {
+                    self.stopHoverPoll()
+                    self.primeAndExpand()
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hoverPollTimer = timer
+    }
+
+    private func stopHoverPoll() {
+        hoverPollTimer?.invalidate()
+        hoverPollTimer = nil
     }
 
     /// An interactive interrupt takes over the notch: bring it forward and
