@@ -73,6 +73,24 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
       joshua-request (claude vivo su ttys009) sopravvive a restart + sweep.
 - [x] M2: unit test + dry-run byte-identical sui config reali (copie).
 
+## Round 2 — hover/animazione notch (stessa giornata) — `7cf62f0`
+
+- [x] **Cooldown hover rimosso** — la riapertura era gated su un rect statico
+  + cooldown 0.7s. Ora `NotchAnimation` definisce la curva UNA volta e la
+  condivide: la view ci anima, il controller interpola il rect in volo della
+  shape (i layout callback riportano solo gli endpoint) e l'hover-to-expand
+  testa il cursore contro la shape REALE che si restringe. L'area già
+  liberata non riapre mai; la shape ancora presente sì.
+- [x] **Scatto a fine collapse** — la spring criticamente smorzata strisciava
+  ~1.3s (misurato su video: -1px/frame per ~700ms) e SwiftUI la troncava con
+  un clamp di -4px. Ora bezier ease-out fissa 0.6s (profilo VI misurato):
+  ri-misurato frame-by-frame, delta monotoni -3,-2,-1,-1,0, zero salto
+  finale; l'unmount del contenuto (0.65s) cade DOPO la fine dell'animazione.
+- Strumenti: comando socket `setExpanded` (debug), telemetria opt-in
+  `VEDETTA_ANIM_LOG`, pipeline screencapture -v + ffmpeg + misura del bordo
+  inferiore della shape per frame.
+- Da confermare a mano (Matteo): feel dell'hover in richiusura e fluidità.
+
 ## Residui noti (non bloccanti)
 
 - Il self-cleanup JXA del launcher (`VedettaSetup`) usa ancora
