@@ -8,6 +8,8 @@
 
 **Tech Stack:** Swift 6, Swift Package Manager, AppKit/SwiftUI, Foundation actors and process I/O, FSEvents, XCTest, Unix domain sockets, JSONL.
 
+**Completion status (2026-07-21):** Tasks 1–11 and 13 are implemented in commits `fa0e818`…`00070fc`; live verification exposed and closed the VI `HookIngressGate` parity gap in `6cc459b`. Tasks 12/14 evidence is recorded in `docs/verification/2026-07-21-codex-terminal-parity.md`. The checklist below remains the original execution specification; the verification report is the authoritative record of which cases were live, captured-fixture, or automated.
+
 ## Global constraints
 
 - Treat the audited Vibe Island binary and its installed runtime/configuration as the highest-priority source of truth.
@@ -293,14 +295,14 @@
 
 ## Acceptance checklist
 
-- [ ] Codex installs exactly the six VI hooks with exact matchers/timeouts.
-- [ ] Hooks and rollout remain complementary live sources with one coordinating writer.
-- [ ] Rollout/index reads are incremental, identity-safe, and partial-line safe.
-- [ ] Active conversation renames update cards live.
-- [ ] Internal Codex workers never persist as visible or terminal-bound cards.
-- [ ] Approval failures always fall back to native Codex and never authorize.
-- [ ] Usage/trust/policy share one persistent app-server client.
-- [ ] Default/custom homes are handled without touching `notify` or fabricating trust.
-- [ ] Claude and Codex install/status paths are independent.
-- [ ] Claude terminal behaviour is re-audited and corrected against VI after Codex.
-- [ ] Unit, integration, package, Codex live, and Claude live verification evidence is recorded.
+- [x] Codex installs exactly the six VI hooks with exact matchers/timeouts.
+- [x] Hooks and rollout remain complementary live sources with one coordinating writer.
+- [x] Rollout/index reads are incremental, identity-safe, and partial-line safe.
+- [x] Active conversation renames update cards live.
+- [x] Internal Codex workers never persist as visible or terminal-bound cards.
+- [x] Approval failures always fall back to native Codex and never authorize.
+- [x] Usage/trust/policy share one persistent app-server client.
+- [x] Default/custom homes are handled without touching `notify` or fabricating trust.
+- [x] Claude and Codex install/status paths are independent.
+- [x] Claude terminal behaviour is re-audited and corrected against VI after Codex.
+- [x] Unit, integration, package, Codex live, and Claude live verification evidence is recorded.
