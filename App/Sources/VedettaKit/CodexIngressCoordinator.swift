@@ -191,7 +191,11 @@ public final class CodexIngressCoordinator {
         }
         if let activity = rollout.lastActivityAt { session.lastActivityAt = activity }
 
-        if !rollout.activeTurnIDs.isEmpty {
+        // The file can lag the hooks: right after a Stop hook the rollout may
+        // still miss its task_complete. A turn the hooks already finalized
+        // must not count as live activity, or the card flips back to blue.
+        let liveTurns = rollout.activeTurnIDs.subtracting(ledger.hookFinalTurns)
+        if !liveTurns.isEmpty {
             ledger.rolloutSawActiveTurn = true
             if session.state != .needsApproval { session.state = .running }
         } else if !ledger.hookSeen || ledger.rolloutSawActiveTurn || session.state == .waitingForInput {

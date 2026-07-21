@@ -120,6 +120,24 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.first?.state == .needsApproval)
     }
 
+    @Test func laggingRolloutCannotRevertAHookFinalizedTurn() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        coordinator.apply(hook: try hook("UserPromptSubmit", extra: ["prompt": "go"]))
+        coordinator.apply(hook: try hook("Stop", extra: ["last_assistant_message": "done"]))
+        #expect(store.sessions.first?.state == .waitingForInput)
+
+        // The rollout file has not flushed task_complete yet: its stale
+        // active turn must not flip the finished card back to running.
+        let tool = CodexRolloutTool(callID: "call-9", name: "Bash", detail: "sleep 1")
+        #expect(coordinator.apply(rollout: rollout(
+            activeTurns: ["turn-1"],
+            tools: ["call-9": tool]
+        )))
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.currentTool == nil)
+    }
+
     @Test func rejectsRolloutReadStartedBeforeNewerHookRevision() throws {
         let store = SessionStore()
         let coordinator = CodexIngressCoordinator(store: store)
