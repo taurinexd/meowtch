@@ -155,7 +155,10 @@ struct NotchView: View {
     private static let fullRowGrace: TimeInterval = 10 * 60
 
     private func deservesFullRow(_ session: AgentSession) -> Bool {
-        guard !session.isMinimized, store.terminal(for: session.id) != nil else { return false }
+        guard !session.isMinimized else { return false }
+        // Claude cards need a live terminal (they're jumpable); Codex has no
+        // terminal identity yet, so an active Codex session earns a card too.
+        if session.agent == .claude, store.terminal(for: session.id) == nil { return false }
         if session.state == .running || session.state == .needsApproval
             || session.state == .compacting { return true }
         return session.lastActivityAt.timeIntervalSinceNow > -Self.fullRowGrace
