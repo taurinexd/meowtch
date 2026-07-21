@@ -144,6 +144,55 @@ La prova sul processo reale conferma la relazione usata da VI: il rollout `019f8
 
 Il secondo scan ha corretto anche un errore nella prima patch: `codexWriterPid` era stato trattato come “rollout già risolto”, mentre nel modello VI è un’identità mutabile. Il caso resume ha ora test dedicati sia per il refresh fallback→fallback sia per la precedenza hook→fallback. Con l’evidenza oggi disponibile, lifecycle, prompt/finale, tool paralleli, approvazioni, rename, metadata, subagent, terminal identity e click/jump hanno una fonte e una fallback esplicite. Commit: `d6c5261`, `bf4479c`, `7941eba`.
 
+## Pass 6 — Review post-integrazione + riparazione regressioni (2026-07-21)
+
+Review indipendente dei 36 commit dell'integrazione Codex contro il binario VI,
+innescata da 4 note live di Matteo (stati blu/verde in ritardo, card
+"joshua-request" sparita, terminale ucciso che non rimuove la card, card blu che
+si scambiano di posto). Dettaglio completo, con E2E, in
+`docs/superpowers/plans/2026-07-21-post-review-fixes.md`. Cause radice trovate:
+
+1. **Handoff che ribalta lo Stop** — la continuation di un'approvazione risolta
+   altrove faceva `transition(.running)` incondizionato DOPO che Stop aveva
+   applicato il verde; lo stale-guard (`6cc459b`) congelava l'errore, e
+   `ec54a88` aveva rimosso la rete di sicurezza euristica che prima lo
+   mascherava. Fix `0ef6e3f` (`clearApprovalState`, reset solo da
+   `.needsApproval`).
+2. **`needsApproval` Codex senza via di ritorno** — Codex non ha PreToolUse: se
+   la decisione avveniva nel terminale (routing follow-focus), nessun evento
+   puliva l'orange, e l'interrupt orfano sequestrava `focusedSession`
+   nascondendo tutte le altre card (prima causa della "sparizione" di
+   joshua-request). Fix `747c85d` (PostToolUse pulisce; takeover solo per
+   interrupt azionabili nel notch).
+3. **Mappa VI congelata che blocca l'adozione** — `VIMapImport.adopt == true`
+   saltava per sempre `adoptRecentSessions`: con VI spenta, le sessioni nuove
+   sparivano a ogni restart finché un hook non le ricreava (seconda causa di
+   joshua-request). Fix `d99f584` (la sweep transcript integra sempre la mappa).
+4. **File rollout indietro rispetto agli hook** — dopo Stop hook, il file senza
+   `task_complete` riportava la card a blu. Fix `44be85c` (`hookFinalTurns`
+   sottratti dagli `activeTurnIDs`).
+5. **Ordinamento per attività** — ogni hook bumpava `lastActivityAt` e le card
+   running si scavalcavano. Fix `12a34a1` (`stateChangedAt` stampato al solo
+   cambio di stato, chiave di ordinamento same-state).
+6. **Nessuna liveness** — VI segue la vita del terminale (mappa con `tty`,
+   `lastKnownPid`, `codexWriterPid`); Vedetta non rimuoveva mai. Fix `622d4cd`
+   + revisione `d8662f7`: gli hook girano con pipe (niente tty) e
+   `TerminalInfo.pid` è il bridge morto per design → l'ancora giusta è il
+   segmento chain[2] (agente) / chain[3] (shell); il fallback writer Codex ha
+   ora un flag esplicito (`isWriterFallback`). Rimozione solo su evidenza
+   positiva; agente uscito con tab aperta resta, tab uccisa rimuove.
+7. **Minori**: identità terminale conservata anche da eventi stale (`c250c42`);
+   timestamp Codex con millisecondi (`8575897`); turni anonymous che
+   rigettavano l'apply (`9a67ae3`); riscritture config che preservano commenti
+   `//`, ordine e literal via `OrderedJSONDocument` (`75f1abe`, round-trip
+   byte-identical sul `settings.json` reale).
+
+Verifica: 141 test/21 suite; E2E su app viva — sessione Claude reale sotto pty
+(card → stati → rimozione alla sweep dopo la chiusura della pty), `codex exec`
+reale (timeline `running → waitingForInput` senza flip), envelope bridge
+sintetici via socket per i percorsi handoff/terminal-routing, dump-order
+stabile con più card running.
+
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
 Tutto su `main` locale (nessun push). Commit principali:
