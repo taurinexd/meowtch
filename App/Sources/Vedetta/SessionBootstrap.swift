@@ -161,6 +161,10 @@ enum SessionBootstrap {
             guard var session = store.sessions.first(where: { $0.id == id }),
                   let attrs = try? fm.attributesOfItem(atPath: path),
                   let modified = attrs[.modificationDate] as? Date else { continue }
+            guard SessionRefreshPolicy.shouldApplyStateHeuristic(
+                agent: session.agent,
+                hasLiveHook: liveEventIds.contains(id)
+            ) else { continue }
 
             let isActive = modified.timeIntervalSinceNow > -activeWindow
             let newState: SessionState = isActive ? .running : .waitingForInput
