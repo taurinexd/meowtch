@@ -5,6 +5,20 @@ public struct CodexRolloutTool: Equatable, Sendable {
     public let name: String
     public let detail: String?
     fileprivate let sequence: Int
+
+    public init(callID: String, name: String, detail: String?) {
+        self.callID = callID
+        self.name = name
+        self.detail = detail
+        sequence = 0
+    }
+
+    fileprivate init(callID: String, name: String, detail: String?, sequence: Int) {
+        self.callID = callID
+        self.name = name
+        self.detail = detail
+        self.sequence = sequence
+    }
 }
 
 public struct CodexRolloutSnapshot: Equatable, Sendable {
