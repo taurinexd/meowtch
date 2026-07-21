@@ -83,6 +83,7 @@ public struct CodexHookEvent: Equatable, Sendable {
     public let prompt: String?
     public let finalResponse: String?
     public let parentThreadID: String?
+    public let subagentKind: String?
     public let subagentRole: String?
     public let subagentNickname: String?
     public let configuredReviewer: String?
@@ -137,6 +138,8 @@ public struct CodexHookEvent: Equatable, Sendable {
         finalResponse = event["last_assistant_message"] as? String
         parentThreadID = (event["parent_session_id"] as? String)
             ?? (event["parent_thread_id"] as? String)
+            ?? (event["subagent_parent_thread_id"] as? String)
+        subagentKind = event["subagent_kind"] as? String
         subagentRole = event["subagent_role"] as? String
         subagentNickname = event["subagent_nickname"] as? String
         configuredReviewer = event["approvals_reviewer"] as? String
@@ -170,6 +173,7 @@ public struct CodexHookEvent: Equatable, Sendable {
         if let prompt { event["prompt"] = prompt }
         if let finalResponse { event["last_assistant_message"] = finalResponse }
         if let parentThreadID { event["parent_session_id"] = parentThreadID }
+        if let subagentKind { event["subagent_kind"] = subagentKind }
         if let subagentRole { event["subagent_role"] = subagentRole }
         if let subagentNickname { event["subagent_nickname"] = subagentNickname }
         if let configuredReviewer { event["approvals_reviewer"] = configuredReviewer }

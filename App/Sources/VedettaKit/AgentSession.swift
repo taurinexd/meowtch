@@ -44,6 +44,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var currentToolUseID: String?
     public var permissionMode: String?
     public var parentSessionID: String?
+    public var subagentKind: String?
     public var subagentRole: String?
     public var subagentNickname: String?
     public var currentTool: String?
@@ -82,6 +83,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         currentToolUseID: String? = nil,
         permissionMode: String? = nil,
         parentSessionID: String? = nil,
+        subagentKind: String? = nil,
         subagentRole: String? = nil,
         subagentNickname: String? = nil,
         currentTool: String? = nil,
@@ -108,6 +110,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.currentToolUseID = currentToolUseID
         self.permissionMode = permissionMode
         self.parentSessionID = parentSessionID
+        self.subagentKind = subagentKind
         self.subagentRole = subagentRole
         self.subagentNickname = subagentNickname
         self.currentTool = currentTool

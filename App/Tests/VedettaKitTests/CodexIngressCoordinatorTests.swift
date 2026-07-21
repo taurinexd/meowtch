@@ -228,12 +228,30 @@ struct CodexIngressCoordinatorTests {
         let coordinator = CodexIngressCoordinator(store: store)
         coordinator.apply(hook: try hook("SubagentStop", extra: [
             "parent_session_id": "parent-thread",
+            "subagent_kind": "reviewer",
             "subagent_role": "reviewer",
             "subagent_nickname": "security",
         ]))
 
         #expect(store.sessions.first?.parentSessionID == "codex-parent-thread")
+        #expect(store.sessions.first?.subagentKind == "reviewer")
         #expect(store.sessions.first?.subagentRole == "reviewer")
+        #expect(store.sessions.first?.subagentNickname == "security")
+    }
+
+    @Test func rolloutBootstrapRetainsSubagentIdentityBeforeHooksArrive() {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        var snapshot = rollout(user: "review the patch")
+        snapshot.subagentKind = "reviewer"
+        snapshot.subagentParentThreadID = "parent-thread"
+        snapshot.subagentRole = "review"
+        snapshot.subagentNickname = "security"
+
+        #expect(coordinator.apply(rollout: snapshot))
+        #expect(store.sessions.first?.subagentKind == "reviewer")
+        #expect(store.sessions.first?.parentSessionID == "codex-parent-thread")
+        #expect(store.sessions.first?.subagentRole == "review")
         #expect(store.sessions.first?.subagentNickname == "security")
     }
 }

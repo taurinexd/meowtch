@@ -155,11 +155,16 @@ struct CodexRolloutTailerTests {
     @Test func parsesTerminalOriginForAdmissionAndJumpParity() {
         var tailer = CodexRolloutTailer()
         let snapshot = tailer.ingest(Data(("""
-        {"type":"session_meta","payload":{"session_id":"thread-1","cwd":"/repo","originator":"codex-tui","source":"cli","thread_source":"user"}}
+        {"type":"session_meta","payload":{"session_id":"thread-1","cwd":"/repo","originator":"codex-tui","source":"cli","thread_source":"user","origin":"terminal","subagent_kind":"reviewer","subagent_parent_thread_id":"parent-1","subagent_nickname":"security","subagent_role":"review"}}
         """ + "\n").utf8))
 
         #expect(snapshot.originator == "codex-tui")
         #expect(snapshot.source == "cli")
         #expect(snapshot.threadSource == "user")
+        #expect(snapshot.origin == "terminal")
+        #expect(snapshot.subagentKind == "reviewer")
+        #expect(snapshot.subagentParentThreadID == "parent-1")
+        #expect(snapshot.subagentNickname == "security")
+        #expect(snapshot.subagentRole == "review")
     }
 }
