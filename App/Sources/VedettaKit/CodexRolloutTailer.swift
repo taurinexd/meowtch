@@ -29,6 +29,11 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
     public var originator: String?
     public var source: String?
     public var threadSource: String?
+    public var origin: String?
+    public var subagentKind: String?
+    public var subagentParentThreadID: String?
+    public var subagentNickname: String?
+    public var subagentRole: String?
     public var firstUserMessage: String?
     public var lastUserMessage: String?
     public var lastAgentMessage: String?
@@ -50,6 +55,8 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
         if let originator { metadata["originator"] = originator }
         if let source { metadata["source"] = source }
         if let threadSource { metadata["thread_source"] = threadSource }
+        if let origin { metadata["origin"] = origin }
+        if let subagentKind { metadata["subagent_kind"] = subagentKind }
         return metadata
     }
 }
@@ -126,6 +133,12 @@ public struct CodexRolloutTailer: Sendable {
             snapshot.originator = payload["originator"] as? String
             snapshot.source = payload["source"] as? String
             snapshot.threadSource = payload["thread_source"] as? String
+            snapshot.origin = payload["origin"] as? String
+            snapshot.subagentKind = payload["subagent_kind"] as? String
+            snapshot.subagentParentThreadID = (payload["subagent_parent_thread_id"] as? String)
+                ?? (payload["parent_thread_id"] as? String)
+            snapshot.subagentNickname = payload["subagent_nickname"] as? String
+            snapshot.subagentRole = payload["subagent_role"] as? String
             return
         }
 

@@ -83,6 +83,7 @@ public final class CodexIngressCoordinator {
         if let parent = hook.parentThreadID {
             session.parentSessionID = sessionID(parent)
         }
+        session.subagentKind = hook.subagentKind ?? session.subagentKind
         session.subagentRole = hook.subagentRole ?? session.subagentRole
         session.subagentNickname = hook.subagentNickname ?? session.subagentNickname
         session.lastActivityAt = eventDate
@@ -162,6 +163,12 @@ public final class CodexIngressCoordinator {
 
         session.codexThreadID = threadID
         if let cwd = rollout.cwd { session.directory = rootDirectory(session.directory, cwd) }
+        if let parent = rollout.subagentParentThreadID {
+            session.parentSessionID = sessionID(parent)
+        }
+        session.subagentKind = rollout.subagentKind ?? session.subagentKind
+        session.subagentRole = rollout.subagentRole ?? session.subagentRole
+        session.subagentNickname = rollout.subagentNickname ?? session.subagentNickname
         if session.title.isEmpty, !ledger.hasIndexTitle,
            let first = rollout.firstUserMessage {
             session.title = first
