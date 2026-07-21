@@ -111,9 +111,11 @@ struct CodexHookEventTests {
     }
 
     @Test func normalizedEnvelopeRetainsOriginalCodexIdentifiers() throws {
-        let decoded = try CodexHookEvent(envelope: envelope("Stop", event: [
+        var value = envelope("Stop", event: [
             "last_assistant_message": "Done",
-        ]))
+        ])
+        value["capturedAt"] = 123.5
+        let decoded = try CodexHookEvent(envelope: value)
         let normalized = decoded.normalizedEnvelope
         let event = normalized["event"] as? [String: Any]
         #expect(normalized["source"] as? String == "codex")
@@ -121,6 +123,7 @@ struct CodexHookEventTests {
         #expect(event?["codex_thread_id"] as? String == "019f-thread")
         #expect(event?["codex_turn_id"] as? String == "turn-1")
         #expect(event?["last_assistant_message"] as? String == "Done")
+        #expect(normalized["capturedAt"] as? Double == 123.5)
     }
 
     @Test func stopUsesObservedBenignContinueResponse() throws {

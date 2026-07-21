@@ -95,6 +95,10 @@ let payload = (try? JSONSerialization.jsonObject(with: inputData)) as? [String: 
 let envelope: [String: Any] = [
     "v": 1,
     "source": argument(after: "--source") ?? "claude",
+    // Hook commands from one CLI lifecycle may reach the socket out of
+    // order (especially while the app is starting). Preserve invocation
+    // time so the reducer can reject a late, older transition.
+    "capturedAt": Date().timeIntervalSince1970,
     "terminal": terminalIdentity(),
     "event": payload,
 ]

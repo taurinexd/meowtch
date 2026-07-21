@@ -90,6 +90,23 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.first?.currentTool == nil)
     }
 
+    @Test func delayedOlderHookCannotUndoNewerLifecycleState() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        coordinator.apply(
+            hook: try hook("Stop"),
+            at: Date(timeIntervalSince1970: 101)
+        )
+
+        coordinator.apply(
+            hook: try hook("SessionStart"),
+            at: Date(timeIntervalSince1970: 100)
+        )
+
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.lastActivityAt == Date(timeIntervalSince1970: 101))
+    }
+
     @Test func rolloutCompletionRecoversMissingStopButRejectsAnotherActiveTurn() throws {
         let store = SessionStore()
         let coordinator = CodexIngressCoordinator(store: store)

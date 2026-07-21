@@ -10,6 +10,7 @@ struct SessionEventReducerTests {
         sessionId: String = "s1",
         cwd: String = "/Users/x/Code/progetto",
         source: String = "claude",
+        capturedAt: Date? = nil,
         extra: [String: Any] = [:]
     ) -> [String: Any] {
         var payload: [String: Any] = [
@@ -18,12 +19,14 @@ struct SessionEventReducerTests {
             "cwd": cwd,
         ]
         payload.merge(extra) { _, new in new }
-        return [
+        var envelope: [String: Any] = [
             "v": 1,
             "source": source,
             "terminal": ["termProgram": "vscode", "tty": "/dev/ttys009"],
             "event": payload,
         ]
+        if let capturedAt { envelope["capturedAt"] = capturedAt.timeIntervalSince1970 }
+        return envelope
     }
 
     @Test func sessionStartCreatesRunningSession() {
@@ -128,6 +131,19 @@ struct SessionEventReducerTests {
         SessionEventReducer.apply(envelope("Stop"), to: store)
         #expect(store.sessions.first?.state == .waitingForInput)
         #expect(store.sessions.first?.currentTool == nil)
+    }
+
+    @Test func delayedOlderHookCannotUndoNewerLifecycleState() {
+        let store = SessionStore()
+        let start = Date(timeIntervalSince1970: 100)
+        let stop = Date(timeIntervalSince1970: 101)
+        SessionEventReducer.apply(envelope("SessionStart", capturedAt: start), to: store)
+        SessionEventReducer.apply(envelope("Stop", capturedAt: stop), to: store)
+
+        SessionEventReducer.apply(envelope("SessionStart", capturedAt: start), to: store)
+
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.lastActivityAt == stop)
     }
 
     @Test func sessionEndCompletes() {
