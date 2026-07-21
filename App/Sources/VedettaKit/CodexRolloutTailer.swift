@@ -171,6 +171,20 @@ public struct CodexRolloutTailer: Sendable {
             }
             snapshot.lastActivityAt = Self.date(payload["completed_at"])
                 ?? snapshot.lastActivityAt
+        case "turn_aborted":
+            if let turnID = payload["turn_id"] as? String {
+                snapshot.activeTurnIDs.remove(turnID)
+            } else if snapshot.activeTurnIDs.count == 1 {
+                snapshot.activeTurnIDs.removeAll()
+            }
+            if snapshot.activeTurnIDs.isEmpty {
+                snapshot.openTools.removeAll()
+            }
+            snapshot.lastActivityAt = Self.date(payload["completed_at"])
+                ?? snapshot.lastActivityAt
+        case "thread_rolled_back":
+            snapshot.activeTurnIDs.removeAll()
+            snapshot.openTools.removeAll()
         case "user_message":
             if let message = payload["message"] as? String, !message.isEmpty {
                 if snapshot.firstUserMessage == nil { snapshot.firstUserMessage = message }

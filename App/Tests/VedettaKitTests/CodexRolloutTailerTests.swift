@@ -113,4 +113,30 @@ struct CodexRolloutTailerTests {
 
         #expect(snapshot.reasoningEffort == "medium")
     }
+
+    @Test func abortedTurnCannotKeepSessionRunning() {
+        var tailer = CodexRolloutTailer()
+        let snapshot = tailer.ingest(Data(("""
+        {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-aborted"}}
+        {"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"pwd\"}"}}
+        {"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-aborted"}}
+        """ + "\n").utf8))
+
+        #expect(snapshot.state == .waiting)
+        #expect(snapshot.activeTurnIDs.isEmpty)
+        #expect(snapshot.openTools.isEmpty)
+    }
+
+    @Test func threadRollbackClearsAllInflightState() {
+        var tailer = CodexRolloutTailer()
+        let snapshot = tailer.ingest(Data(("""
+        {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}
+        {"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"pwd\"}"}}
+        {"type":"event_msg","payload":{"type":"thread_rolled_back"}}
+        """ + "\n").utf8))
+
+        #expect(snapshot.state == .waiting)
+        #expect(snapshot.activeTurnIDs.isEmpty)
+        #expect(snapshot.openTools.isEmpty)
+    }
 }
