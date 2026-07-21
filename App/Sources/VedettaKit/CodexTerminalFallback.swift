@@ -63,7 +63,8 @@ public enum CodexTerminalFallback {
             termProgram: "vscode",
             bundleIdentifier: hostBundle,
             pid: ownerPID,
-            pidChain: chain
+            pidChain: chain,
+            isWriterFallback: true
         )
     }
 }
