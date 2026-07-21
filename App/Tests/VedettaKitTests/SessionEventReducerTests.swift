@@ -29,6 +29,29 @@ struct SessionEventReducerTests {
         return envelope
     }
 
+    @Test func staleEventStillRecordsTerminalIdentityButNotState() {
+        let store = SessionStore()
+        let fresh = Date(timeIntervalSince1970: 2_000)
+        let stale = Date(timeIntervalSince1970: 1_000)
+        SessionEventReducer.apply(envelope("Stop", capturedAt: fresh), to: store)
+        #expect(store.sessions.first?.state == .waitingForInput)
+
+        var late = envelope("PreToolUse", capturedAt: stale,
+                            extra: ["tool_name": "Bash"])
+        late["terminal"] = [
+            "termProgram": "vscode",
+            "tty": "/dev/ttys042",
+            "pidChain": [11, 22, 33],
+        ]
+        SessionEventReducer.apply(late, to: store)
+        // The out-of-order event cannot roll the lifecycle back...
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.currentTool == nil)
+        // ...but it DID run inside the session's terminal: keep the identity.
+        #expect(store.terminal(for: "s1")?.tty == "/dev/ttys042")
+        #expect(store.terminal(for: "s1")?.pidChain == [11, 22, 33])
+    }
+
     @Test func sessionStartCreatesRunningSession() {
         let store = SessionStore()
         SessionEventReducer.apply(envelope("SessionStart"), to: store)

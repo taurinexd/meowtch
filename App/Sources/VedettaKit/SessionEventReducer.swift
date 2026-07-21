@@ -57,10 +57,9 @@ public enum SessionEventReducer {
         let eventDate = (envelope["capturedAt"] as? NSNumber)
             .map { Date(timeIntervalSince1970: $0.doubleValue) }
             ?? date
-        if let previous = store.sessions.first(where: { $0.id == sessionId }),
-           eventDate < previous.lastActivityAt {
-            return
-        }
+        let isStale = store.sessions
+            .first { $0.id == sessionId }
+            .map { eventDate < $0.lastActivityAt } ?? false
 
         let source = envelope["source"] as? String ?? "claude"
         let cwd = event["cwd"] as? String
@@ -78,13 +77,20 @@ public enum SessionEventReducer {
             // The window binding is trustworthy only when the user is
             // certainly typing in it: background events (the agent works
             // while the user is in another window of the same app) must
-            // not rebind the session to whatever window is frontmost.
-            let userDriven = name == "UserPromptSubmit" || name == "SessionStart"
+            // not rebind the session to whatever window is frontmost —
+            // and an out-of-order event never rebinds anything.
+            let userDriven = !isStale
+                && (name == "UserPromptSubmit" || name == "SessionStart")
             if !userDriven, let previous = store.terminal(for: sessionId)?.windowId {
                 info.windowId = previous
             }
             store.setTerminal(info, for: sessionId)
         }
+
+        // Out-of-order events (a detached connection delivering late) must
+        // not roll the lifecycle back — but their terminal identity above is
+        // still real: they DID run inside the session's terminal.
+        if isStale { return }
 
         var session = store.sessions.first { $0.id == sessionId }
             ?? AgentSession(
