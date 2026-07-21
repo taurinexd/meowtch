@@ -2,6 +2,21 @@ import Testing
 @testable import VedettaKit
 
 struct CodexTerminalDiscoveryTests {
+    @Test func writerLookupRepeatsOnlyAfterTheCachedProcessExits() {
+        #expect(CodexTerminalFallback.shouldRefreshWriter(
+            cachedOwnerPID: nil,
+            isProcessAlive: { _ in false }
+        ))
+        #expect(!CodexTerminalFallback.shouldRefreshWriter(
+            cachedOwnerPID: 15557,
+            isProcessAlive: { $0 == 15557 }
+        ))
+        #expect(CodexTerminalFallback.shouldRefreshWriter(
+            cachedOwnerPID: 15557,
+            isProcessAlive: { _ in false }
+        ))
+    }
+
     @Test func openRolloutParserAssociatesFilesWithOwningCodexProcess() {
         let output = """
         p11251

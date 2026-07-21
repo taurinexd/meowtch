@@ -201,6 +201,18 @@ struct CodexIngressCoordinatorTests {
         ))
         #expect(store.terminal(for: "codex-thread-1") == fallback)
 
+        let resumedFallback = TerminalInfo(
+            termProgram: "vscode",
+            bundleIdentifier: "com.microsoft.VSCode",
+            pid: 20000,
+            pidChain: [20000, 19999, 10814, 8026, 8004]
+        )
+        #expect(coordinator.applyFallbackTerminal(
+            threadID: "thread-1",
+            terminal: resumedFallback
+        ))
+        #expect(store.terminal(for: "codex-thread-1") == resumedFallback)
+
         coordinator.apply(hook: try hook("SessionStart"))
         let hookIdentity = try #require(store.terminal(for: "codex-thread-1"))
         #expect(hookIdentity.tty == "/dev/ttys001")

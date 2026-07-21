@@ -28,8 +28,9 @@ public final class CodexIngressCoordinator {
     }
 
     /// VI retains the process writing each rollout so a pre-hook Codex
-    /// session remains jumpable. This fallback only fills a missing binding;
-    /// a later hook carries the more precise tty/window identity and wins.
+    /// session remains jumpable. A resumed thread may acquire a new writer,
+    /// so rollout-derived bindings can refresh one another. A later hook
+    /// carries the more precise tty/window identity and always wins.
     @discardableResult
     public func applyFallbackTerminal(
         threadID: String,
@@ -37,8 +38,11 @@ public final class CodexIngressCoordinator {
     ) -> Bool {
         let id = sessionID(threadID)
         guard store.sessions.contains(where: { $0.id == id }),
-              terminal.isJumpable,
-              store.terminal(for: id)?.isJumpable != true else { return false }
+              terminal.isJumpable else { return false }
+        if let existing = store.terminal(for: id), existing.isJumpable {
+            let existingIsFallback = existing.tty == nil && existing.windowId == nil
+            guard existingIsFallback, existing.pid != terminal.pid else { return false }
+        }
         store.setTerminal(terminal, for: id)
         return true
     }

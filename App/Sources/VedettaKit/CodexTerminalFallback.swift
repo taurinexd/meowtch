@@ -32,6 +32,14 @@ public enum CodexOpenRolloutFiles {
 /// window identity; until then the writer ancestry is sufficient for the IDE
 /// extension to select the exact integrated terminal.
 public enum CodexTerminalFallback {
+    public static func shouldRefreshWriter(
+        cachedOwnerPID: Int32?,
+        isProcessAlive: (Int32) -> Bool
+    ) -> Bool {
+        guard let cachedOwnerPID else { return true }
+        return !isProcessAlive(cachedOwnerPID)
+    }
+
     public static func resolve(
         ownerPID: Int32,
         parentOf: (Int32) -> Int32?,
