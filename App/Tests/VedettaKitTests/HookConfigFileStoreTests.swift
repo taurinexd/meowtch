@@ -29,6 +29,53 @@ struct HookConfigFileStoreTests {
         return url
     }
 
+    @Test func mutatePreservesUserCommentsOrderAndLiterals() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let config = root.appendingPathComponent("settings.json")
+        let backups = root.appendingPathComponent("backups")
+        try Data("""
+        {
+          // keep me
+          "model": "opus",
+          "hooks": {
+            "Stop": [
+              { "hooks": [{ "command": "afplay done.wav", "type": "command" }] }
+            ]
+          },
+          "timeout": 86400
+        }
+        """.utf8).write(to: config)
+        let store = HookConfigFileStore(now: { Date(timeIntervalSince1970: 0) })
+
+        _ = try store.mutate(
+            at: config,
+            backupDirectory: backups,
+            backupName: "settings.json"
+        ) { settings in
+            var settings = settings
+            var hooks = settings["hooks"] as? [String: Any] ?? [:]
+            hooks["SessionStart"] = [["hooks": [["command": "vedetta", "type": "command"]]]]
+            settings["hooks"] = hooks
+            return (settings, true)
+        }
+
+        let written = String(
+            decoding: try Data(contentsOf: config), as: UTF8.self
+        )
+        #expect(written.contains("// keep me"))
+        #expect(written.contains("afplay done.wav"))
+        #expect(written.contains("\"timeout\": 86400"))
+        #expect(written.contains("\"SessionStart\""))
+        // The user's ordering survives: model stays before hooks.
+        let model = try #require(written.range(of: "\"model\""))
+        let hooks = try #require(written.range(of: "\"hooks\""))
+        #expect(model.lowerBound < hooks.lowerBound)
+        // And the file still reads back as the transform's result.
+        let reread = try store.read(at: config)
+        #expect((reread["hooks"] as? [String: Any])?.count == 2)
+    }
+
     @Test func createsMissingConfigurationWithoutBackup() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
