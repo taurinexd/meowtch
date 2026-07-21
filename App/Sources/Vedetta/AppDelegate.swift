@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         in: store,
                         coordinator: self.codexIngress
                     )
+                    SessionBootstrap.sweepDeadTerminals(in: store)
                     TerminalPersistence.save(from: store)
                     store.touch()
                 }

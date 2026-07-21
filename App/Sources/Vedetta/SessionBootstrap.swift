@@ -156,6 +156,26 @@ enum SessionBootstrap {
         kill(pid, 0) == 0 || errno == EPERM
     }
 
+    /// Removes cards whose terminal is provably dead (killed tab, exited
+    /// writer), the way VI's cards follow the terminal's life. Runs on the
+    /// periodic timer; the policy errs toward keeping on missing evidence.
+    @MainActor
+    static func sweepDeadTerminals(in store: SessionStore) {
+        let dead = store.sessions.filter { session in
+            SessionLivenessPolicy.shouldRemove(
+                session: session,
+                terminal: store.terminal(for: session.id),
+                isPidAttachedToTTY: TerminalLiveness.isPidAttachedToTTY,
+                isProcessAlive: TerminalLiveness.isProcessAlive
+            )
+        }
+        for session in dead {
+            store.remove(id: session.id)
+            liveEventIds.remove(session.id)
+            scannedPaths.removeValue(forKey: session.id)
+        }
+    }
+
     @MainActor
     static func ingestCodexIndex(
         path: String,
