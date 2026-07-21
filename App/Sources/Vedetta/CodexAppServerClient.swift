@@ -20,6 +20,11 @@ actor CodexAppServerClient {
     private var retryAfter = Date.distantPast
     private var idleGeneration = 0
     private var rateAccumulator = CodexRateLimitAccumulator()
+    private let codexHome: String?
+
+    init(codexHome: String? = nil) {
+        self.codexHome = codexHome
+    }
 
     func rateLimits() async -> CodexRateLimitSnapshot? {
         do {
@@ -49,6 +54,10 @@ actor CodexAppServerClient {
         return result
     }
 
+    func shutdown() {
+        stopProcess()
+    }
+
     private func ensureStarted() async throws {
         if initialized, process?.isRunning == true { return }
         guard Date() >= retryAfter else { throw ClientError.startupBackoff }
@@ -62,6 +71,11 @@ actor CodexAppServerClient {
         process.standardInput = stdinPipe
         process.standardOutput = stdoutPipe
         process.standardError = Pipe()
+        if let codexHome {
+            var environment = ProcessInfo.processInfo.environment
+            environment["CODEX_HOME"] = codexHome
+            process.environment = environment
+        }
         process.terminationHandler = { [weak self] _ in
             guard let self else { return }
             Task { await self.connectionEnded() }

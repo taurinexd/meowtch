@@ -101,19 +101,43 @@ private struct OnboardingView: View {
                             }
                         }
                         agentHookRow(
-                            name: "Codex",
+                            name: "Codex (\(VedettaSetup.codexHomes.count) config)",
                             installed: codexInstalled,
                             error: codexError
                         ) {
                             do {
                                 try VedettaSetup.ensureRuntimeLayout()
                                 try VedettaSetup.installCodexHooks()
-                                codexInstalled = true
-                                codexError = nil
+                                codexInstalled = VedettaSetup.codexHooksInstalled()
+                                codexError = VedettaSetup.codexHomes.contains {
+                                    VedettaSetup.codexHooksExplicitlyDisabled(at: $0)
+                                } ? "Hooks disabilitati esplicitamente in almeno un config.toml." : nil
                             } catch {
                                 codexError = error.localizedDescription
                             }
                         }
+                        Button("Aggiungi config Codex…") {
+                            let picker = NSOpenPanel()
+                            picker.canChooseDirectories = true
+                            picker.canChooseFiles = false
+                            picker.allowsMultipleSelection = false
+                            guard picker.runModal() == .OK, let url = picker.url else { return }
+                            let codexHome = VedettaSetup.registerCodexHome(url.path)
+                            do {
+                                try VedettaSetup.installCodexHooks(at: codexHome)
+                                codexInstalled = VedettaSetup.codexHooksInstalled()
+                                codexError = VedettaSetup.codexHooksExplicitlyDisabled(at: codexHome)
+                                    ? "Hooks disabilitati in \(codexHome.configPath); file non modificato."
+                                    : nil
+                                NotificationCenter.default.post(
+                                    name: .vedettaCodexHomesChanged,
+                                    object: nil
+                                )
+                            } catch {
+                                codexError = error.localizedDescription
+                            }
+                        }
+                        .buttonStyle(.bordered)
                     }
                 default:
                     VStack(spacing: 10) {

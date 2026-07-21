@@ -56,6 +56,20 @@ final class StatusItemController {
         )
         removeCodexItem.target = self
         menu.addItem(removeCodexItem)
+        let addCodexHomeItem = NSMenuItem(
+            title: "Add Codex Config Directory…",
+            action: #selector(addCodexHome),
+            keyEquivalent: ""
+        )
+        addCodexHomeItem.target = self
+        menu.addItem(addCodexHomeItem)
+        let trustItem = NSMenuItem(
+            title: "Check Codex Hook Trust…",
+            action: #selector(checkCodexHookTrust),
+            keyEquivalent: ""
+        )
+        trustItem.target = self
+        menu.addItem(trustItem)
         let approvalItem = NSMenuItem(title: "Codex Approvals", action: nil, keyEquivalent: "")
         let approvalMenu = NSMenu(title: "Codex Approvals")
         let selectedMode = CodexApprovalMode(
@@ -187,6 +201,67 @@ final class StatusItemController {
         }
     }
 
+    @objc private func addCodexHome() {
+        let picker = NSOpenPanel()
+        picker.title = "Select a Codex config directory"
+        picker.prompt = "Add"
+        picker.canChooseDirectories = true
+        picker.canChooseFiles = false
+        picker.allowsMultipleSelection = false
+        guard picker.runModal() == .OK, let url = picker.url else { return }
+        let codexHome = VedettaSetup.registerCodexHome(url.path)
+        do {
+            let changed = try VedettaSetup.installCodexHooks(at: codexHome)
+            NotificationCenter.default.post(name: .vedettaCodexHomesChanged, object: nil)
+            if VedettaSetup.codexHooksExplicitlyDisabled(at: codexHome) {
+                showAlert(
+                    title: "Codex hooks disabled",
+                    message: "\(codexHome.path) explicitly disables hooks. Vedetta left config.toml unchanged."
+                )
+            } else {
+                showAlert(
+                    title: "Codex config added",
+                    message: changed
+                        ? "Hooks installed with a backup. Open Codex in this home and use /hooks to review Vedetta."
+                        : "This config directory is already registered and its hooks are current."
+                )
+            }
+        } catch {
+            showAlert(title: "Operation failed", message: error.localizedDescription, warning: true)
+        }
+    }
+
+    @objc private func checkCodexHookTrust() {
+        Task { @MainActor in
+            var lines: [String] = []
+            for codexHome in VedettaSetup.codexHomes {
+                if !codexHome.isAvailable {
+                    lines.append("\(codexHome.path): unavailable")
+                    continue
+                }
+                if VedettaSetup.codexHooksExplicitlyDisabled(at: codexHome) {
+                    lines.append("\(codexHome.path): disabled in config.toml")
+                    continue
+                }
+                let client = codexHome.isDefault
+                    ? CodexAppServerClient.shared
+                    : CodexAppServerClient(codexHome: codexHome.path)
+                let snapshot = await client.hookTrust()
+                if !codexHome.isDefault { await client.shutdown() }
+                let label: String
+                switch snapshot.state {
+                case .verified: label = "verified"
+                case .manualConfirmationRequired: label = "review with /hooks"
+                case .disabled: label = "disabled"
+                case .unverified: label = "unverified — review with /hooks"
+                case .unavailable: label = "app-server unavailable"
+                }
+                lines.append("\(codexHome.path): \(label)")
+            }
+            showAlert(title: "Codex Hook Trust", message: lines.joined(separator: "\n"))
+        }
+    }
+
     @objc private func selectCodexApprovalMode(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String,
               CodexApprovalMode(rawValue: rawValue) != nil else { return }
@@ -206,6 +281,14 @@ final class StatusItemController {
             alert.messageText = "Operazione fallita"
             alert.informativeText = error.localizedDescription
         }
+        alert.runModal()
+    }
+
+    private func showAlert(title: String, message: String, warning: Bool = false) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        if warning { alert.alertStyle = .warning }
         alert.runModal()
     }
 }
