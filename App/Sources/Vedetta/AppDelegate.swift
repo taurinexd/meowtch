@@ -4,6 +4,7 @@ import VedettaKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = SessionStore()
+    private lazy var codexIngress = CodexIngressCoordinator(store: store)
     private var panelController: NotchPanelController?
     private var statusItemController: StatusItemController?
     private var eventServer: EventServer?
@@ -18,17 +19,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !VIMapImport.adopt(into: store) {
                 SessionBootstrap.adoptRecentSessions(into: store)
             }
-            SessionBootstrap.adoptCodexSessions(into: store)
+            SessionBootstrap.adoptCodexSessions(
+                into: store,
+                coordinator: codexIngress
+            )
             // Keep watching Codex rollouts as a fallback for sessions that
             // started before our hooks were installed. Hook events take
             // ownership as soon as that session emits one.
-            let codexWatcher = CodexWatcher(root: NSHomeDirectory() + "/.codex/sessions") { [weak self] path in
-                Task { @MainActor in
-                    guard let self else { return }
-                    SessionBootstrap.ingestCodexRollout(path: path, into: self.store)
-                    self.store.touch()
+            let codexWatcher = CodexWatcher(
+                root: NSHomeDirectory() + "/.codex",
+                onRollout: { [weak self] path in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        SessionBootstrap.ingestCodexRollout(
+                            path: path,
+                            coordinator: self.codexIngress
+                        )
+                        self.store.touch()
+                    }
+                },
+                onIndex: { [weak self] path in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        SessionBootstrap.ingestCodexIndex(
+                            path: path,
+                            coordinator: self.codexIngress
+                        )
+                        self.store.touch()
+                    }
                 }
-            }
+            )
             codexWatcher.start()
             self.codexWatcher = codexWatcher
             JumpService.installVSCodeExtension()
@@ -36,7 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in
                 Task { @MainActor in
-                    SessionBootstrap.refreshScannedSessions(in: store)
+                    SessionBootstrap.refreshScannedSessions(
+                        in: store,
+                        coordinator: self.codexIngress
+                    )
                     TerminalPersistence.save(from: store)
                     store.touch()
                 }
@@ -73,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         do {
             EventDispatcher.store = store
+            EventDispatcher.codexCoordinator = codexIngress
             let server = EventServer(socketPath: VedettaSetup.socketPath) { data in
                 await EventDispatcher.handle(data)
             }
