@@ -1,67 +1,84 @@
-# Post-review fixes — 2026-07-21
+# Post-review fixes — 2026-07-21 — COMPLETATO
 
 Esito della review dell'integrazione Codex (36 commit `a1733d0`…`c0e00de`) più le
 4 note di Matteo. Ogni fix: implementazione + test + commit separato; verifica
-end-to-end complessiva alla fine. Stato: `[ ]` da fare, `[x]` committato.
+end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
 
 ## Bug maggiori
 
-- [ ] **B1 — Flip verde→blu su handoff (nota 1, Claude)**
-  `EventDispatcher.handlePermissionRequest` fa `transition(.running)` incondizionato
-  al resume della continuation (anche `.handoff` scatenato da Stop): sovrascrive il
-  `waitingForInput` appena applicato e, con lo stale-guard del reducer, lo stato
-  sbagliato resta fino all'evento successivo. Fix: reset a `.running` solo se lo
-  stato corrente è ancora `.needsApproval` (helper puro in VedettaKit + test).
+- [x] **B1 — Flip verde→blu su handoff (nota 1, Claude)** — `0ef6e3f`
+  Il resume della continuation (anche `.handoff` scatenato da Stop) faceva
+  `transition(.running)` incondizionato, sovrascrivendo il verde appena
+  applicato; lo stale-guard congelava lo stato sbagliato. Ora
+  `SessionStore.clearApprovalState` resetta solo se lo stato è ancora
+  `.needsApproval`.
 
-- [ ] **B2 — `needsApproval` Codex senza ritorno (nota 2, hijack del pannello)**
-  PermissionRequest Codex instradata al terminale: il coordinator setta
-  `.needsApproval` prima del routing e nessun evento lo pulisce (postToolUse è
-  `break`, il rollout lo preserva). L'interrupt orfano sequestra `focusedSession`
-  e nasconde tutte le altre card (è così che "joshua-request" è sparita).
-  Fix: (a) coordinator pulisce `needsApproval → running` su `.postToolUse`;
-  (b) `NotchView.focusedSession` prende il takeover solo per interrupt
-  *azionabili* (pending in ApprovalCenter o domanda in QuestionStore).
+- [x] **B2 — `needsApproval` Codex senza ritorno + hijack del pannello (nota 2)** — `747c85d`
+  PostToolUse ora pulisce l'approval deciso a terminale (Codex non ha
+  PreToolUse: il tool eseguito È il segnale). `focusedSession` prende il
+  takeover solo per interrupt azionabili nel notch (pending in ApprovalCenter
+  o domanda in QuestionStore), mai per un bare `.needsApproval`.
 
-- [ ] **B3 — Rollout in ritardo ribalta lo Stop hook (nota 1, Codex)**
-  Dopo `Stop` hook, una lettura rollout col file indietro (manca `task_complete`)
-  rimette `.running`. Il revision-guard protegge dall'interleaving, non dal file
-  vecchio. Fix: la logica di stato sottrae `ledger.hookFinalTurns` dagli
-  `activeTurnIDs` prima di decidere running/waiting.
+- [x] **B3 — Rollout in ritardo ribalta lo Stop hook (nota 1, Codex)** — `44be85c`
+  La logica di stato sottrae `ledger.hookFinalTurns` dagli `activeTurnIDs`:
+  un turno chiuso dagli hook non conta più come attività live del file.
 
-- [ ] **B4 — Card blu che si scambiano di posto (nota 4)**
-  `SessionStore.sort()` ordina per `lastActivityAt`, aggiornato a ogni hook.
-  Fix: nuovo `AgentSession.stateChangedAt` (stampato centralmente da
-  `upsert`/`transition` solo al cambio di stato) come chiave di ordinamento
-  secondaria stabile.
+- [x] **B4 — Card blu che si scambiano di posto (nota 4)** — `12a34a1`
+  Nuovo `AgentSession.stateChangedAt` stampato centralmente da
+  `SessionStore.upsert`/`transition` al solo cambio di stato; l'ordinamento
+  same-state usa quello, non `lastActivityAt`.
 
-- [ ] **B5 — Terminale ucciso, card che resta (nota 3)**
-  Nessuna liveness sweep; VI tiene tty/pid per sessione (`session-terminals.json`,
-  `lastKnownPid`/`codexWriterPid`) e li usa. Fix: policy pura in VedettaKit
-  (sessione rimossa quando il terminale è *provatamente* morto) + collector di
-  sistema (sysctl per pid → controlling tty dev vs `stat(tty).st_rdev`) sul
-  timer 15s. Regole: hook-bound → morto se nessun pid della chain (bridge escluso)
-  è vivo e attaccato al tty della sessione; Codex fallback (`tty == nil`) → morto
-  se il writer pid è morto e il rollout è fermo da ≥60s. Nessuna identità → keep.
+- [x] **B5 — Terminale ucciso, card che resta (nota 3)** — `622d4cd` + `d8662f7`
+  Liveness sweep sul timer 15s: policy pura in VedettaKit + probe kernel
+  (sysctl controlling-tty / kill(0)), rimozione solo su evidenza positiva.
+  **Revisione dopo il primo giro live**: gli hook girano con pipe (tty quasi
+  mai catturata) e `TerminalInfo.pid` è il bridge (morto per design) → il
+  primo sweep rimuoveva sessioni vive. Ora: fallback writer marcato con flag
+  esplicito (`isWriterFallback`); identità hook senza tty vive tramite
+  chain[2] (agente) / chain[3] (shell) — agente uscito con tab aperta resta,
+  tab uccisa rimuove.
+
+- [x] **Bonus — mappa VI stale blocca l'adozione** (seconda causa della nota 2) — `d99f584`
+  `VIMapImport.adopt == true` saltava `adoptRecentSessions` per sempre: con
+  VI spenta la mappa congelata a ieri nascondeva le sessioni nuove a ogni
+  restart (joshua-request). Ora la sweep transcript integra sempre la mappa.
 
 ## Rilievi minori
 
-- [ ] **M1 — Lo stale-guard del reducer perde l'identità terminale**
-  Registrare il terminale (senza rebind del windowId) anche per eventi scartati.
-- [ ] **M2 — La riscrittura config perde commenti `//` e ordine chiavi**
-  Writer order/comment-preserving in `HookConfigFileStore` (merge del dizionario
-  trasformato dentro il documento originale ordinato; literal scalari intatti).
-- [ ] **M3 — `CodexRolloutTailer.date()` non parse i frazionali ISO**
-  `.withFractionalSeconds` con fallback al formato secco.
-- [ ] **M4 — Turni anonymous rigettano l'apply del rollout**
-  Il guard su `currentTurnID` rigetta solo se il rollout espone turn id reali.
+- [x] **M1** — `c250c42` — lo stale-guard registra comunque l'identità
+  terminale (senza rebind del windowId); scarta solo la mutazione lifecycle.
+- [x] **M2** — `75f1abe` — `OrderedJSONDocument`: le riscritture config
+  preservano commenti `//`, ordine chiavi, raggruppamento a righe vuote e
+  literal originali; riscrive solo ciò che il transform ha cambiato.
+  Dry-run su copie dei config reali: `settings.json` round-trip
+  byte-identical.
+- [x] **M3** — `8575897` — `.withFractionalSeconds` (Codex stampa i ms).
+- [x] **M4** — `9a67ae3` — i turni `anonymous-turn-*` non rigettano più
+  l'apply del rollout.
 
-## Verifica end-to-end (alla fine)
+## Verifica end-to-end (eseguita su app viva, build post-fix)
 
-- [ ] `make test` verde; `make app` + relaunch.
-- [ ] Sessione Claude reale (`claude -p`) → card, stati, terminal identity.
-- [ ] Sessione Codex reale (`codex exec`) → card via hook, stato blu→verde senza flip.
-- [ ] Approvazione via socket `decide` + handoff simulato (envelope bridge sintetici):
-      Stop dopo handoff non ribalta il verde (B1); postToolUse pulisce l'orange (B2).
-- [ ] Kill del terminale → card rimossa entro una sweep (B5).
-- [ ] Ordine `dump` stabile con più sessioni blu (B4).
-- [ ] Config con commenti `//` + chiavi disordinate: merge preserva tutto (M2).
+- [x] `make test` verde (141/21); `make app` + relaunch.
+- [x] Claude reale (`claude -p` sotto pty): card → stati → SessionEnd; pty
+      chiusa → card rimossa alla prima sweep.
+- [x] Codex reale (`codex exec`): card via hook, timeline `running →
+      waitingForInput`, **nessun flip** di ritorno; card rimossa post-exit.
+- [x] B1 via socket (envelope bridge reali): PermissionRequest pendente +
+      Stop → reply `{}` (handoff), stato resta `waitingForInput`.
+- [x] B2 via socket: PermissionRequest Codex routed-to-terminal (reply
+      immediata `{}`) → `needsApproval`; PostToolUse → `running`.
+- [x] B4: ordine del dump identico tra snapshot distanziati con più card
+      running; cambia solo alle transizioni di stato.
+- [x] B5: fixture di processo uccise → card sintetiche rimosse dalla sweep;
+      joshua-request (claude vivo su ttys009) sopravvive a restart + sweep.
+- [x] M2: unit test + dry-run byte-identical sui config reali (copie).
+
+## Residui noti (non bloccanti)
+
+- Il self-cleanup JXA del launcher (`VedettaSetup`) usa ancora
+  JSON.parse/stringify: in quello scenario estremo (app rimossa da >5 min) i
+  commenti dell'utente non sono preservati.
+- `ledger.hookPromptTurns/hookFinalTurns` crescono per la vita della
+  sessione (bounded dal numero di turni; irrilevante in pratica).
+- La sessione Codex adottata da rollout senza writer vivo non ha binding →
+  mai rimossa dalla sweep (comportamento conservativo voluto).
