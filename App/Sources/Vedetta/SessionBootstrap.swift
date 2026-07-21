@@ -15,6 +15,7 @@ enum SessionBootstrap {
     /// must not fight the reducer over them.
     @MainActor static var liveEventIds: Set<String> = []
     @MainActor private static var scannedPaths: [String: String] = [:]
+    @MainActor private static var codexTailers: [String: CodexRolloutTailer] = [:]
 
     @MainActor
     static func registerScannedPath(_ path: String, for id: String) {
@@ -70,8 +71,8 @@ enum SessionBootstrap {
 
     // MARK: - Codex
 
-    /// Adopts recent Codex CLI sessions from the rollout files, titled via
-    /// the session index. No hooks: mtime drives running/waiting.
+    /// Adopts recent Codex CLI sessions from rollout files, titled via the
+    /// session index. This covers sessions that predate hook installation.
     @MainActor
     static func adoptCodexSessions(into store: SessionStore) {
         let fm = FileManager.default
@@ -90,19 +91,22 @@ enum SessionBootstrap {
             let path = root + "/" + relative
             guard let attrs = try? fm.attributesOfItem(atPath: path),
                   let modified = attrs[.modificationDate] as? Date,
-                  modified > cutoff,
-                  let data = fm.contents(atPath: path) else { continue }
+                  modified > cutoff else { continue }
 
-            let rollout = CodexScan.parseRollout(data)
-            guard let id = rollout.sessionId,
-                  !store.sessions.contains(where: { $0.id == id }) else { continue }
+            var tailer = CodexRolloutTailer()
+            guard let rollout = try? tailer.read(from: URL(fileURLWithPath: path)),
+                  let rawID = rollout.threadID else { continue }
+            codexTailers[path] = tailer
+            let id = "codex-\(rawID)"
+            guard !store.sessions.contains(where: { $0.id == id }) else { continue }
             let created = attrs[.creationDate] as? Date ?? modified
             scannedPaths[id] = path
             store.upsert(AgentSession(
                 id: id,
                 agent: .codex,
-                title: names[id] ?? rollout.firstUserMessage ?? "",
+                title: names[rawID] ?? rollout.firstUserMessage ?? "",
                 directory: rollout.cwd ?? "",
+                codexThreadID: rawID,
                 currentTool: rollout.currentTool,
                 currentToolDetail: rollout.currentToolDetail,
                 lastMessage: rollout.lastUserMessage,
@@ -118,9 +122,10 @@ enum SessionBootstrap {
     /// task_started/task_complete), current tool (last open function_call), and
     /// the message lines. Returns the updated session, or nil if unreadable.
     /// Shared by the periodic pass and the live FSEvents watcher.
-    static func applyCodexRollout(to session: AgentSession, path: String) -> AgentSession? {
-        guard let data = FileManager.default.contents(atPath: path) else { return nil }
-        let rollout = CodexScan.parseRollout(data)
+    static func applyCodexRollout(
+        to session: AgentSession,
+        snapshot rollout: CodexRolloutSnapshot
+    ) -> AgentSession {
         var updated = session
         if let last = rollout.lastUserMessage { updated.lastMessage = last }
         if let reply = rollout.lastAgentMessage { updated.lastAssistantMessage = reply }
@@ -135,9 +140,11 @@ enum SessionBootstrap {
     /// watcher's entry point for a changed file, incl. brand-new sessions).
     @MainActor
     static func ingestCodexRollout(path: String, into store: SessionStore) {
-        guard let data = FileManager.default.contents(atPath: path) else { return }
-        let rollout = CodexScan.parseRollout(data)
-        guard let id = rollout.sessionId else { return }
+        var tailer = codexTailers[path] ?? CodexRolloutTailer()
+        guard let rollout = try? tailer.read(from: URL(fileURLWithPath: path)),
+              let rawID = rollout.threadID else { return }
+        codexTailers[path] = tailer
+        let id = "codex-\(rawID)"
         scannedPaths[id] = path
         let existing = store.sessions.first { $0.id == id }
         let base = existing ?? AgentSession(
@@ -145,13 +152,12 @@ enum SessionBootstrap {
             agent: .codex,
             title: rollout.firstUserMessage ?? "",
             directory: rollout.cwd ?? "",
+            codexThreadID: rawID,
             state: .waitingForInput,
             startedAt: Date(),
             lastActivityAt: Date()
         )
-        if let updated = applyCodexRollout(to: base, path: path) {
-            store.upsert(updated)
-        }
+        store.upsert(applyCodexRollout(to: base, snapshot: rollout))
     }
 
     /// Periodic pass for sessions without live hook events (started before
@@ -160,7 +166,7 @@ enum SessionBootstrap {
     @MainActor
     static func refreshScannedSessions(in store: SessionStore) {
         let fm = FileManager.default
-        for (id, path) in scannedPaths where !liveEventIds.contains(id) {
+        for (id, path) in scannedPaths {
             guard var session = store.sessions.first(where: { $0.id == id }),
                   let attrs = try? fm.attributesOfItem(atPath: path),
                   let modified = attrs[.modificationDate] as? Date else { continue }
@@ -170,12 +176,14 @@ enum SessionBootstrap {
             let changed = modified > session.lastActivityAt || newState != session.state
             guard changed else { continue }
 
-            // Codex has no hooks: its rollout drives state, tool and messages
-            // directly (event-based, not mtime), so route it through the same
-            // path the live watcher uses.
+            // Codex keeps rollout ingestion live alongside hooks. Field
+            // authority and stale-write rejection are applied by its ingress
+            // coordinator; this periodic path remains only a safety sweep.
             if session.agent == .codex {
-                if let updated = applyCodexRollout(to: session, path: path) {
-                    store.upsert(updated)
+                var tailer = codexTailers[path] ?? CodexRolloutTailer()
+                if let rollout = try? tailer.read(from: URL(fileURLWithPath: path)) {
+                    codexTailers[path] = tailer
+                    store.upsert(applyCodexRollout(to: session, snapshot: rollout))
                 }
                 continue
             }
