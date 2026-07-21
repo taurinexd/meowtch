@@ -45,6 +45,7 @@ public final class SessionStore: ObservableObject {
 
     public func remove(id: String) {
         sessions.removeAll { $0.id == id }
+        terminals.removeValue(forKey: id)
     }
 
     private func sort() {

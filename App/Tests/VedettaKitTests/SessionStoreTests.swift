@@ -86,10 +86,12 @@ struct SessionStoreTests {
         #expect(store.sessions.map(\.id) == ["run", "done", "min-appr"])
     }
 
-    @Test func removeClearsSession() {
+    @Test func removeClearsSessionAndTerminalBinding() {
         let store = SessionStore()
         store.upsert(makeSession(id: "a", state: .completed))
+        store.setTerminal(TerminalInfo(tty: "/dev/ttys001"), for: "a")
         store.remove(id: "a")
         #expect(store.sessions.isEmpty)
+        #expect(store.terminal(for: "a") == nil)
     }
 }
