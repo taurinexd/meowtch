@@ -86,6 +86,23 @@ struct SessionStoreTests {
         #expect(store.sessions.map(\.id) == ["run", "done", "min-appr"])
     }
 
+    @Test func clearApprovalStateResetsAPendingApprovalToRunning() {
+        let store = SessionStore()
+        store.upsert(makeSession(id: "a", state: .needsApproval))
+        store.clearApprovalState(id: "a", at: Date(timeIntervalSince1970: 2_000))
+        #expect(store.sessions.first?.state == .running)
+    }
+
+    @Test func clearApprovalStateNeverClobbersAStateTheLifecycleMovedPast() {
+        let store = SessionStore()
+        store.upsert(makeSession(id: "a", state: .waitingForInput))
+        store.clearApprovalState(id: "a", at: Date(timeIntervalSince1970: 2_000))
+        // Stop already put the session in waiting: the resuming handoff
+        // continuation must not flip it back to running.
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.lastActivityAt == Date(timeIntervalSince1970: 1_000))
+    }
+
     @Test func removeClearsSessionAndTerminalBinding() {
         let store = SessionStore()
         store.upsert(makeSession(id: "a", state: .completed))

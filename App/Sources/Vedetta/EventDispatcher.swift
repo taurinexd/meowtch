@@ -176,7 +176,10 @@ enum EventDispatcher {
             let answers = await QuestionStore.shared.awaitAnswer(
                 sessionId: sessionId, questions: questions
             )
-            store.transition(id: sessionId, to: .running)
+            // An abandoned question resumes AFTER the event that dismissed it
+            // (often Stop): only the approval state may be cleared, never a
+            // state the lifecycle already moved past.
+            store.clearApprovalState(id: sessionId)
             // Abandoned (nil): reply "{}" so the bridge stays silent and
             // Claude Code falls back to its own picker.
             guard let answers, var updatedInput = toolInput else { return Data("{}".utf8) }
@@ -210,7 +213,10 @@ enum EventDispatcher {
             fingerprint: fingerprint
         )
 
-        store.transition(id: sessionId, to: .running)
+        // A handoff resumes AFTER the event that resolved it (often Stop):
+        // only the approval state may be cleared, never a state the
+        // lifecycle already moved past.
+        store.clearApprovalState(id: sessionId)
 
         guard case .decision(let allow, let message) = decision else {
             return Data("{}".utf8)
