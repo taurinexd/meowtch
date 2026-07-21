@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var eventServer: EventServer?
     private var refreshTimer: Timer?
+    private var codexWatcher: CodexWatcher?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if ProcessInfo.processInfo.arguments.contains("--mock") {
@@ -18,6 +19,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SessionBootstrap.adoptRecentSessions(into: store)
             }
             SessionBootstrap.adoptCodexSessions(into: store)
+            // Codex has no hooks: a file-events watcher on its rollouts keeps
+            // the cards live (state, tool, messages) between periodic passes.
+            let codexWatcher = CodexWatcher(root: NSHomeDirectory() + "/.codex/sessions") { [weak self] path in
+                Task { @MainActor in
+                    guard let self else { return }
+                    SessionBootstrap.ingestCodexRollout(path: path, into: self.store)
+                    self.store.touch()
+                }
+            }
+            codexWatcher.start()
+            self.codexWatcher = codexWatcher
             JumpService.installVSCodeExtension()
             UsageModel.shared.start()
             let store = self.store
