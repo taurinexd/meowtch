@@ -33,6 +33,10 @@ struct AgentSessionPresentationTests {
             pidChain: [42, 7]
         ).isJumpable)
         #expect(TerminalInfo(
+            termProgram: "vscode",
+            pidChain: [42, 7]
+        ).isJumpable)
+        #expect(TerminalInfo(
             bundleIdentifier: "com.apple.Terminal",
             windowId: 99
         ).isJumpable)

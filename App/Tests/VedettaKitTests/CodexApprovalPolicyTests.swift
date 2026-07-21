@@ -57,4 +57,9 @@ struct CodexApprovalPolicyTests {
         #expect(variants.allSatisfy { CodexApprovalPolicy.fingerprint(for: $0) != baseline })
         #expect(CodexApprovalPolicy.fingerprint(for: request) == baseline)
     }
+
+    @Test func claudeNativeToggleHandsApprovalBackToTerminal() {
+        #expect(ClaudeApprovalPolicy.route(deferToNative: false) == .notch)
+        #expect(ClaudeApprovalPolicy.route(deferToNative: true) == .terminal)
+    }
 }

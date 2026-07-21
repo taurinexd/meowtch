@@ -3,6 +3,24 @@ import Testing
 @testable import VedettaKit
 
 struct HookConfigFileStoreTests {
+    @Test func readsClaudeJSONWithLineCommentsOutsideStrings() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("settings.json")
+        try Data("""
+        {
+          // user explanation
+          "url": "https://example.test/path//segment",
+          "hooks": {}
+        }
+        """.utf8).write(to: file)
+
+        let result = try HookConfigFileStore().read(at: file)
+        #expect(result["url"] as? String == "https://example.test/path//segment")
+        #expect(result["hooks"] as? [String: Any] != nil)
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("vedetta-hook-store-tests-")
