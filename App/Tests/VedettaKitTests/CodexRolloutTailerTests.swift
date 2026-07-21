@@ -118,7 +118,7 @@ struct CodexRolloutTailerTests {
         var tailer = CodexRolloutTailer()
         let snapshot = tailer.ingest(Data(("""
         {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-aborted"}}
-        {"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"pwd\"}"}}
+        {"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\\"command\\":\\"pwd\\"}"}}
         {"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-aborted"}}
         """ + "\n").utf8))
 
@@ -131,12 +131,24 @@ struct CodexRolloutTailerTests {
         var tailer = CodexRolloutTailer()
         let snapshot = tailer.ingest(Data(("""
         {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}
-        {"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\"command\":\"pwd\"}"}}
+        {"type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec","arguments":"{\\"command\\":\\"pwd\\"}"}}
         {"type":"event_msg","payload":{"type":"thread_rolled_back"}}
         """ + "\n").utf8))
 
         #expect(snapshot.state == .waiting)
         #expect(snapshot.activeTurnIDs.isEmpty)
+        #expect(snapshot.openTools.isEmpty)
+    }
+
+    @Test func completedTurnClearsUnmatchedOpenTools() {
+        var tailer = CodexRolloutTailer()
+        let snapshot = tailer.ingest(Data(("""
+        {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}
+        {"type":"response_item","payload":{"type":"function_call","call_id":"call-without-output","name":"exec","arguments":"{\\"command\\":\\"pwd\\"}"}}
+        {"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}
+        """ + "\n").utf8))
+
+        #expect(snapshot.state == .waiting)
         #expect(snapshot.openTools.isEmpty)
     }
 }
