@@ -58,6 +58,23 @@ struct CodexRolloutTailerTests {
         #expect(rebuilt.lastUserMessage == nil)
     }
 
+    @Test func parsesFractionalSecondTimestampsIntoActivity() throws {
+        let temp = try temporaryFile()
+        defer { try? FileManager.default.removeItem(at: temp.directory) }
+        try Data(("""
+        {"type":"session_meta","payload":{"id":"thread-1","cwd":"/repo"}}
+        {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":"2026-07-21T08:20:12.128Z"}}
+        """ + "\n").utf8).write(to: temp.file)
+        var tailer = CodexRolloutTailer()
+
+        // Codex stamps milliseconds; the plain ISO formatter returns nil
+        // for them and lastActivityAt silently never advanced.
+        let snapshot = try tailer.read(from: temp.file)
+        let expected = try #require(ISO8601DateFormatter().date(from: "2026-07-21T08:20:12Z"))
+        let parsed = try #require(snapshot.lastActivityAt)
+        #expect(abs(parsed.timeIntervalSince(expected) - 0.128) < 0.001)
+    }
+
     @Test func tracksParallelCallsByIDAndReadsCustomInput() throws {
         let temp = try temporaryFile()
         defer { try? FileManager.default.removeItem(at: temp.directory) }
