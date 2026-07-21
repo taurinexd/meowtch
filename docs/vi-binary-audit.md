@@ -137,11 +137,11 @@ La prova sul processo reale conferma la relazione usata da VI: il rollout `019f8
 ### Correzioni Vedetta
 
 - `CodexTerminalDiscovery` esegue un singolo snapshot `lsof -c codex -Fpn`, associa rollout→writer PID e costruisce l’ancestry fino all’IDE.
-- Il binding fallback viene applicato solo quando manca un’identità jumpable; un hook successivo conserva autorità e lo sostituisce con tty/window/process identity più precisa.
+- Il binding fallback conserva il PID del writer, non un semplice flag “risolto”. Se una sessione viene ripresa e il writer precedente è terminato, il nuovo evento rollout ripete `lsof`, aggiorna PID e ancestry e rende nuovamente valido il jump. Un hook successivo conserva autorità e sostituisce il fallback con tty/window/process identity più precisa; i refresh rollout non possono sovrascriverlo.
 - Il click resta un unico percorso condiviso Claude/Codex: una volta recuperato il terminal binding, entrambe le card eseguono lo stesso `JumpService` e collassano il notch.
 - `session_meta.originator/source/thread_source` viene ora letto prima di creare la card. `Codex Desktop` e il companion interno `Claude Code` sono esclusi immediatamente, non solo dopo l’arrivo tardivo di un titolo; questo chiude anche la causa delle card fantasma transitorie.
 
-Il controllo completo dei campi Codex in-scope non ha trovato altri gap dopo questa correzione: lifecycle, prompt/finale, tool paralleli, approvazioni, rename, metadata, subagent, terminal identity e click/jump hanno una fonte e una fallback esplicite. Commit: `d6c5261`.
+Il secondo scan ha corretto anche un errore nella prima patch: `codexWriterPid` era stato trattato come “rollout già risolto”, mentre nel modello VI è un’identità mutabile. Il caso resume ha ora test dedicati sia per il refresh fallback→fallback sia per la precedenza hook→fallback. Con l’evidenza oggi disponibile, lifecycle, prompt/finale, tool paralleli, approvazioni, rename, metadata, subagent, terminal identity e click/jump hanno una fonte e una fallback esplicite. Commit: `d6c5261`, `bf4479c`.
 
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
