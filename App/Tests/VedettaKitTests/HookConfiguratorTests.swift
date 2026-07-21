@@ -172,6 +172,28 @@ struct HookConfiguratorTests {
         #expect(HookConfigurator.codexHooksInstalled(in: twice))
     }
 
+    @Test func codexMergeRemovesOnlyObsoleteVedettaEventHandlers() {
+        let vedetta = HookConfigurator.bridgeCommand(source: "codex")
+        let existing: [String: Any] = [
+            "hooks": [
+                "PreToolUse": [
+                    ["hooks": [["type": "command", "command": "user-pre-tool"]]],
+                    ["hooks": [["type": "command", "command": vedetta]]],
+                ],
+            ],
+        ]
+
+        #expect(!HookConfigurator.codexHooksInstalled(in: existing))
+        let (merged, changed) = HookConfigurator.mergingCodexHooks(into: existing)
+        #expect(changed)
+        let hooks = merged["hooks"] as? [String: Any]
+        let preGroups = hooks?["PreToolUse"] as? [[String: Any]]
+        #expect(preGroups?.count == 1)
+        let command = ((preGroups?.first?["hooks"] as? [[String: Any]])?.first)?["command"] as? String
+        #expect(command == "user-pre-tool")
+        #expect(HookConfigurator.codexHooksInstalled(in: merged))
+    }
+
     @Test func codexRemoveStripsOnlyCodexVedettaHooks() {
         let (merged, _) = HookConfigurator.mergingCodexHooks(into: userSettings())
         #expect(HookConfigurator.hasAnyCodexHook(in: merged))
