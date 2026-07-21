@@ -17,6 +17,8 @@ struct NotchView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var model: NotchUIModel
     @ObservedObject private var usage = UsageModel.shared
+    @ObservedObject private var approvals = ApprovalCenter.shared
+    @ObservedObject private var questions = QuestionStore.shared
     @AppStorage(SessionMetadataPresentation.defaultsKey)
     private var showSessionMetadata = false
     var geometry: NotchGeometry
@@ -200,12 +202,18 @@ struct NotchView: View {
     }
 
     /// The single card the panel focuses on: an interactive interrupt
-    /// (approval or question — i.e. `.needsApproval`) takes over, like the
-    /// original's focusedSession; otherwise the finished-session peek, if one
-    /// is open. "Show all" overrides both to reveal the whole list.
+    /// takes over, like the original's focusedSession; otherwise the
+    /// finished-session peek, if one is open. "Show all" overrides both to
+    /// reveal the whole list. The takeover requires an interrupt the user
+    /// can act on here: a bare `.needsApproval` (the decision is pending in
+    /// the terminal, not in the notch) must not hijack the whole panel.
     private var focusedSession: AgentSession? {
         if model.showAllSessions { return nil }
-        if let interrupt = visibleSessions.first(where: { $0.state == .needsApproval }) {
+        if let interrupt = visibleSessions.first(where: { session in
+            session.state == .needsApproval
+                && (approvals.firstPending(for: session.id) != nil
+                    || questions.first(for: session.id) != nil)
+        }) {
             return interrupt
         }
         if let peekId = model.peekSessionId {

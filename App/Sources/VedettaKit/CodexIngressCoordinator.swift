@@ -104,7 +104,11 @@ public final class CodexIngressCoordinator {
         case .permissionRequest:
             session.state = .needsApproval
         case .postToolUse:
-            break
+            // Codex has no PreToolUse hook: an executed tool is the only
+            // signal that a pending approval was decided (in the terminal,
+            // or in bypass). Without this the orange state has no way back
+            // until Stop and the stale interrupt hijacks the panel.
+            if session.state == .needsApproval { session.state = .running }
         case .subagentStop:
             session.subagentCount = max(0, session.subagentCount - 1)
         case .stop:
