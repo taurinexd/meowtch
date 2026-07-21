@@ -83,7 +83,8 @@ Prove:
 
 | Dato | Fonte primaria | Ruolo delle altre fonti |
 |---|---|---|
-| lifecycle, prompt/finale, approval, terminale | hook | rollout recupera solo completion mancante con guardia su turn/revision |
+| lifecycle, prompt/finale, approval | hook | rollout recupera solo completion mancante con guardia su turn/revision |
+| terminale/jump | hook | per sessioni pre-hook, PID del writer del rollout (`lsof -F`) + ancestry processo |
 | tool-start, tool detail, chiamate parallele | rollout incrementale | `PostToolUse` conferma l'esito senza cancellare altri call ID |
 | titolo conversazione | `session_index.jsonl` incrementale | primo prompt è solo fallback iniziale |
 | usage, hook list/trust | app-server persistente | rate limits nel rollout sono last-resort |
@@ -118,6 +119,29 @@ Binario verificato: `/Applications/Vibe Island.app/Contents/MacOS/vibe-island`, 
 | worker/desktop | Cowork/Desktop hanno watcher dedicati | esclusi per decisione di scope | intenzionale |
 
 I mismatch terminali emersi dall’audit (commenti nelle settings, toggle native approvals, VS Code senza bundle identifier e ordine delle connessioni hook) hanno test di regressione. Il test live ha riprodotto l’ultimo: un `SessionStart` tardivo ribaltava uno `Stop`; `capturedAt` + stale rejection lo correggono sia nel reducer Claude sia nel coordinatore Codex. La suite finale conta 100 test in 17 suite.
+
+## Pass 5 — Correzione audit Codex jump/origin (2026-07-21)
+
+La dichiarazione precedente di parità Codex era incompleta: copriva il jump delle sessioni nate con gli hook già caricati, ma non quello delle sessioni Codex CLI già aperte. La card `codex-vedetta` ha reso visibile il gap: rollout e titolo erano presenti, ma non esisteva un terminal binding, quindi `SessionRowView` scartava il tap.
+
+### Evidenza primaria dal binario VI
+
+- Il modello di sessione VI contiene `codexRolloutPath` e `codexWriterPid`; la firma riflessa dell’update Codex riceve entrambi insieme a `cwd`, `tty`, `terminalBundleId`, `originator` e `threadSource`.
+- Il binario contiene `CodexWriterInfo` e `WriterLookupOutcome`.
+- Nello stesso blocco di codice sono presenti `/usr/sbin/lsof` e il formato field-oriented `-F`: VI associa il file rollout aperto al processo Codex che lo sta scrivendo.
+- `JumpInput` contiene separatamente `codexThreadId`, `pid`, `tty`, `bundleId` e `ideWindowId`; il percorso comune è `JumpInput → JumpPlanner → IDE resolver`.
+- Le stringhe `codex://threads/` e `CodexDesktopThreadFocus` appartengono al percorso Codex Desktop, esplicitamente fuori scope. Non sono necessarie per il terminale IDE.
+
+La prova sul processo reale conferma la relazione usata da VI: il rollout `019f83c2…jsonl` è aperto in scrittura dal PID Codex `15557`; la sua ancestry arriva allo shell VS Code e infine a `com.microsoft.VSCode`.
+
+### Correzioni Vedetta
+
+- `CodexTerminalDiscovery` esegue un singolo snapshot `lsof -c codex -Fpn`, associa rollout→writer PID e costruisce l’ancestry fino all’IDE.
+- Il binding fallback viene applicato solo quando manca un’identità jumpable; un hook successivo conserva autorità e lo sostituisce con tty/window/process identity più precisa.
+- Il click resta un unico percorso condiviso Claude/Codex: una volta recuperato il terminal binding, entrambe le card eseguono lo stesso `JumpService` e collassano il notch.
+- `session_meta.originator/source/thread_source` viene ora letto prima di creare la card. `Codex Desktop` e il companion interno `Claude Code` sono esclusi immediatamente, non solo dopo l’arrivo tardivo di un titolo; questo chiude anche la causa delle card fantasma transitorie.
+
+Il controllo completo dei campi Codex in-scope non ha trovato altri gap dopo questa correzione: lifecycle, prompt/finale, tool paralleli, approvazioni, rename, metadata, subagent, terminal identity e click/jump hanno una fonte e una fallback esplicite. Commit: `d6c5261`.
 
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
