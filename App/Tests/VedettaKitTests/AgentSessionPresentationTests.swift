@@ -10,6 +10,7 @@ struct AgentSessionPresentationTests {
             directory: "/Code/vedetta",
             gitBranch: "main",
             model: "gpt-5.6",
+            reasoningEffort: "high",
             permissionMode: "on-request",
             parentSessionID: "codex-parent",
             subagentRole: "reviewer",
@@ -21,8 +22,41 @@ struct AgentSessionPresentationTests {
 
         #expect(session.title == "Live renamed title")
         #expect(session.presentationMetadata == [
-            "main", "gpt-5.6", "on-request", "reviewer: lint",
+            "main", "gpt-5.6", "high",
         ])
+    }
+
+    @Test func metadataOmitsMissingValuesAndPermissionMode() {
+        let session = AgentSession(
+            id: "claude-session",
+            agent: .claude,
+            title: "Work",
+            directory: "/Code/vedetta",
+            model: "claude-fable-5",
+            permissionMode: "bypassPermissions",
+            state: .waitingForInput,
+            startedAt: .distantPast,
+            lastActivityAt: .distantPast
+        )
+
+        #expect(session.presentationMetadata == ["claude-fable-5"])
+    }
+
+    @Test func oneGlobalPolicyShowsMetadataOnlyOnEnabledFullRows() {
+        let metadata = ["main", "gpt-5.6", "medium"]
+        #expect(!SessionMetadataPresentation.shouldShow(
+            enabled: false, isCompact: false, metadata: metadata
+        ))
+        #expect(SessionMetadataPresentation.shouldShow(
+            enabled: true, isCompact: false, metadata: metadata
+        ))
+        #expect(!SessionMetadataPresentation.shouldShow(
+            enabled: true, isCompact: true, metadata: metadata
+        ))
+        #expect(!SessionMetadataPresentation.shouldShow(
+            enabled: true, isCompact: false, metadata: []
+        ))
+        #expect(SessionMetadataPresentation.defaultsKey == "showSessionMetadata")
     }
 
     @Test func jumpRequiresCapturedHostAndProcessOrWindowIdentity() {
