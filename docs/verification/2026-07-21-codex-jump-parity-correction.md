@@ -15,6 +15,7 @@ VI covers this case by retaining the rollout writer PID. Static binary evidence 
 - Bind that fallback to rollout-only sessions without replacing a later hook identity.
 - Track the actual writer PID. On resume, retry lookup as soon as the cached writer exits and allow only fallback→fallback replacement; tty/window identities from hooks remain authoritative.
 - Parse rollout `originator`, `source` and `thread_source`.
+- Retain rollout/hook `origin` and the full subagent identity (`kind`, parent thread, nickname, role) observed in VI.
 - Reject Codex Desktop and Claude companion rollouts before they can create a transient card.
 
 ## Automated evidence
@@ -27,9 +28,10 @@ The change was developed red/green. Coverage includes:
 - fallback attachment and hook precedence;
 - resumed-session writer refresh and stale-PID replacement;
 - origin parsing;
+- rollout-only subagent identity and parent relation;
 - early exclusion of Codex Desktop and internal Claude companion sessions.
 
-Final suite: **119 tests in 19 suites, 0 failures**.
+Final suite: **120 tests in 19 suites, 0 failures**.
 
 ## Live evidence
 
@@ -39,7 +41,7 @@ Final suite: **119 tests in 19 suites, 0 failures**.
 - The production VS Code focus URI returned `owns=true` for `/Users/matteomorena/Code/vedetta`, proving the extension selected the correct workspace/terminal route.
 - Socket dump contains the current `codex-vedetta` session and no `Codex Companion Task:`/known companion thread.
 - Debug build, production bundle and strict deep code-sign verification passed after the resume correction.
-- Packaged Vedetta was restarted from `dist/Vedetta.app` as PID `39987`.
+- Packaged Vedetta was restarted from `dist/Vedetta.app` as PID `45651` after the final subagent-field correction.
 - Post-restart socket dump contains exactly the current `codex-vedetta` card and no `.` or `Codex Companion Task:` card; persisted mapping still resolves to VS Code through PID chain `15557 → 15549 → 10814 → 8026 → 8004`.
 
-Commits: `d6c5261 fix: restore Codex terminal jump parity`, `bf4479c fix: refresh resumed Codex writer identity`. No push was performed.
+Commits: `d6c5261 fix: restore Codex terminal jump parity`, `bf4479c fix: refresh resumed Codex writer identity`, `7941eba fix: retain Codex rollout subagent identity`. No push was performed.
