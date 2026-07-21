@@ -273,7 +273,12 @@ public struct CodexRolloutTailer: Sendable {
             return Date(timeIntervalSince1970: seconds)
         }
         if let value = value as? String {
-            return ISO8601DateFormatter().date(from: value)
+            // Codex stamps milliseconds ("…T08:20:12.128Z"); the plain
+            // formatter rejects fractional seconds outright.
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return fractional.date(from: value)
+                ?? ISO8601DateFormatter().date(from: value)
         }
         return nil
     }
