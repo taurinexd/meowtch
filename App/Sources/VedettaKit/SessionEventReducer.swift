@@ -215,14 +215,24 @@ public enum SessionEventReducer {
                 try? await Task.sleep(for: .milliseconds(delay))
                 guard var session = store.sessions.first(where: { $0.id == sessionId }) else { return }
                 let peek = TranscriptPeek.read(path: path)
+                var changed = false
+                var foundReply = false
                 if let reply = peek.lastAssistantText, reply != session.lastAssistantMessage {
                     session.lastAssistantMessage = reply
+                    changed = true
+                    foundReply = true
                     if session.title.isEmpty, let first = peek.firstUserPrompt {
                         session.title = first
                     }
-                    store.upsert(session)
-                    return
                 }
+                if let effort = peek.reasoningEffort, effort != session.reasoningEffort {
+                    session.reasoningEffort = effort
+                    changed = true
+                }
+                if changed {
+                    store.upsert(session)
+                }
+                if foundReply { return }
             }
         }
     }
@@ -237,6 +247,9 @@ public enum SessionEventReducer {
         }
         // Unconditional: the transcript is the truth for recap presence.
         session.recap = peek.awaySummary
+        if let effort = peek.reasoningEffort {
+            session.reasoningEffort = effort
+        }
         // Title priority mirrors the original: a name the user gave the
         // session wins, then Claude's auto-generated title, then the first
         // prompt as a last resort.

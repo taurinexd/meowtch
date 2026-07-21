@@ -10,6 +10,8 @@ struct SessionRowView: View {
     /// Compact = the session has no visible terminal window to jump to
     /// (minimized, or adopted from transcripts with no live terminal).
     var isCompact = false
+    /// One global future-Settings preference; compact rows never use it.
+    var showSessionMetadata = false
     /// Adds the teal "^G ↗" jump-shortcut chip (finished-session peek).
     var showJumpHint = false
     @State private var isHovered = false
@@ -165,7 +167,11 @@ struct SessionRowView: View {
                             .foregroundStyle(Color.white.opacity(0.85))
                             .lineLimit(3)
                     }
-                    if !session.presentationMetadata.isEmpty {
+                    if SessionMetadataPresentation.shouldShow(
+                        enabled: showSessionMetadata,
+                        isCompact: isCompact,
+                        metadata: session.presentationMetadata
+                    ) {
                         Text(session.presentationMetadata.joined(separator: " · "))
                             .font(.system(size: 9.5, design: .monospaced))
                             .foregroundStyle(Theme.secondaryText.opacity(0.72))
