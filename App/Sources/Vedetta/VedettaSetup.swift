@@ -8,6 +8,7 @@ enum VedettaSetup {
     private static let configStore = HookConfigFileStore()
     private static let claudeRemovalKey = "hooks.deliberatelyRemoved.claude"
     private static let codexRemovalKey = "hooks.deliberatelyRemoved.codex"
+    private static let codexHomePathsKey = "codex.customHomes"
     static let home = NSHomeDirectory()
     static var rootDir: String { home + "/.vedetta" }
     static var binDir: String { rootDir + "/bin" }
@@ -17,7 +18,27 @@ enum VedettaSetup {
     static var launcherPath: String { binDir + "/vedetta-bridge" }
     static var orphanedPath: String { rootDir + "/.orphaned" }
     static var claudeSettingsPath: String { home + "/.claude/settings.json" }
-    static var codexHooksPath: String { home + "/.codex/hooks.json" }
+    static var codexHooksPath: String { codexHomes[0].hooksPath }
+    static var codexHomes: [CodexHome] {
+        CodexHomeRegistry.resolve(
+            defaultPath: home + "/.codex",
+            customPaths: UserDefaults.standard.stringArray(forKey: codexHomePathsKey) ?? [],
+            directoryExists: { FileManager.default.fileExists(atPath: $0) }
+        )
+    }
+
+    @discardableResult
+    static func registerCodexHome(_ path: String) -> CodexHome {
+        let canonical = CodexHomeRegistry.canonical(path)
+        var paths = UserDefaults.standard.stringArray(forKey: codexHomePathsKey) ?? []
+        if !paths.map(CodexHomeRegistry.canonical).contains(canonical),
+           canonical != CodexHomeRegistry.canonical(home + "/.codex") {
+            paths.append(canonical)
+            UserDefaults.standard.set(paths, forKey: codexHomePathsKey)
+        }
+        return codexHomes.first(where: { $0.path == canonical })
+            ?? CodexHome(path: canonical, isDefault: false, isAvailable: true)
+    }
 
     // MARK: - Runtime layout
 
@@ -115,8 +136,22 @@ enum VedettaSetup {
     }
 
     static func codexHooksInstalled() -> Bool {
-        guard let settings = try? configStore.read(at: URL(fileURLWithPath: codexHooksPath)) else { return false }
+        let available = codexHomes.filter(\.isAvailable)
+        return !available.isEmpty && available.allSatisfy(codexHooksInstalled(at:))
+    }
+
+    static func codexHooksInstalled(at codexHome: CodexHome) -> Bool {
+        guard let settings = try? configStore.read(
+            at: URL(fileURLWithPath: codexHome.hooksPath)
+        ) else { return false }
         return HookConfigurator.codexHooksInstalled(in: settings)
+    }
+
+    static func codexHooksExplicitlyDisabled(at codexHome: CodexHome) -> Bool {
+        guard let config = try? String(contentsOfFile: codexHome.configPath, encoding: .utf8) else {
+            return false
+        }
+        return CodexFeatureConfig.hooksExplicitlyDisabled(in: config)
     }
 
     /// Self-heal on every launch: if we were installed but some events
@@ -135,11 +170,18 @@ enum VedettaSetup {
 
     @discardableResult
     static func healCodexHooks() throws -> Bool {
-        guard !UserDefaults.standard.bool(forKey: codexRemovalKey),
-              let settings = try? configStore.read(at: URL(fileURLWithPath: codexHooksPath)),
-              HookConfigurator.hasAnyCodexHook(in: settings),
-              !HookConfigurator.codexHooksInstalled(in: settings) else { return false }
-        return try installCodexHooks()
+        var changed = false
+        for codexHome in codexHomes where codexHome.isAvailable {
+            guard !codexHooksExplicitlyDisabled(at: codexHome),
+                  !UserDefaults.standard.bool(forKey: removalKey(for: codexHome)),
+                  let settings = try? configStore.read(
+                    at: URL(fileURLWithPath: codexHome.hooksPath)
+                  ),
+                  HookConfigurator.hasAnyCodexHook(in: settings),
+                  !HookConfigurator.codexHooksInstalled(in: settings) else { continue }
+            changed = try installCodexHooks(at: codexHome) || changed
+        }
+        return changed
     }
 
     @discardableResult
@@ -163,16 +205,29 @@ enum VedettaSetup {
 
     @discardableResult
     static func installCodexHooks() throws -> Bool {
+        var changed = false
+        for codexHome in codexHomes where codexHome.isAvailable {
+            changed = try installCodexHooks(at: codexHome) || changed
+        }
+        return changed
+    }
+
+    @discardableResult
+    static func installCodexHooks(at codexHome: CodexHome) throws -> Bool {
+        guard !codexHooksExplicitlyDisabled(at: codexHome) else { return false }
+        let backupName = codexHome.isDefault
+            ? "hooks-default.json"
+            : "hooks-\((codexHome.path as NSString).lastPathComponent).json"
         let result = try configStore.mutate(
-            at: URL(fileURLWithPath: codexHooksPath),
+            at: URL(fileURLWithPath: codexHome.hooksPath),
             backupDirectory: URL(fileURLWithPath: backupsDir),
-            backupName: "hooks.json",
+            backupName: backupName,
             transform: HookConfigurator.mergingCodexHooks
         )
         // Deliberately do not mutate ~/.codex/config.toml or synthesize
         // trusted_hash values. Codex owns that trust decision and asks the
         // user to review new hook commands on the next interactive launch.
-        UserDefaults.standard.set(false, forKey: codexRemovalKey)
+        UserDefaults.standard.set(false, forKey: removalKey(for: codexHome))
         return result.changed
     }
 
@@ -198,12 +253,24 @@ enum VedettaSetup {
 
     @discardableResult
     static func removeCodexHooks() throws -> Bool {
-        defer { UserDefaults.standard.set(true, forKey: codexRemovalKey) }
-        guard FileManager.default.fileExists(atPath: codexHooksPath) else { return false }
+        var changed = false
+        for codexHome in codexHomes where codexHome.isAvailable {
+            changed = try removeCodexHooks(at: codexHome) || changed
+        }
+        return changed
+    }
+
+    @discardableResult
+    static func removeCodexHooks(at codexHome: CodexHome) throws -> Bool {
+        defer { UserDefaults.standard.set(true, forKey: removalKey(for: codexHome)) }
+        guard FileManager.default.fileExists(atPath: codexHome.hooksPath) else { return false }
+        let backupName = codexHome.isDefault
+            ? "hooks-default.json"
+            : "hooks-\((codexHome.path as NSString).lastPathComponent).json"
         return try configStore.mutate(
-            at: URL(fileURLWithPath: codexHooksPath),
+            at: URL(fileURLWithPath: codexHome.hooksPath),
             backupDirectory: URL(fileURLWithPath: backupsDir),
-            backupName: "hooks.json",
+            backupName: backupName,
             transform: HookConfigurator.removingCodexHooks
         ).changed
     }
@@ -229,6 +296,10 @@ enum VedettaSetup {
         // No path at all is unusual; don't claim in that ambiguous case.
         guard !paths.isEmpty else { return false }
         return !paths.contains { fm.fileExists(atPath: $0) }
+    }
+
+    private static func removalKey(for codexHome: CodexHome) -> String {
+        codexHome.isDefault ? codexRemovalKey : "(codexRemovalKey).(codexHome.path)"
     }
 
 }

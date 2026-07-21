@@ -77,37 +77,37 @@ enum SessionBootstrap {
     @MainActor
     static func adoptCodexSessions(
         into store: SessionStore,
-        coordinator: CodexIngressCoordinator
+        coordinator: CodexIngressCoordinator,
+        homes: [CodexHome]
     ) {
         let fm = FileManager.default
-        let home = NSHomeDirectory()
-        let root = home + "/.codex/sessions"
-        guard let enumerator = fm.enumerator(atPath: root) else { return }
-
         let cutoff = Date().addingTimeInterval(-recencyWindow)
-        var names: [String: String] = [:]
-        if let indexData = fm.contents(atPath: home + "/.codex/session_index.jsonl") {
-            names = CodexScan.parseIndex(indexData)
-        }
+        for codexHome in homes where codexHome.isAvailable {
+            guard let enumerator = fm.enumerator(atPath: codexHome.sessionsPath) else { continue }
+            var names: [String: String] = [:]
+            if let indexData = fm.contents(atPath: codexHome.sessionIndexPath) {
+                names = CodexScan.parseIndex(indexData)
+            }
 
-        while let relative = enumerator.nextObject() as? String {
-            guard relative.hasSuffix(".jsonl") else { continue }
-            let path = root + "/" + relative
-            guard let attrs = try? fm.attributesOfItem(atPath: path),
-                  let modified = attrs[.modificationDate] as? Date,
-                  modified > cutoff else { continue }
+            while let relative = enumerator.nextObject() as? String {
+                guard relative.hasSuffix(".jsonl") else { continue }
+                let path = codexHome.sessionsPath + "/" + relative
+                guard let attrs = try? fm.attributesOfItem(atPath: path),
+                      let modified = attrs[.modificationDate] as? Date,
+                      modified > cutoff else { continue }
 
-            var tailer = CodexRolloutTailer()
-            guard let rollout = try? tailer.read(from: URL(fileURLWithPath: path)),
-                  let rawID = rollout.threadID else { continue }
-            codexTailers[path] = tailer
-            let id = "codex-\(rawID)"
-            guard !store.sessions.contains(where: { $0.id == id }) else { continue }
-            let created = attrs[.creationDate] as? Date ?? modified
-            scannedPaths[id] = path
-            coordinator.apply(rollout: rollout, at: created)
-            if let title = names[rawID] {
-                coordinator.applyTitle(threadID: rawID, title: title)
+                var tailer = CodexRolloutTailer()
+                guard let rollout = try? tailer.read(from: URL(fileURLWithPath: path)),
+                      let rawID = rollout.threadID else { continue }
+                codexTailers[path] = tailer
+                let id = "codex-\(rawID)"
+                guard !store.sessions.contains(where: { $0.id == id }) else { continue }
+                let created = attrs[.creationDate] as? Date ?? modified
+                scannedPaths[id] = path
+                coordinator.apply(rollout: rollout, at: created)
+                if let title = names[rawID] {
+                    coordinator.applyTitle(threadID: rawID, title: title)
+                }
             }
         }
     }

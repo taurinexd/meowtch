@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var eventServer: EventServer?
     private var refreshTimer: Timer?
-    private var codexWatcher: CodexWatcher?
+    private var codexWatchers: [CodexWatcher] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if ProcessInfo.processInfo.arguments.contains("--mock") {
@@ -19,38 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !VIMapImport.adopt(into: store) {
                 SessionBootstrap.adoptRecentSessions(into: store)
             }
-            SessionBootstrap.adoptCodexSessions(
-                into: store,
-                coordinator: codexIngress
+            reloadCodexHomes()
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(codexHomesChanged),
+                name: .vedettaCodexHomesChanged,
+                object: nil
             )
-            // Keep watching Codex rollouts as a fallback for sessions that
-            // started before our hooks were installed. Hook events take
-            // ownership as soon as that session emits one.
-            let codexWatcher = CodexWatcher(
-                root: NSHomeDirectory() + "/.codex",
-                onRollout: { [weak self] path in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        SessionBootstrap.ingestCodexRollout(
-                            path: path,
-                            coordinator: self.codexIngress
-                        )
-                        self.store.touch()
-                    }
-                },
-                onIndex: { [weak self] path in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        SessionBootstrap.ingestCodexIndex(
-                            path: path,
-                            coordinator: self.codexIngress
-                        )
-                        self.store.touch()
-                    }
-                }
-            )
-            codexWatcher.start()
-            self.codexWatcher = codexWatcher
             JumpService.installVSCodeExtension()
             UsageModel.shared.start()
             let store = self.store
@@ -118,5 +93,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         eventServer?.stop()
+        codexWatchers.forEach { $0.stop() }
     }
+
+    @objc private func codexHomesChanged() {
+        reloadCodexHomes()
+    }
+
+    private func reloadCodexHomes() {
+        codexWatchers.forEach { $0.stop() }
+        let homes = VedettaSetup.codexHomes
+        SessionBootstrap.adoptCodexSessions(
+            into: store,
+            coordinator: codexIngress,
+            homes: homes
+        )
+        codexWatchers = homes.filter(\.isAvailable).map { codexHome in
+            CodexWatcher(
+                root: codexHome.path,
+                onRollout: { [weak self] path in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        SessionBootstrap.ingestCodexRollout(
+                            path: path,
+                            coordinator: self.codexIngress
+                        )
+                        self.store.touch()
+                    }
+                },
+                onIndex: { [weak self] path in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        SessionBootstrap.ingestCodexIndex(
+                            path: path,
+                            coordinator: self.codexIngress
+                        )
+                        self.store.touch()
+                    }
+                }
+            )
+        }
+        codexWatchers.forEach { $0.start() }
+    }
+}
+
+extension Notification.Name {
+    static let vedettaCodexHomesChanged = Notification.Name("VedettaCodexHomesChanged")
 }
