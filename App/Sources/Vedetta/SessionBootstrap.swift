@@ -60,6 +60,7 @@ enum SessionBootstrap {
                 agent: .claude,
                 title: peek.sessionName ?? peek.aiTitle ?? peek.firstUserPrompt ?? "",
                 directory: peek.cwd ?? "",
+                reasoningEffort: peek.reasoningEffort,
                 lastMessage: peek.lastUserText,
                 lastAssistantMessage: peek.lastAssistantText,
                 recap: peek.awaySummary,
@@ -189,6 +190,7 @@ enum SessionBootstrap {
             if let name = peek.sessionName ?? peek.aiTitle { session.title = name }
             if let last = peek.lastUserText { session.lastMessage = last }
             if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
+            if let effort = peek.reasoningEffort { session.reasoningEffort = effort }
             if let real = peek.lastActivity { activity = real }
             // Unconditional: nil means the recap is stale or absent.
             session.recap = peek.awaySummary
@@ -203,9 +205,17 @@ enum SessionBootstrap {
         for (id, path) in scannedPaths where liveEventIds.contains(id) {
             guard var session = store.sessions.first(where: { $0.id == id }),
                   session.agent == .claude else { continue }
-            let recap = TranscriptPeek.read(path: path).awaySummary
-            if session.recap != recap {
-                session.recap = recap
+            let peek = TranscriptPeek.read(path: path)
+            var changed = false
+            if session.recap != peek.awaySummary {
+                session.recap = peek.awaySummary
+                changed = true
+            }
+            if let effort = peek.reasoningEffort, session.reasoningEffort != effort {
+                session.reasoningEffort = effort
+                changed = true
+            }
+            if changed {
                 store.upsert(session)
             }
         }

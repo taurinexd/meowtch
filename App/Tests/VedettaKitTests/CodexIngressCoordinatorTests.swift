@@ -29,6 +29,7 @@ struct CodexIngressCoordinatorTests {
         activeTurns: Set<String> = [],
         user: String? = nil,
         agent: String? = nil,
+        reasoningEffort: String? = nil,
         tools: [String: CodexRolloutTool] = [:]
     ) -> CodexRolloutSnapshot {
         var snapshot = CodexRolloutSnapshot()
@@ -37,9 +38,24 @@ struct CodexIngressCoordinatorTests {
         snapshot.firstUserMessage = user
         snapshot.lastUserMessage = user
         snapshot.lastAgentMessage = agent
+        snapshot.reasoningEffort = reasoningEffort
         snapshot.activeTurnIDs = activeTurns
         snapshot.openTools = tools
         return snapshot
+    }
+
+    @Test func rolloutReasoningEffortReachesSessionAndLatestValueWins() {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+
+        #expect(coordinator.apply(rollout: rollout(
+            user: "inspect",
+            reasoningEffort: "high"
+        )))
+        #expect(store.sessions.first?.reasoningEffort == "high")
+
+        #expect(coordinator.apply(rollout: rollout(reasoningEffort: "xhigh")))
+        #expect(store.sessions.first?.reasoningEffort == "xhigh")
     }
 
     @Test func enforcesFieldAuthorityAcrossHookRolloutAndIndex() throws {

@@ -17,6 +17,8 @@ struct NotchView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject var model: NotchUIModel
     @ObservedObject private var usage = UsageModel.shared
+    @AppStorage(SessionMetadataPresentation.defaultsKey)
+    private var showSessionMetadata = false
     var geometry: NotchGeometry
     var onHoverChange: (Bool) -> Void
 
@@ -247,6 +249,7 @@ struct NotchView: View {
             SessionRowView(
                 session: session,
                 terminal: terminal,
+                showSessionMetadata: showSessionMetadata,
                 showJumpHint: !isInterrupt && terminal?.isJumpable == true
             )
             if !isInterrupt {
@@ -301,10 +304,19 @@ struct NotchView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach(fullSessions) { session in
-                        SessionRowView(session: session, terminal: store.terminal(for: session.id))
+                        SessionRowView(
+                            session: session,
+                            terminal: store.terminal(for: session.id),
+                            showSessionMetadata: showSessionMetadata
+                        )
                     }
                     ForEach(compactSessions) { session in
-                        SessionRowView(session: session, terminal: store.terminal(for: session.id), isCompact: true)
+                        SessionRowView(
+                            session: session,
+                            terminal: store.terminal(for: session.id),
+                            isCompact: true,
+                            showSessionMetadata: false
+                        )
                     }
                 }
                 // Breathing room so the first/last card (and their hover

@@ -152,6 +152,9 @@ public final class CodexIngressCoordinator {
         }
         session.currentTool = rollout.currentTool
         session.currentToolDetail = rollout.currentToolDetail
+        if let effort = rollout.reasoningEffort {
+            session.reasoningEffort = effort
+        }
         if let activity = rollout.lastActivityAt { session.lastActivityAt = activity }
 
         if !rollout.activeTurnIDs.isEmpty {

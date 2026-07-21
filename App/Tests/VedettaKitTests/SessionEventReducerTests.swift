@@ -133,6 +133,26 @@ struct SessionEventReducerTests {
         #expect(store.sessions.first?.currentTool == nil)
     }
 
+    @Test func transcriptReasoningEffortReachesClaudeSession() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vedetta-reducer-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transcript = directory.appendingPathComponent("session.jsonl")
+        try Data(("""
+        {"type":"user","message":{"role":"user","content":"inspect"}}
+        {"type":"assistant","effort":"high","message":{"role":"assistant","content":"done"}}
+        """ + "\n").utf8).write(to: transcript)
+
+        let store = SessionStore()
+        SessionEventReducer.apply(envelope("Stop", extra: [
+            "transcript_path": transcript.path,
+        ]), to: store)
+
+        #expect(store.sessions.first?.reasoningEffort == "high")
+    }
+
     @Test func delayedOlderHookCannotUndoNewerLifecycleState() {
         let store = SessionStore()
         let start = Date(timeIntervalSince1970: 100)
