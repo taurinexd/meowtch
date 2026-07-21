@@ -48,6 +48,7 @@ struct SessionRowView: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture {
+            guard terminal?.isJumpable == true else { return }
             JumpService.jump(to: session, terminal: terminal)
             // Jumping collapses the panel at once, like the original.
             NotificationCenter.default.post(name: .vedettaDidJump, object: nil)
@@ -163,6 +164,12 @@ struct SessionRowView: View {
                             .font(.system(size: 11.5))
                             .foregroundStyle(Color.white.opacity(0.85))
                             .lineLimit(3)
+                    }
+                    if !session.presentationMetadata.isEmpty {
+                        Text(session.presentationMetadata.joined(separator: " · "))
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(Theme.secondaryText.opacity(0.72))
+                            .lineLimit(1)
                     }
                 }
             }

@@ -42,6 +42,9 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var currentTurnID: String?
     public var currentToolUseID: String?
     public var permissionMode: String?
+    public var parentSessionID: String?
+    public var subagentRole: String?
+    public var subagentNickname: String?
     public var currentTool: String?
     public var currentToolDetail: String?
     public var lastMessage: String?
@@ -76,6 +79,9 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         currentTurnID: String? = nil,
         currentToolUseID: String? = nil,
         permissionMode: String? = nil,
+        parentSessionID: String? = nil,
+        subagentRole: String? = nil,
+        subagentNickname: String? = nil,
         currentTool: String? = nil,
         currentToolDetail: String? = nil,
         lastMessage: String? = nil,
@@ -98,6 +104,9 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.currentTurnID = currentTurnID
         self.currentToolUseID = currentToolUseID
         self.permissionMode = permissionMode
+        self.parentSessionID = parentSessionID
+        self.subagentRole = subagentRole
+        self.subagentNickname = subagentNickname
         self.currentTool = currentTool
         self.currentToolDetail = currentToolDetail
         self.lastMessage = lastMessage
@@ -114,5 +123,16 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     /// Last path component of the working directory, used as the card title prefix.
     public var directoryName: String {
         (directory as NSString).lastPathComponent
+    }
+
+    public var presentationMetadata: [String] {
+        var values = [gitBranch, model, permissionMode].compactMap { value in
+            value?.isEmpty == false ? value : nil
+        }
+        if let role = subagentRole, !role.isEmpty {
+            let detail = subagentNickname?.isEmpty == false ? "\(role): \(subagentNickname!)" : role
+            values.append(detail)
+        }
+        return values
     }
 }

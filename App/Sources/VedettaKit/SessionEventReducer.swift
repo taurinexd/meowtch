@@ -30,6 +30,11 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
         self.windowId = windowId
         self.pidChain = pidChain
     }
+
+    public var isJumpable: Bool {
+        guard bundleIdentifier?.isEmpty == false else { return false }
+        return windowId != nil || pid != nil || pidChain?.isEmpty == false
+    }
 }
 
 /// Turns bridge envelopes (hook payload + terminal identity) into
