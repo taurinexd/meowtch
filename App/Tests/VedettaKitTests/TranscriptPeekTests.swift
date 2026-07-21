@@ -89,6 +89,16 @@ struct TranscriptPeekTests {
         #expect(TranscriptPeek.parse(Data(withAgent.utf8)).aiTitle == "kamal-crm-upgrade")
     }
 
+    @Test func latestMainSessionEffortWins() {
+        let data = Data(("""
+        {"type":"assistant","effort":"high","message":{"role":"assistant","content":[{"type":"text","text":"prima"}]}}
+        {"type":"assistant","isSidechain":true,"effort":"low","message":{"role":"assistant","content":[{"type":"text","text":"worker"}]}}
+        {"type":"assistant","effort":"xhigh","message":{"role":"assistant","content":[{"type":"text","text":"dopo"}]}}
+        """ + "\n").utf8)
+
+        #expect(TranscriptPeek.parse(data).reasoningEffort == "xhigh")
+    }
+
     @Test func awaySummaryIsCapturedAndInvalidatedByNewerUserMessage() {
         let withRecap = fixture + "\n" + """
         {"type":"system","subtype":"away_summary","content":"Checkout sistemato: CAP validato e test verdi.","uuid":"x"}

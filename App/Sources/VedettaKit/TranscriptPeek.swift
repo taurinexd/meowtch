@@ -31,6 +31,8 @@ public struct TranscriptPeek: Sendable {
     /// turn while the user is away. Shown in place of the message lines,
     /// like the original; any newer user message invalidates it.
     public var awaySummary: String?
+    /// Claude's latest main-session reasoning effort, when recorded.
+    public var reasoningEffort: String?
 
     /// Parses transcript JSONL content. Malformed lines are skipped.
     public static func parse(_ data: Data) -> TranscriptPeek {
@@ -44,6 +46,11 @@ public struct TranscriptPeek: Sendable {
             if let title = (entry["aiTitle"] as? String) ?? (entry["agentName"] as? String),
                !title.isEmpty {
                 peek.aiTitle = title
+            }
+
+            if entry["isSidechain"] as? Bool != true,
+               let effort = nonEmpty(entry["effort"] as? String) {
+                peek.reasoningEffort = effort
             }
 
             // The recap is a bare system entry (content string, no message).
@@ -139,6 +146,7 @@ public struct TranscriptPeek: Sendable {
         merged.lastActivity = tailPeek.lastActivity ?? headPeek.lastActivity
         // Tail only: a recap buried in the head predates the tail's lines.
         merged.awaySummary = tailPeek.awaySummary
+        merged.reasoningEffort = tailPeek.reasoningEffort ?? headPeek.reasoningEffort
 
         // Renames outside these windows are picked up by the async
         // TranscriptFullScan — never a synchronous full read here.
@@ -153,5 +161,11 @@ public struct TranscriptPeek: Sendable {
             return block["text"] as? String
         }
         return texts.isEmpty ? nil : texts.joined(separator: " ")
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 }

@@ -95,4 +95,22 @@ struct CodexRolloutTailerTests {
 
         #expect(try tailer.read(from: temp.file).lastAgentMessage == "rollout enrichment")
     }
+
+    @Test func readsDirectReasoningEffortFromTurnContext() {
+        var tailer = CodexRolloutTailer()
+        let snapshot = tailer.ingest(Data(("""
+        {"type":"turn_context","payload":{"effort":"high","collaboration_mode":{"settings":{"reasoning_effort":"low"}}}}
+        """ + "\n").utf8))
+
+        #expect(snapshot.reasoningEffort == "high")
+    }
+
+    @Test func fallsBackToNestedReasoningEffortFromTurnContext() {
+        var tailer = CodexRolloutTailer()
+        let snapshot = tailer.ingest(Data(("""
+        {"type":"turn_context","payload":{"collaboration_mode":{"settings":{"reasoning_effort":"medium"}}}}
+        """ + "\n").utf8))
+
+        #expect(snapshot.reasoningEffort == "medium")
+    }
 }
