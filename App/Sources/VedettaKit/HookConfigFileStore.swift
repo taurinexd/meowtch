@@ -30,7 +30,9 @@ public struct HookConfigFileStore: Sendable {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
         let data = try Data(contentsOf: url)
         do {
-            guard let dictionary = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            guard let dictionary = try JSONSerialization.jsonObject(
+                with: strippingLineComments(from: data)
+            ) as? [String: Any] else {
                 throw HookConfigFileStoreError.malformedConfiguration(url)
             }
             return dictionary
@@ -39,6 +41,46 @@ public struct HookConfigFileStore: Sendable {
         } catch {
             throw HookConfigFileStoreError.malformedConfiguration(url)
         }
+    }
+
+    private func strippingLineComments(from data: Data) -> Data {
+        let bytes = Array(data)
+        var output: [UInt8] = []
+        output.reserveCapacity(bytes.count)
+        var index = 0
+        var inString = false
+        var escaped = false
+        while index < bytes.count {
+            let byte = bytes[index]
+            if inString {
+                output.append(byte)
+                if escaped {
+                    escaped = false
+                } else if byte == 0x5C {
+                    escaped = true
+                } else if byte == 0x22 {
+                    inString = false
+                }
+                index += 1
+                continue
+            }
+            if byte == 0x22 {
+                inString = true
+                output.append(byte)
+                index += 1
+                continue
+            }
+            if byte == 0x2F, index + 1 < bytes.count, bytes[index + 1] == 0x2F {
+                index += 2
+                while index < bytes.count, bytes[index] != 0x0A, bytes[index] != 0x0D {
+                    index += 1
+                }
+                continue
+            }
+            output.append(byte)
+            index += 1
+        }
+        return Data(output)
     }
 
     public func mutate(

@@ -83,3 +83,9 @@ public enum CodexApprovalPolicy {
         return String(decoding: data, as: UTF8.self)
     }
 }
+
+public enum ClaudeApprovalPolicy {
+    public static func route(deferToNative: Bool) -> CodexApprovalRoute {
+        deferToNative ? .terminal : .notch
+    }
+}

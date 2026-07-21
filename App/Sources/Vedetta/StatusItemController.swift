@@ -94,6 +94,16 @@ final class StatusItemController {
         }
         approvalItem.submenu = approvalMenu
         menu.addItem(approvalItem)
+        let nativeClaudeItem = NSMenuItem(
+            title: "Use Native Claude Code Approvals",
+            action: #selector(toggleNativeClaudeApprovals(_:)),
+            keyEquivalent: ""
+        )
+        nativeClaudeItem.target = self
+        nativeClaudeItem.state = UserDefaults.standard.bool(
+            forKey: "deferClaudeApprovalsToNative"
+        ) ? .on : .off
+        menu.addItem(nativeClaudeItem)
         let muteItem = NSMenuItem(
             title: "Mute Sounds",
             action: #selector(toggleMute),
@@ -269,6 +279,12 @@ final class StatusItemController {
         for item in sender.menu?.items ?? [] {
             item.state = item === sender ? .on : .off
         }
+    }
+
+    @objc private func toggleNativeClaudeApprovals(_ sender: NSMenuItem) {
+        let enabled = !UserDefaults.standard.bool(forKey: "deferClaudeApprovalsToNative")
+        UserDefaults.standard.set(enabled, forKey: "deferClaudeApprovalsToNative")
+        sender.state = enabled ? .on : .off
     }
 
     private func report(_ work: () throws -> String) {

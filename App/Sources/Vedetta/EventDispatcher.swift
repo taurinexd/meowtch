@@ -84,6 +84,13 @@ enum EventDispatcher {
                 )
             } else {
                 SessionEventReducer.apply(envelope, to: store)
+                if ClaudeApprovalPolicy.route(
+                    deferToNative: UserDefaults.standard.bool(
+                        forKey: "deferClaudeApprovalsToNative"
+                    )
+                ) == .terminal {
+                    return empty
+                }
             }
             return await handlePermissionRequest(
                 event,

@@ -32,7 +32,8 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
     }
 
     public var isJumpable: Bool {
-        guard bundleIdentifier?.isEmpty == false else { return false }
+        let hasKnownHost = bundleIdentifier?.isEmpty == false || termProgram == "vscode"
+        guard hasKnownHost else { return false }
         return windowId != nil || pid != nil || pidChain?.isEmpty == false
     }
 }
