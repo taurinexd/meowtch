@@ -9,6 +9,7 @@ import VedettaKit
 @MainActor
 enum EventDispatcher {
     static var store: SessionStore?
+    static var codexCoordinator: CodexIngressCoordinator?
 
     static func handle(_ data: Data) async -> Data {
         let empty = Data("{}".utf8)
@@ -49,7 +50,11 @@ enum EventDispatcher {
             // The reducer first: it creates the session lazily (the request
             // can be the first thing we ever hear from a session), records
             // the terminal identity and enriches title/messages.
-            SessionEventReducer.apply(envelope, to: store)
+            if let codexHook {
+                codexCoordinator?.apply(hook: codexHook)
+            } else {
+                SessionEventReducer.apply(envelope, to: store)
+            }
             return await handlePermissionRequest(
                 event,
                 source: envelope["source"] as? String ?? "claude",
@@ -58,7 +63,11 @@ enum EventDispatcher {
             )
         }
 
-        SessionEventReducer.apply(envelope, to: store)
+        if let codexHook {
+            codexCoordinator?.apply(hook: codexHook)
+        } else {
+            SessionEventReducer.apply(envelope, to: store)
+        }
 
         // A pending request goes stale when the tool proceeds without our
         // decision (bypass mode) or the user answers in the terminal: the

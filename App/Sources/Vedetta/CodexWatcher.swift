@@ -3,16 +3,22 @@ import Foundation
 
 /// Watches `~/.codex/sessions` for rollout changes and hands each touched
 /// rollout file to a callback, so Codex cards update near-instantly instead of
-/// waiting for the periodic pass — Codex has no hooks, so this file stream is
-/// the live signal. FSEvents coalesces bursts with its own latency window.
+/// waiting for the periodic pass. This is the compatibility signal for
+/// pre-hook sessions; FSEvents coalesces bursts with its own latency window.
 final class CodexWatcher {
     private var stream: FSEventStreamRef?
     private let root: String
     private let onRollout: (String) -> Void
+    private let onIndex: (String) -> Void
 
-    init(root: String, onRollout: @escaping (String) -> Void) {
+    init(
+        root: String,
+        onRollout: @escaping (String) -> Void,
+        onIndex: @escaping (String) -> Void
+    ) {
         self.root = root
         self.onRollout = onRollout
+        self.onIndex = onIndex
     }
 
     func start() {
@@ -53,8 +59,12 @@ final class CodexWatcher {
               let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
         let watcher = Unmanaged<CodexWatcher>.fromOpaque(info).takeUnretainedValue()
         var seen = Set<String>()
-        for path in paths where path.contains("rollout-") && path.hasSuffix(".jsonl") {
-            if seen.insert(path).inserted { watcher.onRollout(path) }
+        for path in paths where seen.insert(path).inserted {
+            if path.contains("rollout-") && path.hasSuffix(".jsonl") {
+                watcher.onRollout(path)
+            } else if path.hasSuffix("/session_index.jsonl") {
+                watcher.onIndex(path)
+            }
         }
     }
 }
