@@ -61,13 +61,15 @@ public enum HookConfigurator {
     public static func mergingCodexHooks(
         into settings: [String: Any]
     ) -> ([String: Any], changed: Bool) {
-        mergingHooks(
-            into: settings,
+        let (pruned, prunedObsolete) = removingObsoleteCodexHooks(from: settings)
+        let (merged, installedMissing) = mergingHooks(
+            into: pruned,
             events: codexEvents,
             source: "codex",
             matchers: ["PostToolUse": ""],
             timeouts: codexTimeouts
         )
+        return (merged, prunedObsolete || installedMissing)
     }
 
     private static func mergingHooks(
@@ -192,9 +194,14 @@ public enum HookConfigurator {
 
     public static func codexHooksInstalled(in settings: [String: Any]) -> Bool {
         guard let hooks = settings["hooks"] as? [String: Any] else { return false }
-        return codexEvents.allSatisfy { event in
+        let requiredPresent = codexEvents.allSatisfy { event in
             containsMarker(hooks[event] as? [[String: Any]] ?? [], source: "codex")
         }
+        let hasObsolete = hooks.contains { event, value in
+            !codexEvents.contains(event)
+                && containsMarker(value as? [[String: Any]] ?? [], source: "codex")
+        }
+        return requiredPresent && !hasObsolete
     }
 
     /// True when at least one of our hooks is present: distinguishes "the
@@ -232,5 +239,27 @@ public enum HookConfigurator {
             guard let command = $0["command"] as? String else { return false }
             return command.contains(markerToken) && command.contains("--source \(source)")
         }
+    }
+
+    private static func removingObsoleteCodexHooks(
+        from settings: [String: Any]
+    ) -> ([String: Any], changed: Bool) {
+        var settings = settings
+        guard var hooks = settings["hooks"] as? [String: Any] else { return (settings, false) }
+        var changed = false
+
+        for (event, value) in hooks where !codexEvents.contains(event) {
+            guard let groups = value as? [[String: Any]] else { continue }
+            let kept = groups.filter { !groupHasMarker($0, source: "codex") }
+            guard kept.count != groups.count else { continue }
+            changed = true
+            if kept.isEmpty {
+                hooks.removeValue(forKey: event)
+            } else {
+                hooks[event] = kept
+            }
+        }
+        settings["hooks"] = hooks
+        return (settings, changed)
     }
 }
