@@ -96,10 +96,21 @@ public struct HookConfigFileStore: Sendable {
             return HookConfigMutationResult(changed: false, backupURL: nil)
         }
 
-        let data = try JSONSerialization.data(
-            withJSONObject: updated,
-            options: [.prettyPrinted, .sortedKeys]
-        )
+        // The user's file is rewritten in place: keep their member order,
+        // comments and literal formatting, rewriting only what the
+        // transform actually changed. Fresh files (or unparseable edge
+        // cases) fall back to plain pretty-printed JSON.
+        let data: Data
+        if existed,
+           let original = try? Data(contentsOf: url),
+           let document = try? OrderedJSONDocument(data: original) {
+            data = Data(document.merged(with: updated).serialized().utf8)
+        } else {
+            data = try JSONSerialization.data(
+                withJSONObject: updated,
+                options: [.prettyPrinted, .sortedKeys]
+            )
+        }
 
         var backupURL: URL?
         if existed {
