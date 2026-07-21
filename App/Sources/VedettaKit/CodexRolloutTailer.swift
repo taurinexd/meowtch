@@ -30,6 +30,7 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
     public var lastUserMessage: String?
     public var lastAgentMessage: String?
     public var lastActivityAt: Date?
+    public var reasoningEffort: String?
     public var activeTurnIDs: Set<String> = []
     public var openTools: [String: CodexRolloutTool] = [:]
 
@@ -111,6 +112,14 @@ public struct CodexRolloutTailer: Sendable {
             snapshot.threadID = (payload["session_id"] as? String)
                 ?? (payload["id"] as? String)
             snapshot.cwd = payload["cwd"] as? String
+            return
+        }
+
+        if type == "turn_context" {
+            let settings = (payload["collaboration_mode"] as? [String: Any])?["settings"] as? [String: Any]
+            let direct = Self.nonEmpty(payload["effort"] as? String)
+            let nested = Self.nonEmpty(settings?["reasoning_effort"] as? String)
+            snapshot.reasoningEffort = direct ?? nested ?? snapshot.reasoningEffort
             return
         }
 
@@ -207,6 +216,12 @@ public struct CodexRolloutTailer: Sendable {
         case "web_search": "WebSearch"
         default: name
         }
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     private static func date(_ value: Any?) -> Date? {
