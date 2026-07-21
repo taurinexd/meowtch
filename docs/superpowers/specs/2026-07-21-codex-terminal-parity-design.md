@@ -211,9 +211,16 @@ Codex cards show the same terminal-centric information as Claude cards:
 
 Built-in admission rules suppress known background-only sessions: Guardian or
 AutoReview, memory consolidation and writer sessions, Chronicle summaries,
-Codex App suggested-prompt workers, and Git-helper prompts. Because desktop
-clients are out of scope, desktop-only workers are filtered rather than
-presented or controlled.
+Codex App suggested-prompt workers, Git-helper prompts, and Codex Companion
+`task-worker` sessions launched by the Claude integration. Admission is checked
+both when a rollout is first discovered and after title hydration: if a late
+`session_index.jsonl` update reveals an internal worker, its provisional card
+and terminal mapping are removed. Because desktop clients are out of scope,
+desktop-only workers are filtered rather than presented or controlled.
+
+`session_index.jsonl` is a live title source, not startup metadata. A later
+`thread_name` for an existing thread replaces the first-prompt fallback as soon
+as it is appended, without an app or session restart.
 
 ### 8. Usage
 
@@ -268,13 +275,14 @@ Unit tests cover:
   config rejection, and custom-home routing;
 - raw Codex hook adaptation and namespacing;
 - incremental append, partial line, truncation, custom-tool `input`, shell-name
-  normalization, parallel call IDs, and session-index title updates;
+  normalization, parallel call IDs, and live session-index rename updates;
 - hook/rollout authority, revision ordering, identity mismatch, completion
   fallback, and duplicate suppression;
 - approval fingerprints, routing modes, disconnect fallback, and exact output;
 - app-server request multiplexing, restart, trust-state interpretation, and
   last-known-good usage behaviour;
-- internal-worker admission rules.
+- internal-worker admission rules, including provisional cards reclassified by
+  a late `Codex Companion Task:` title.
 
 Integration tests exercise bridge-to-socket framing and a fake local app-server
 process. They do not alter real user configuration.
@@ -287,8 +295,10 @@ real Codex session in an IDE terminal:
 3. Allow and deny from the Notch affect the intended request.
 4. Terminal/native routing leaves the request safely in Codex.
 5. App restart and a pre-hook session recover without duplicate cards.
-6. Existing foreign hooks and `notify` remain unchanged.
-7. Removal restores a clean Vedetta-free configuration.
+6. Renaming the Codex conversation updates the existing card without restart.
+7. Claude-launched Codex Companion workers do not appear as user cards.
+8. Existing foreign hooks and `notify` remain unchanged.
+9. Removal restores a clean Vedetta-free configuration.
 
 ## Claude verification phase
 
