@@ -54,6 +54,14 @@ public final class CodexIngressCoordinator {
         session.permissionMode = hook.permissionMode ?? session.permissionMode
         session.model = hook.model ?? session.model
         if let cwd = hook.cwd { session.directory = rootDirectory(session.directory, cwd) }
+        if session.gitBranch == nil {
+            session.gitBranch = GitIdentity.branch(forDirectory: session.directory)
+        }
+        if let parent = hook.parentThreadID {
+            session.parentSessionID = sessionID(parent)
+        }
+        session.subagentRole = hook.subagentRole ?? session.subagentRole
+        session.subagentNickname = hook.subagentNickname ?? session.subagentNickname
         session.lastActivityAt = date
         store.setTerminal(hook.terminal, for: id)
 

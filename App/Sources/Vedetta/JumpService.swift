@@ -11,7 +11,7 @@ enum JumpService {
         var trace = ["jump \(session.id.prefix(8))"]
         defer { log(trace.joined(separator: " ")) }
 
-        guard let terminal else {
+        guard let terminal, terminal.isJumpable else {
             trace.append("NO-TERMINAL")
             return
         }

@@ -130,4 +130,18 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.first?.id == "codex-thread-1")
         #expect(store.sessions.first?.lastMessage == "authoritative")
     }
+
+    @Test func retainsParentAwareSubagentDetail() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        coordinator.apply(hook: try hook("SubagentStop", extra: [
+            "parent_session_id": "parent-thread",
+            "subagent_role": "reviewer",
+            "subagent_nickname": "security",
+        ]))
+
+        #expect(store.sessions.first?.parentSessionID == "codex-parent-thread")
+        #expect(store.sessions.first?.subagentRole == "reviewer")
+        #expect(store.sessions.first?.subagentNickname == "security")
+    }
 }

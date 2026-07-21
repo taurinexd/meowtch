@@ -156,8 +156,9 @@ struct NotchView: View {
 
     private func deservesFullRow(_ session: AgentSession) -> Bool {
         guard !session.isMinimized else { return false }
-        // Claude cards need a live terminal (they're jumpable); Codex has no
-        // terminal identity yet, so an active Codex session earns a card too.
+        // Claude cards need a live terminal. Codex rollout fallbacks may not
+        // have one, so an active Codex session still earns a full card; hook-
+        // driven Codex sessions carry the same jump identity as Claude.
         if session.agent == .claude, store.terminal(for: session.id) == nil { return false }
         if session.state == .running || session.state == .needsApproval
             || session.state == .compacting { return true }
@@ -241,11 +242,12 @@ struct NotchView: View {
         // gets the prompt/reply inset. Section gaps measured on the recording:
         // 13.5pt card→inset→link.
         let isInterrupt = session.state == .needsApproval
+        let terminal = store.terminal(for: session.id)
         return VStack(alignment: .leading, spacing: 13) {
             SessionRowView(
                 session: session,
-                terminal: store.terminal(for: session.id),
-                showJumpHint: !isInterrupt
+                terminal: terminal,
+                showJumpHint: !isInterrupt && terminal?.isJumpable == true
             )
             if !isInterrupt {
                 peekReplyPanel(session)
