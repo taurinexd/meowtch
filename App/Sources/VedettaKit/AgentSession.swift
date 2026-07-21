@@ -37,6 +37,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var directory: String
     public var gitBranch: String?
     public var model: String?
+    public var reasoningEffort: String?
     /// Original Codex identities retained alongside Vedetta's namespaced ID.
     public var codexThreadID: String?
     public var currentTurnID: String?
@@ -75,6 +76,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         directory: String,
         gitBranch: String? = nil,
         model: String? = nil,
+        reasoningEffort: String? = nil,
         codexThreadID: String? = nil,
         currentTurnID: String? = nil,
         currentToolUseID: String? = nil,
@@ -100,6 +102,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.directory = directory
         self.gitBranch = gitBranch
         self.model = model
+        self.reasoningEffort = reasoningEffort
         self.codexThreadID = codexThreadID
         self.currentTurnID = currentTurnID
         self.currentToolUseID = currentToolUseID
@@ -126,13 +129,20 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     }
 
     public var presentationMetadata: [String] {
-        var values = [gitBranch, model, permissionMode].compactMap { value in
+        [gitBranch, model, reasoningEffort].compactMap { value in
             value?.isEmpty == false ? value : nil
         }
-        if let role = subagentRole, !role.isEmpty {
-            let detail = subagentNickname?.isEmpty == false ? "\(role): \(subagentNickname!)" : role
-            values.append(detail)
-        }
-        return values
+    }
+}
+
+public enum SessionMetadataPresentation {
+    public static let defaultsKey = "showSessionMetadata"
+
+    public static func shouldShow(
+        enabled: Bool,
+        isCompact: Bool,
+        metadata: [String]
+    ) -> Bool {
+        enabled && !isCompact && !metadata.isEmpty
     }
 }
