@@ -21,12 +21,22 @@ public enum CodexAdmissionRules {
         "memory-consolidation", "chronicle", "suggested-prompts", "git-helper",
     ]
 
+    private static let blockedOriginators: Set<String> = [
+        "codex desktop", "claude code",
+    ]
+
     public static func shouldAdmit(
         title: String?,
         metadata: [String: String] = [:]
     ) -> Bool {
         let normalizedMetadata = metadata.values.map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+        if let originator = metadata["originator"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+           blockedOriginators.contains(originator) {
+            return false
         }
         if normalizedMetadata.contains(where: blockedWorkerKinds.contains) {
             return false

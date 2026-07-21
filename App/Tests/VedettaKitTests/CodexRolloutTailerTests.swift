@@ -151,4 +151,15 @@ struct CodexRolloutTailerTests {
         #expect(snapshot.state == .waiting)
         #expect(snapshot.openTools.isEmpty)
     }
+
+    @Test func parsesTerminalOriginForAdmissionAndJumpParity() {
+        var tailer = CodexRolloutTailer()
+        let snapshot = tailer.ingest(Data(("""
+        {"type":"session_meta","payload":{"session_id":"thread-1","cwd":"/repo","originator":"codex-tui","source":"cli","thread_source":"user"}}
+        """ + "\n").utf8))
+
+        #expect(snapshot.originator == "codex-tui")
+        #expect(snapshot.source == "cli")
+        #expect(snapshot.threadSource == "user")
+    }
 }

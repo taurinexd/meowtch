@@ -26,6 +26,9 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
 
     public var threadID: String?
     public var cwd: String?
+    public var originator: String?
+    public var source: String?
+    public var threadSource: String?
     public var firstUserMessage: String?
     public var lastUserMessage: String?
     public var lastAgentMessage: String?
@@ -40,6 +43,14 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
     }
     public var currentToolDetail: String? {
         openTools.values.max(by: { $0.sequence < $1.sequence })?.detail
+    }
+
+    public var admissionMetadata: [String: String] {
+        var metadata: [String: String] = [:]
+        if let originator { metadata["originator"] = originator }
+        if let source { metadata["source"] = source }
+        if let threadSource { metadata["thread_source"] = threadSource }
+        return metadata
     }
 }
 
@@ -112,6 +123,9 @@ public struct CodexRolloutTailer: Sendable {
             snapshot.threadID = (payload["session_id"] as? String)
                 ?? (payload["id"] as? String)
             snapshot.cwd = payload["cwd"] as? String
+            snapshot.originator = payload["originator"] as? String
+            snapshot.source = payload["source"] as? String
+            snapshot.threadSource = payload["thread_source"] as? String
             return
         }
 
