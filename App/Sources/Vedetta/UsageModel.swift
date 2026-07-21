@@ -112,14 +112,26 @@ final class UsageModel: ObservableObject {
         Task { await refreshCodex() }
     }
 
-    /// Codex quota via `codex app-server`, throttled to a few minutes since it
-    /// spawns a process. Keeps the last-known windows on failure.
+    /// Codex quota via the shared warm `codex app-server` connection. Keeps
+    /// the last-known windows on failure.
     private func refreshCodex() async {
         if let last = lastCodexProbe, Date().timeIntervalSince(last) < 240 { return }
-        guard let snapshot = await CodexUsageProbe.probe() else { return }
+        guard let snapshot = await CodexAppServerClient.shared.rateLimits() else { return }
         lastCodexProbe = Date()
-        codexPrimary = snapshot.primary
-        codexSecondary = snapshot.secondary
+        codexPrimary = snapshot.primary.map {
+            Window(
+                percent: $0.usedPercent,
+                resetsAt: $0.resetsAt,
+                windowMinutes: $0.windowDurationMinutes
+            )
+        }
+        codexSecondary = snapshot.secondary.map {
+            Window(
+                percent: $0.usedPercent,
+                resetsAt: $0.resetsAt,
+                windowMinutes: $0.windowDurationMinutes
+            )
+        }
     }
 
     private func collectWindows(
