@@ -16,17 +16,23 @@ final class ApprovalCenter: ObservableObject {
         // driving the native picker.
     }
 
+    enum Outcome {
+        case decision(allow: Bool, message: String?)
+        case handoff
+    }
+
     struct Pending: Identifiable {
         let id: Int
         let sessionId: String
         let toolName: String
         let toolDetail: String?
         let kind: Kind
+        let fingerprint: String?
         let receivedAt: Date
     }
 
     @Published private(set) var pending: [Pending] = []
-    private var continuations: [Int: CheckedContinuation<(allow: Bool, message: String?), Never>] = [:]
+    private var continuations: [Int: CheckedContinuation<Outcome, Never>] = [:]
     private var nextId = 1
 
     /// Called when a new request arrives (expand the panel, play a sound).
@@ -38,8 +44,9 @@ final class ApprovalCenter: ObservableObject {
         sessionId: String,
         toolName: String,
         toolDetail: String?,
-        kind: Kind = .tool
-    ) async -> (allow: Bool, message: String?) {
+        kind: Kind = .tool,
+        fingerprint: String? = nil
+    ) async -> Outcome {
         let id = nextId
         nextId += 1
         pending.append(Pending(
@@ -48,6 +55,7 @@ final class ApprovalCenter: ObservableObject {
             toolName: toolName,
             toolDetail: toolDetail,
             kind: kind,
+            fingerprint: fingerprint,
             receivedAt: Date()
         ))
         onArrival?()
@@ -56,22 +64,24 @@ final class ApprovalCenter: ObservableObject {
         }
     }
 
-    func decide(id: Int, allow: Bool, message: String? = nil) {
-        guard let continuation = continuations.removeValue(forKey: id) else { return }
+    func decide(id: Int, allow: Bool, message: String? = nil, fingerprint: String? = nil) {
+        guard let item = pending.first(where: { $0.id == id }),
+              fingerprint == nil || fingerprint == item.fingerprint,
+              let continuation = continuations.removeValue(forKey: id) else { return }
         pending.removeAll { $0.id == id }
-        continuation.resume(returning: (allow, message))
+        continuation.resume(returning: .decision(allow: allow, message: message))
         if pending.isEmpty { onDrain?() }
     }
 
     /// The tool proceeded without us — bypass mode, or the user answered in
     /// the terminal — so a request still on screen is stale. Drop it and
-    /// unblock the (now-ignored) bridge connection so nothing hangs.
+    /// unblock the bridge without manufacturing an authorization decision.
     func resolveStale(sessionId: String) {
         let stale = pending.filter { $0.sessionId == sessionId }
         guard !stale.isEmpty else { return }
         for item in stale {
             continuations.removeValue(forKey: item.id)?
-                .resume(returning: (allow: true, message: nil))
+                .resume(returning: .handoff)
         }
         pending.removeAll { $0.sessionId == sessionId }
         if pending.isEmpty { onDrain?() }

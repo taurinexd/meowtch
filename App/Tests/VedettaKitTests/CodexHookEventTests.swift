@@ -52,6 +52,9 @@ struct CodexHookEventTests {
             "parent_session_id": "parent-thread",
             "subagent_role": "reviewer",
             "subagent_nickname": "lint",
+            "approvals_reviewer": "guardian",
+            "sandbox_policy": ["type": "workspace-write"],
+            "auto_reviewed": false,
         ]))
 
         #expect(decoded.turnID == "turn-1")
@@ -68,6 +71,9 @@ struct CodexHookEventTests {
         #expect(decoded.parentThreadID == "parent-thread")
         #expect(decoded.subagentRole == "reviewer")
         #expect(decoded.subagentNickname == "lint")
+        #expect(decoded.configuredReviewer == "guardian")
+        #expect(decoded.sandboxPolicy == .object(["type": .string("workspace-write")]))
+        #expect(!decoded.autoReviewed)
         #expect(decoded.terminal.tty == "/dev/ttys009")
         #expect(decoded.terminal.windowId == 77)
         #expect(decoded.terminal.pidChain == [42, 21, 10])

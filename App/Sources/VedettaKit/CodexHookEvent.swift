@@ -85,6 +85,9 @@ public struct CodexHookEvent: Equatable, Sendable {
     public let parentThreadID: String?
     public let subagentRole: String?
     public let subagentNickname: String?
+    public let configuredReviewer: String?
+    public let sandboxPolicy: JSONValue?
+    public let autoReviewed: Bool
     public let terminal: TerminalInfo
 
     public var sessionID: String { "codex-\(threadID)" }
@@ -135,6 +138,9 @@ public struct CodexHookEvent: Equatable, Sendable {
             ?? (event["parent_thread_id"] as? String)
         subagentRole = event["subagent_role"] as? String
         subagentNickname = event["subagent_nickname"] as? String
+        configuredReviewer = event["approvals_reviewer"] as? String
+        sandboxPolicy = JSONValue(any: event["sandbox_policy"])
+        autoReviewed = (event["auto_reviewed"] as? Bool) ?? false
         terminal = Self.decodeTerminal(envelope["terminal"] as? [String: Any])
     }
 
@@ -163,6 +169,9 @@ public struct CodexHookEvent: Equatable, Sendable {
         if let parentThreadID { event["parent_session_id"] = parentThreadID }
         if let subagentRole { event["subagent_role"] = subagentRole }
         if let subagentNickname { event["subagent_nickname"] = subagentNickname }
+        if let configuredReviewer { event["approvals_reviewer"] = configuredReviewer }
+        if let sandboxPolicy { event["sandbox_policy"] = sandboxPolicy.anyValue }
+        event["auto_reviewed"] = autoReviewed
 
         return [
             "v": 1,

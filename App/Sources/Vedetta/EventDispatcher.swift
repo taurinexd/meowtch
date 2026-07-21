@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import VedettaKit
 
 /// Main-actor endpoint for bridge envelopes: decodes the JSON, feeds the
@@ -52,6 +53,35 @@ enum EventDispatcher {
             // the terminal identity and enriches title/messages.
             if let codexHook {
                 codexCoordinator?.apply(hook: codexHook)
+                let request = CodexApprovalRequest(
+                    threadID: codexHook.threadID,
+                    turnID: codexHook.turnID,
+                    toolUseID: codexHook.toolUseID,
+                    permissionPolicy: codexHook.permissionMode,
+                    configuredReviewer: codexHook.configuredReviewer,
+                    sandboxPolicy: codexHook.sandboxPolicy,
+                    autoReviewed: codexHook.autoReviewed
+                )
+                let mode = CodexApprovalMode(
+                    rawValue: UserDefaults.standard.string(
+                        forKey: "codexApprovalMode"
+                    ) ?? ""
+                ) ?? .followFocus
+                let focusedBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                let terminalFocused = focusedBundle != nil
+                    && focusedBundle == codexHook.terminal.bundleIdentifier
+                guard CodexApprovalPolicy.route(
+                    mode: mode,
+                    terminalIsFocused: terminalFocused,
+                    request: request
+                ) == .notch else { return empty }
+                return await handlePermissionRequest(
+                    event,
+                    source: "codex",
+                    sessionId: sessionId,
+                    store: store,
+                    fingerprint: CodexApprovalPolicy.fingerprint(for: request)
+                )
             } else {
                 SessionEventReducer.apply(envelope, to: store)
             }
@@ -59,7 +89,8 @@ enum EventDispatcher {
                 event,
                 source: envelope["source"] as? String ?? "claude",
                 sessionId: sessionId,
-                store: store
+                store: store,
+                fingerprint: nil
             )
         }
 
@@ -113,7 +144,8 @@ enum EventDispatcher {
         _ event: [String: Any],
         source: String,
         sessionId: String,
-        store: SessionStore
+        store: SessionStore,
+        fingerprint: String?
     ) async -> Data {
         let toolName = event["tool_name"] as? String ?? "?"
         let toolInput = event["tool_input"] as? [String: Any]
@@ -167,13 +199,18 @@ enum EventDispatcher {
             sessionId: sessionId,
             toolName: toolName,
             toolDetail: detail,
-            kind: kind
+            kind: kind,
+            fingerprint: fingerprint
         )
 
         store.transition(id: sessionId, to: .running)
 
-        var decisionObject: [String: Any] = ["behavior": decision.allow ? "allow" : "deny"]
-        if let message = decision.message, !decision.allow {
+        guard case .decision(let allow, let message) = decision else {
+            return Data("{}".utf8)
+        }
+
+        var decisionObject: [String: Any] = ["behavior": allow ? "allow" : "deny"]
+        if let message, !allow {
             decisionObject["message"] = message
         }
         let reply: [String: Any] = [
@@ -233,6 +270,7 @@ enum EventDispatcher {
                     "sessionId": pending.sessionId,
                     "toolName": pending.toolName,
                     "toolDetail": pending.toolDetail ?? "",
+                    "fingerprint": pending.fingerprint ?? "",
                 ]
             }
             return try? JSONSerialization.data(withJSONObject: ["pending": items])
@@ -258,7 +296,8 @@ enum EventDispatcher {
             ApprovalCenter.shared.decide(
                 id: id,
                 allow: allow,
-                message: envelope["message"] as? String
+                message: envelope["message"] as? String,
+                fingerprint: envelope["fingerprint"] as? String
             )
             return Data(#"{"ok":true}"#.utf8)
 

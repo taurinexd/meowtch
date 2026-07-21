@@ -1,4 +1,5 @@
 import AppKit
+import VedettaKit
 
 /// Menu bar item: quick visibility toggle and quit.
 @MainActor
@@ -55,6 +56,30 @@ final class StatusItemController {
         )
         removeCodexItem.target = self
         menu.addItem(removeCodexItem)
+        let approvalItem = NSMenuItem(title: "Codex Approvals", action: nil, keyEquivalent: "")
+        let approvalMenu = NSMenu(title: "Codex Approvals")
+        let selectedMode = CodexApprovalMode(
+            rawValue: UserDefaults.standard.string(forKey: "codexApprovalMode") ?? ""
+        ) ?? .followFocus
+        let approvalModes: [(CodexApprovalMode, String)] = [
+            (.followFocus, "Follow Focus"),
+            (.alwaysNotch, "Always Notch"),
+            (.alwaysTerminal, "Always Terminal"),
+            (.nativeCodex, "Native Codex"),
+        ]
+        for (mode, title) in approvalModes {
+            let item = NSMenuItem(
+                title: title,
+                action: #selector(selectCodexApprovalMode(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = mode == selectedMode ? .on : .off
+            approvalMenu.addItem(item)
+        }
+        approvalItem.submenu = approvalMenu
+        menu.addItem(approvalItem)
         let muteItem = NSMenuItem(
             title: "Mute Sounds",
             action: #selector(toggleMute),
@@ -159,6 +184,15 @@ final class StatusItemController {
             return changed
                 ? "Hook Codex rimossi (backup in ~/.vedetta/backups)."
                 : "Nessun hook Codex di Vedetta presente."
+        }
+    }
+
+    @objc private func selectCodexApprovalMode(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              CodexApprovalMode(rawValue: rawValue) != nil else { return }
+        UserDefaults.standard.set(rawValue, forKey: "codexApprovalMode")
+        for item in sender.menu?.items ?? [] {
+            item.state = item === sender ? .on : .off
         }
     }
 
