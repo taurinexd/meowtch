@@ -37,6 +37,11 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var directory: String
     public var gitBranch: String?
     public var model: String?
+    /// Original Codex identities retained alongside Vedetta's namespaced ID.
+    public var codexThreadID: String?
+    public var currentTurnID: String?
+    public var currentToolUseID: String?
+    public var permissionMode: String?
     public var currentTool: String?
     public var currentToolDetail: String?
     public var lastMessage: String?
@@ -67,6 +72,10 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         directory: String,
         gitBranch: String? = nil,
         model: String? = nil,
+        codexThreadID: String? = nil,
+        currentTurnID: String? = nil,
+        currentToolUseID: String? = nil,
+        permissionMode: String? = nil,
         currentTool: String? = nil,
         currentToolDetail: String? = nil,
         lastMessage: String? = nil,
@@ -85,6 +94,10 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.directory = directory
         self.gitBranch = gitBranch
         self.model = model
+        self.codexThreadID = codexThreadID
+        self.currentTurnID = currentTurnID
+        self.currentToolUseID = currentToolUseID
+        self.permissionMode = permissionMode
         self.currentTool = currentTool
         self.currentToolDetail = currentToolDetail
         self.lastMessage = lastMessage
