@@ -119,4 +119,100 @@ struct HookConfiguratorTests {
         let stop = ((merged["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])?.first
         #expect(stop?["matcher"] == nil)
     }
+
+    @Test func codexMergeInstallsOnlySupportedEventsWithCodexSource() {
+        let (merged, changed) = HookConfigurator.mergingCodexHooks(into: [:])
+        #expect(changed)
+        let hooks = merged["hooks"] as? [String: Any]
+        let installedEvents = Set(hooks?.keys.map { $0 } ?? [])
+        #expect(installedEvents == Set(HookConfigurator.codexEvents))
+        #expect(hooks?["Notification"] == nil)
+        #expect(hooks?["StopFailure"] == nil)
+        #expect(hooks?["SessionEnd"] == nil)
+
+        #expect(installedEvents == Set([
+            "SessionStart", "UserPromptSubmit", "PermissionRequest",
+            "PostToolUse", "SubagentStop", "Stop",
+        ]))
+
+        let post = (hooks?["PostToolUse"] as? [[String: Any]])?.first
+        let command = ((post?["hooks"] as? [[String: Any]])?.first)?["command"] as? String
+        #expect(command?.contains("--source codex") == true)
+        #expect(post?["matcher"] as? String == "")
+        #expect(hooks?["PreToolUse"] == nil)
+        #expect(hooks?["PreCompact"] == nil)
+        #expect(hooks?["PostCompact"] == nil)
+        #expect(hooks?["SubagentStart"] == nil)
+    }
+
+    @Test func codexMergePreservesExistingHooksAndIsIdempotent() {
+        let vibeCommand = "'/Users/x/.vibe-island/bin/vibe-island-bridge' --source codex"
+        let existing: [String: Any] = [
+            "custom": ["preserve": true],
+            "hooks": [
+                "Stop": [[
+                    "hooks": [[
+                        "type": "command",
+                        "command": vibeCommand,
+                        "timeout": 5,
+                    ]],
+                ]],
+            ],
+        ]
+        let (once, changed) = HookConfigurator.mergingCodexHooks(into: existing)
+        #expect(changed)
+        #expect(((once["custom"] as? [String: Any])?["preserve"] as? Bool) == true)
+        let stopGroups = (once["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]]
+        #expect(stopGroups?.count == 2)
+        let firstCommand = ((stopGroups?[0]["hooks"] as? [[String: Any]])?[0]["command"]) as? String
+        #expect(firstCommand == vibeCommand)
+
+        let (twice, changedAgain) = HookConfigurator.mergingCodexHooks(into: once)
+        #expect(!changedAgain)
+        #expect(HookConfigurator.codexHooksInstalled(in: twice))
+    }
+
+    @Test func codexRemoveStripsOnlyCodexVedettaHooks() {
+        let (merged, _) = HookConfigurator.mergingCodexHooks(into: userSettings())
+        #expect(HookConfigurator.hasAnyCodexHook(in: merged))
+
+        let (removed, changed) = HookConfigurator.removingCodexHooks(from: merged)
+        #expect(changed)
+        #expect(!HookConfigurator.hasAnyCodexHook(in: removed))
+        let stopGroups = (removed["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]]
+        #expect(stopGroups?.count == 1)
+        let command = ((stopGroups?[0]["hooks"] as? [[String: Any]])?[0]["command"]) as? String
+        #expect(command?.contains("afplay") == true)
+    }
+
+    @Test func codexHooksUseObservedTimeoutsAndMatchers() {
+        let (merged, _) = HookConfigurator.mergingCodexHooks(into: [:])
+        let hooks = merged["hooks"] as? [String: Any]
+
+        for event in HookConfigurator.codexEvents {
+            let group = (hooks?[event] as? [[String: Any]])?.first
+            let hook = (group?["hooks"] as? [[String: Any]])?.first
+            let expectedTimeout = event == "PermissionRequest" ? 7_200 : 5
+            #expect(hook?["timeout"] as? Int == expectedTimeout, "timeout errato per \(event)")
+            if event == "PostToolUse" {
+                #expect(group?["matcher"] as? String == "")
+            } else {
+                #expect(group?["matcher"] == nil, "matcher inatteso per \(event)")
+            }
+        }
+    }
+
+    @Test func claudeKeepsItsOwnTimeoutAndMatcherContract() {
+        let (merged, _) = HookConfigurator.mergingHooks(into: [:])
+        let hooks = merged["hooks"] as? [String: Any]
+        let permissionGroup = (hooks?["PermissionRequest"] as? [[String: Any]])?.first
+        let permissionHook = (permissionGroup?["hooks"] as? [[String: Any]])?.first
+        #expect(permissionHook?["timeout"] as? Int == 86_400)
+        #expect(permissionGroup?["matcher"] as? String == "*")
+
+        let postGroup = (hooks?["PostToolUse"] as? [[String: Any]])?.first
+        let postHook = (postGroup?["hooks"] as? [[String: Any]])?.first
+        #expect(postHook?["timeout"] == nil)
+        #expect(postGroup?["matcher"] as? String == "*")
+    }
 }
