@@ -1,10 +1,10 @@
 import Foundation
 import VedettaKit
 
-/// While Vibe Island is installed it is the source of truth for which
-/// sessions are "current": importing its persisted map gives set parity,
-/// its custom titles and the window mapping (full vs compact rows).
-/// Vedetta falls back to its own transcript sweep when the map is absent.
+/// While Vibe Island is installed its persisted map contributes set parity,
+/// custom titles and the window mapping for the sessions it knows — but the
+/// map freezes the moment VI quits, so it only complements (never replaces)
+/// Vedetta's own transcript sweep.
 @MainActor
 enum VIMapImport {
     static var mapPath: String {
