@@ -17,6 +17,7 @@ enum SessionBootstrap {
     @MainActor private static var scannedPaths: [String: String] = [:]
     @MainActor private static var codexTailers: [String: CodexRolloutTailer] = [:]
     @MainActor private static var codexIndexes: [String: CodexSessionIndexStore] = [:]
+    @MainActor private static var codexTerminalResolvedPaths: Set<String> = []
 
     @MainActor
     static func registerScannedPath(_ path: String, for id: String) {
@@ -83,6 +84,9 @@ enum SessionBootstrap {
     ) {
         let fm = FileManager.default
         let cutoff = Date().addingTimeInterval(-recencyWindow)
+        // One lsof snapshot associates every currently open rollout with its
+        // Codex writer PID, matching VI's pre-hook terminal fallback.
+        let openTerminals = CodexTerminalDiscovery.openRollouts()
         for codexHome in homes where codexHome.isAvailable {
             guard let enumerator = fm.enumerator(atPath: codexHome.sessionsPath) else { continue }
             var names: [String: String] = [:]
@@ -109,6 +113,10 @@ enum SessionBootstrap {
                 if let title = names[rawID] {
                     coordinator.applyTitle(threadID: rawID, title: title)
                 }
+                if let terminal = openTerminals[path] {
+                    coordinator.applyFallbackTerminal(threadID: rawID, terminal: terminal)
+                    codexTerminalResolvedPaths.insert(path)
+                }
             }
         }
     }
@@ -132,6 +140,11 @@ enum SessionBootstrap {
             rollout: rollout,
             observedRevision: knownThread == rawID ? observedRevision : nil
         )
+        if !codexTerminalResolvedPaths.contains(path),
+           let terminal = CodexTerminalDiscovery.openRollouts()[path] {
+            coordinator.applyFallbackTerminal(threadID: rawID, terminal: terminal)
+            codexTerminalResolvedPaths.insert(path)
+        }
     }
 
     @MainActor

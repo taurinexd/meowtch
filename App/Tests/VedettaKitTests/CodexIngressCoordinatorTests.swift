@@ -19,7 +19,14 @@ struct CodexIngressCoordinatorTests {
         event.merge(extra) { _, new in new }
         return try CodexHookEvent(envelope: [
             "source": "codex",
-            "terminal": ["tty": "/dev/ttys001", "termProgram": "vscode"],
+            "terminal": [
+                "tty": "/dev/ttys001",
+                "termProgram": "vscode",
+                "bundleIdentifier": "com.microsoft.VSCode",
+                "pid": 999,
+                "windowId": 123,
+                "pidChain": [999, 100],
+            ],
             "event": event,
         ])
     }
@@ -162,6 +169,46 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.count == 1)
         #expect(store.sessions.first?.id == "codex-thread-1")
         #expect(store.sessions.first?.lastMessage == "authoritative")
+    }
+
+    @Test func rolloutOriginSuppressesDesktopAndInternalCompanionSessions() {
+        for originator in ["Codex Desktop", "Claude Code"] {
+            let store = SessionStore()
+            let coordinator = CodexIngressCoordinator(store: store)
+            var snapshot = rollout(user: "must stay hidden")
+            snapshot.originator = originator
+            snapshot.source = "vscode"
+
+            #expect(!coordinator.apply(rollout: snapshot))
+            #expect(store.sessions.isEmpty)
+        }
+    }
+
+    @Test func rolloutWriterTerminalFillsGapButNeverReplacesHookIdentity() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        #expect(coordinator.apply(rollout: rollout(user: "provisional")))
+        let fallback = TerminalInfo(
+            termProgram: "vscode",
+            bundleIdentifier: "com.microsoft.VSCode",
+            pid: 15557,
+            pidChain: [15557, 15549, 10814, 8026, 8004]
+        )
+
+        #expect(coordinator.applyFallbackTerminal(
+            threadID: "thread-1",
+            terminal: fallback
+        ))
+        #expect(store.terminal(for: "codex-thread-1") == fallback)
+
+        coordinator.apply(hook: try hook("SessionStart"))
+        let hookIdentity = try #require(store.terminal(for: "codex-thread-1"))
+        #expect(hookIdentity.tty == "/dev/ttys001")
+        #expect(!coordinator.applyFallbackTerminal(
+            threadID: "thread-1",
+            terminal: fallback
+        ))
+        #expect(store.terminal(for: "codex-thread-1") == hookIdentity)
     }
 
     @Test func retainsParentAwareSubagentDetail() throws {

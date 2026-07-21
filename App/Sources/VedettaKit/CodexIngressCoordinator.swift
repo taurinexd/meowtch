@@ -27,6 +27,22 @@ public final class CodexIngressCoordinator {
         ledgers[sessionID(threadID)]?.revision ?? 0
     }
 
+    /// VI retains the process writing each rollout so a pre-hook Codex
+    /// session remains jumpable. This fallback only fills a missing binding;
+    /// a later hook carries the more precise tty/window identity and wins.
+    @discardableResult
+    public func applyFallbackTerminal(
+        threadID: String,
+        terminal: TerminalInfo
+    ) -> Bool {
+        let id = sessionID(threadID)
+        guard store.sessions.contains(where: { $0.id == id }),
+              terminal.isJumpable,
+              store.terminal(for: id)?.isJumpable != true else { return false }
+        store.setTerminal(terminal, for: id)
+        return true
+    }
+
     public func apply(hook: CodexHookEvent, at date: Date = Date()) {
         let id = hook.sessionID
         var ledger = ledgers[id] ?? Ledger()
@@ -127,7 +143,10 @@ public final class CodexIngressCoordinator {
                 startedAt: date,
                 lastActivityAt: date
             )
-        if !CodexAdmissionRules.shouldAdmit(title: session.title) {
+        if !CodexAdmissionRules.shouldAdmit(
+            title: session.title,
+            metadata: rollout.admissionMetadata
+        ) {
             suppress(id: id, ledger: &ledger)
             return false
         }
