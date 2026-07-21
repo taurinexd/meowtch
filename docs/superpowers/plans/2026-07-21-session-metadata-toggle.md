@@ -31,9 +31,9 @@
 - Produces: `SessionMetadataPresentation.defaultsKey: String`
 - Produces: `SessionMetadataPresentation.shouldShow(enabled:isCompact:metadata:) -> Bool`
 
-- [ ] Add failing tests asserting `presentationMetadata == ["main", "gpt-5.6", "high"]`, permission mode exclusion, missing-value omission, and visibility only for enabled full rows with non-empty metadata.
-- [ ] Run `make test`; expect failures because `reasoningEffort` and `SessionMetadataPresentation` do not exist and the projection still includes permission mode.
-- [ ] Add `reasoningEffort` to `AgentSession` and change the projection:
+- [x] Add failing tests asserting `presentationMetadata == ["main", "gpt-5.6", "high"]`, permission mode exclusion, missing-value omission, and visibility only for enabled full rows with non-empty metadata.
+- [x] Run `make test`; expect failures because `reasoningEffort` and `SessionMetadataPresentation` do not exist and the projection still includes permission mode.
+- [x] Add `reasoningEffort` to `AgentSession` and change the projection:
 
 ```swift
 public var presentationMetadata: [String] {
@@ -50,8 +50,8 @@ public enum SessionMetadataPresentation {
 }
 ```
 
-- [ ] Run `make test`; expect all tests to pass.
-- [ ] Commit with `feat: define global session metadata policy`.
+- [x] Run `make test`; expect all tests to pass.
+- [x] Commit with `feat: define global session metadata policy`.
 
 ### Task 2: Extract genuine effort from Claude and Codex
 
@@ -65,19 +65,19 @@ public enum SessionMetadataPresentation {
 - Produces: `TranscriptPeek.reasoningEffort: String?`
 - Produces: `CodexRolloutSnapshot.reasoningEffort: String?`
 
-- [ ] Add a Claude fixture with successive top-level `effort` values and assert the latest non-empty value wins.
-- [ ] Add Codex `turn_context` fixtures asserting direct `payload.effort` wins and nested `collaboration_mode.settings.reasoning_effort` is the fallback.
-- [ ] Run `make test`; expect failures because neither parser exposes effort.
-- [ ] In `TranscriptPeek.parse`, capture non-empty top-level `effort` before message parsing; merge tail over head in `read`.
-- [ ] In `CodexRolloutTailer.consume`, handle `type == "turn_context"` before requiring `payload.type`:
+- [x] Add a Claude fixture with successive top-level `effort` values and assert the latest non-empty value wins.
+- [x] Add Codex `turn_context` fixtures asserting direct `payload.effort` wins and nested `collaboration_mode.settings.reasoning_effort` is the fallback.
+- [x] Run `make test`; expect failures because neither parser exposes effort.
+- [x] In `TranscriptPeek.parse`, capture non-empty top-level `effort` before message parsing; merge tail over head in `read`.
+- [x] In `CodexRolloutTailer.consume`, handle `type == "turn_context"` before requiring `payload.type`:
 
 ```swift
 let nested = ((payload["collaboration_mode"] as? [String: Any])?["settings"] as? [String: Any])?["reasoning_effort"] as? String
 snapshot.reasoningEffort = Self.nonEmpty(payload["effort"] as? String) ?? Self.nonEmpty(nested)
 ```
 
-- [ ] Run `make test`; expect all tests to pass.
-- [ ] Commit with `feat: extract reasoning effort from agent records`.
+- [x] Run `make test`; expect all tests to pass.
+- [x] Commit with `feat: extract reasoning effort from agent records`.
 
 ### Task 3: Propagate effort and bind one global UI preference
 
@@ -94,19 +94,19 @@ snapshot.reasoningEffort = Self.nonEmpty(payload["effort"] as? String) ?? Self.n
 - Consumes: `SessionMetadataPresentation` from Task 1.
 - Produces: `SessionRowView.showSessionMetadata: Bool`.
 
-- [ ] Add failing coordinator/reducer tests proving parsed effort reaches the session and a newer parsed value replaces an older one.
-- [ ] Run `make test`; expect failures because ingestion does not assign `reasoningEffort`.
-- [ ] Assign Codex rollout effort in `CodexIngressCoordinator.apply(rollout:)`; assign Claude peek effort in bootstrap adoption/refresh and reducer enrichment/reply refresh.
-- [ ] Add one root observation in `NotchView`:
+- [x] Add failing coordinator/reducer tests proving parsed effort reaches the session and a newer parsed value replaces an older one.
+- [x] Run `make test`; expect failures because ingestion does not assign `reasoningEffort`.
+- [x] Assign Codex rollout effort in `CodexIngressCoordinator.apply(rollout:)`; assign Claude peek effort in bootstrap adoption/refresh and reducer enrichment/reply refresh.
+- [x] Add one root observation in `NotchView`:
 
 ```swift
 @AppStorage(SessionMetadataPresentation.defaultsKey)
 private var showSessionMetadata = false
 ```
 
-- [ ] Pass `showSessionMetadata` to every full `SessionRowView` call and `false` to compact rows. Add `var showSessionMetadata = false` on the row and gate the line through `SessionMetadataPresentation.shouldShow`.
-- [ ] Run `make test`; expect all tests to pass.
-- [ ] Commit with `feat: gate session metadata behind global preference`.
+- [x] Pass `showSessionMetadata` to every full `SessionRowView` call and `false` to compact rows. Add `var showSessionMetadata = false` on the row and gate the line through `SessionMetadataPresentation.shouldShow`.
+- [x] Run `make test`; expect all tests to pass.
+- [x] Commit with `feat: gate session metadata behind global preference`.
 
 ### Task 4: Regression, package, and live default-off verification
 
@@ -116,9 +116,9 @@ private var showSessionMetadata = false
 **Interfaces:**
 - Verifies the stable UserDefaults key without exposing a temporary control.
 
-- [ ] Run `make test && make build && make app`; require exit 0 and record the test count.
-- [ ] Read `defaults read app.vedetta.macos showSessionMetadata`; absence is valid and means false. If an inherited development value exists, back up the domain before clearing only this key for the default-off test.
-- [ ] Restart Vedetta once with the packaged app and inspect the live panel/socket: full cards show no metadata line by default and compact rows remain unchanged.
-- [ ] Temporarily set `showSessionMetadata=true`, verify full cards use branch/model/effort with missing values omitted and compact rows remain unchanged, then restore the prior preference value.
-- [ ] Run `git diff --check`, inspect `git status --short`, and write the exact evidence in the verification document.
-- [ ] Commit with `docs: verify global session metadata toggle`.
+- [x] Run `make test && make build && make app`; require exit 0 and record the test count.
+- [x] Read `defaults read app.vedetta.macos showSessionMetadata`; absence is valid and means false. If an inherited development value exists, back up the domain before clearing only this key for the default-off test.
+- [x] Restart Vedetta once with the packaged app and inspect the live panel/socket: full cards show no metadata line by default and compact rows remain unchanged.
+- [x] Temporarily set `showSessionMetadata=true`, verify full cards use branch/model/effort with missing values omitted and compact rows remain unchanged, then restore the prior preference value.
+- [x] Run `git diff --check`, inspect `git status --short`, and write the exact evidence in the verification document.
+- [x] Commit with `docs: verify global session metadata toggle`.
