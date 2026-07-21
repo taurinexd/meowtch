@@ -43,6 +43,15 @@ public final class SessionStore: ObservableObject {
         sort()
     }
 
+    /// Clears a pending-approval state once its request resolved (decision,
+    /// handoff, or abandonment). Only the approval state is cleared: a state
+    /// the lifecycle already moved past (Stop → waiting) must not be
+    /// clobbered by the resuming continuation.
+    public func clearApprovalState(id: String, at date: Date = Date()) {
+        guard sessions.first(where: { $0.id == id })?.state == .needsApproval else { return }
+        transition(id: id, to: .running, at: date)
+    }
+
     public func remove(id: String) {
         sessions.removeAll { $0.id == id }
         terminals.removeValue(forKey: id)
