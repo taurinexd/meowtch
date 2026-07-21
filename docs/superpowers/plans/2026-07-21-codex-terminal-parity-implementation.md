@@ -17,7 +17,7 @@
 - Keep Claude and Codex installation/status failures independent.
 - Work directly on local `main`, commit each completed task, and never push.
 - Preserve the inherited uncommitted patch until its useful pieces have either passed the tests below or been replaced.
-- For every production change: add the named test first, run the focused command and observe the expected failure, implement the minimum correction, rerun focused tests, then run `make test`.
+- For every production change: add the named test first, run `make test` and observe the expected failure, implement the minimum correction, then rerun `make test`. Do not invoke plain `swift test` on this macOS 26 Command Line Tools setup because the Makefile supplies the required `Testing.framework` paths.
 - Do not claim completion without an actual Codex terminal session and an actual Claude terminal session exercising the verified paths.
 
 ## Task 1: Lock the exact VI hook contract
@@ -32,7 +32,7 @@
 - [ ] Assert Claude retains its existing source-specific timeout and matcher contract.
 - [ ] Assert additive merge preserves unrelated groups and removal deletes only Vedetta handlers.
 - [ ] Assert a second merge is idempotent and does not duplicate handlers.
-- [ ] Run `cd App && swift test --filter HookConfiguratorTests`; confirm the inherited ten-event/86400 implementation fails.
+- [ ] Run `make test`; confirm the inherited ten-event/86400 implementation fails in `HookConfiguratorTests`.
 - [ ] Introduce source-specific hook descriptors rather than one shared timeout table.
 - [ ] Rerun focused tests and `make test`.
 - [ ] Commit: `fix: match VI Codex hook manifest exactly`.
@@ -50,7 +50,7 @@
 - [ ] Test writing a missing file, merging a valid file, rejecting malformed JSON unchanged, timestamping a backup before mutation, and atomically replacing the destination.
 - [ ] Test per-agent results so a Codex failure cannot mark Claude failed and vice versa.
 - [ ] Test deliberate removal disables automatic healing until the user explicitly reinstalls.
-- [ ] Run `cd App && swift test --filter HookConfigFileStoreTests`; confirm the new API is absent.
+- [ ] Run `make test`; confirm the new `HookConfigFileStoreTests` fail before implementation.
 - [ ] Move pure filesystem planning/validation into `HookConfigFileStore`; keep AppKit presentation in `VedettaSetup`.
 - [ ] Install/heal/remove both sources independently and preserve every unrelated key, including `notify`.
 - [ ] Render independent Claude and Codex status/action rows in onboarding and the status menu.
@@ -71,7 +71,7 @@
 - [ ] Test `exec`, `exec_command`, `shell`, and `local_shell` normalize to `Bash`.
 - [ ] Test missing or malformed fields produce a non-authorizing parse failure with metadata-safe diagnostics.
 - [ ] Test the raw bridge response for `Stop` remains `{"continue":true}` and `PermissionRequest` transport failure emits no decision.
-- [ ] Run `cd App && swift test --filter CodexHookEventTests`; confirm the adapter is absent.
+- [ ] Run `make test`; confirm the new `CodexHookEventTests` fail before implementation.
 - [ ] Implement `CodexHookEvent` and `CodexFact` as `Sendable` value types and add only the identity fields required by presentation/correlation to `AgentSession`.
 - [ ] Route Codex envelopes through the adapter; leave Claude on `SessionEventReducer`.
 - [ ] Remove payload-body diagnostic logging; retain event kind, source, IDs, and parse result only.
