@@ -16,9 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MockSessions.seed(into: store)
         } else {
             TerminalPersistence.load(into: store)
-            if !VIMapImport.adopt(into: store) {
-                SessionBootstrap.adoptRecentSessions(into: store)
-            }
+            // The VI map contributes set parity and titles for the sessions
+            // it knows, but it freezes the moment VI quits: the transcript
+            // sweep must always fill in what the (possibly stale) map
+            // misses. Both skip ids already in the store.
+            _ = VIMapImport.adopt(into: store)
+            SessionBootstrap.adoptRecentSessions(into: store)
             reloadCodexHomes()
             NotificationCenter.default.addObserver(
                 self,
