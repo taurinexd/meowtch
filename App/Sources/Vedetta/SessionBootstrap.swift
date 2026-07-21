@@ -103,12 +103,54 @@ enum SessionBootstrap {
                 agent: .codex,
                 title: names[id] ?? rollout.firstUserMessage ?? "",
                 directory: rollout.cwd ?? "",
+                currentTool: rollout.currentTool,
+                currentToolDetail: rollout.currentToolDetail,
                 lastMessage: rollout.lastUserMessage,
                 lastAssistantMessage: rollout.lastAgentMessage,
-                state: modified.timeIntervalSinceNow > -activeWindow ? .running : .waitingForInput,
+                state: rollout.state == .running ? .running : .waitingForInput,
                 startedAt: created,
-                lastActivityAt: modified
+                lastActivityAt: rollout.lastActivityAt ?? modified
             ))
+        }
+    }
+
+    /// Folds a Codex rollout file into a session's live fields — state (from
+    /// task_started/task_complete), current tool (last open function_call), and
+    /// the message lines. Returns the updated session, or nil if unreadable.
+    /// Shared by the periodic pass and the live FSEvents watcher.
+    static func applyCodexRollout(to session: AgentSession, path: String) -> AgentSession? {
+        guard let data = FileManager.default.contents(atPath: path) else { return nil }
+        let rollout = CodexScan.parseRollout(data)
+        var updated = session
+        if let last = rollout.lastUserMessage { updated.lastMessage = last }
+        if let reply = rollout.lastAgentMessage { updated.lastAssistantMessage = reply }
+        updated.currentTool = rollout.currentTool
+        updated.currentToolDetail = rollout.currentToolDetail
+        updated.state = rollout.state == .running ? .running : .waitingForInput
+        if let activity = rollout.lastActivityAt { updated.lastActivityAt = activity }
+        return updated
+    }
+
+    /// Adopts or updates the Codex session a rollout belongs to (the live
+    /// watcher's entry point for a changed file, incl. brand-new sessions).
+    @MainActor
+    static func ingestCodexRollout(path: String, into store: SessionStore) {
+        guard let data = FileManager.default.contents(atPath: path) else { return }
+        let rollout = CodexScan.parseRollout(data)
+        guard let id = rollout.sessionId else { return }
+        scannedPaths[id] = path
+        let existing = store.sessions.first { $0.id == id }
+        let base = existing ?? AgentSession(
+            id: id,
+            agent: .codex,
+            title: rollout.firstUserMessage ?? "",
+            directory: rollout.cwd ?? "",
+            state: .waitingForInput,
+            startedAt: Date(),
+            lastActivityAt: Date()
+        )
+        if let updated = applyCodexRollout(to: base, path: path) {
+            store.upsert(updated)
         }
     }
 
@@ -128,22 +170,24 @@ enum SessionBootstrap {
             let changed = modified > session.lastActivityAt || newState != session.state
             guard changed else { continue }
 
-            var activity = modified
+            // Codex has no hooks: its rollout drives state, tool and messages
+            // directly (event-based, not mtime), so route it through the same
+            // path the live watcher uses.
             if session.agent == .codex {
-                if let data = fm.contents(atPath: path) {
-                    let rollout = CodexScan.parseRollout(data)
-                    if let last = rollout.lastUserMessage { session.lastMessage = last }
-                    if let reply = rollout.lastAgentMessage { session.lastAssistantMessage = reply }
+                if let updated = applyCodexRollout(to: session, path: path) {
+                    store.upsert(updated)
                 }
-            } else {
-                let peek = TranscriptPeek.read(path: path)
-                if let name = peek.sessionName ?? peek.aiTitle { session.title = name }
-                if let last = peek.lastUserText { session.lastMessage = last }
-                if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
-                if let real = peek.lastActivity { activity = real }
-                // Unconditional: nil means the recap is stale or absent.
-                session.recap = peek.awaySummary
+                continue
             }
+
+            var activity = modified
+            let peek = TranscriptPeek.read(path: path)
+            if let name = peek.sessionName ?? peek.aiTitle { session.title = name }
+            if let last = peek.lastUserText { session.lastMessage = last }
+            if let reply = peek.lastAssistantText { session.lastAssistantMessage = reply }
+            if let real = peek.lastActivity { activity = real }
+            // Unconditional: nil means the recap is stale or absent.
+            session.recap = peek.awaySummary
             session.state = activity.timeIntervalSinceNow > -activeWindow ? .running : .waitingForInput
             session.lastActivityAt = activity
             store.upsert(session)
