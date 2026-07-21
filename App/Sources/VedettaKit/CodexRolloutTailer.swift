@@ -169,6 +169,9 @@ public struct CodexRolloutTailer: Sendable {
             } else if snapshot.activeTurnIDs.count == 1 {
                 snapshot.activeTurnIDs.removeAll()
             }
+            if snapshot.activeTurnIDs.isEmpty {
+                snapshot.openTools.removeAll()
+            }
             snapshot.lastActivityAt = Self.date(payload["completed_at"])
                 ?? snapshot.lastActivityAt
         case "turn_aborted":
