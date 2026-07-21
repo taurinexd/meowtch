@@ -67,6 +67,43 @@ Il **core è in parità** (notch, sessioni, approvals, questions, jump, socket).
 - **🚫 Fuori scope confermato:** `UsageIngestionDatabase`/`UsageRollupStore`/`usage_daily_rollups`/`UsageBehaviorDay/MonthFile` = **storico consumo** giornaliero/mensile (analytics), non serve allo strip live e va contro lo zero-telemetria.
 - Nota: VI ha un backend cloud `api.vibeisland.app` (`/api/codex-reset-signals`, `/api/instances`, `/v1/licenses`) — per licensing/instances/reset-signals, fuori scope.
 
+## Pass 3 — Codex HA gli hook (2026-07-21) — svolta per M6
+
+**Il piano (2026-07-16) diceva "Codex config non toccato / niente hook". È SUPERATO: Codex CLI 0.144.6 espone hook stabili.**
+
+Prove:
+- `codex --help` → flag `--dangerously-bypass-hook-trust`.
+- `~/.codex/config.toml` → sezioni `[hooks.state]` (trust persistito per hook, per evento: session_start, permission_request, stop, post_tool_use, subagent_stop, user_prompt_submit).
+- `~/.codex/hooks.json` **esiste già** e VI ci ha installato i suoi hook Codex: `'vibe-island-bridge' --source codex` su `PermissionRequest` (timeout 7200), `PostToolUse`, `SessionStart`, `Stop`, `UserPromptSubmit`, `SubagentStop`. **Formato e nomi evento IDENTICI a Claude** (`hooks: {NomeEvento: [{hooks:[{type:"command", command, timeout}], matcher?}]}`).
+- Schema app-server conferma il sottosistema: `HookEventName`, `ConfiguredHookHandler`, `HookCompletedNotification`, ecc.
+
+**Implicazione (correzione dell'audit Pass 1):** VI fa l'integrazione Codex **via HOOK**, non (solo) rollout-watching. Quindi Vedetta può ottenere **parità piena con Claude** installando hook Codex verso il proprio bridge (`vedetta-bridge --source codex`, già source-agnostic): eventi real-time + **identità terminale → JUMP** + **`PermissionRequest` → approvazioni remote Codex** (che il piano riteneva impossibili in v1).
+
+Il workaround rollout-watching costruito il 2026-07-20 (`CodexScan` + `CodexWatcher` + `SessionBootstrap.ingestCodexRollout`) resta come **fallback** per sessioni pre-hook (come `liveEventIds` per Claude). Scoperta emersa da Codex stesso (Matteo gli ha chiesto di analizzare il progetto → la sua risposta ha segnalato gli hook 0.144.6).
+
+**Stato: l'integrazione hook Codex è delegata all'agent `codex-rescue` (Codex la implementa; Claude aggiorna i doc).**
+
+## Stato lavori — progress (sessione 2026-07-20/21)
+
+Tutto su `main` locale (nessun push). Commit principali:
+
+| Commit | Cosa |
+|---|---|
+| `97ce721` | **Rispondere a Question dal notch** via hook `updatedInput.answers` (abbandonata l'iniezione nel terminale) |
+| `ba09521` | Wizard multi-domanda (una alla volta, tab, progresso, Skip, ENTER→invia) |
+| `5d8c266` | Self-cleanup del launcher orfano >5min (rimuove hook/statusLine, uninstall estensione) |
+| `1e43e56` | Notch focalizzato sulla **singola card** su interrupt (approvazione/domanda) |
+| `70ef134` | Questo audit (Pass 1 mappa 86 classi + Pass 2 Usage) |
+| `774af5d` | **Quota Codex** nello strip via `codex app-server` (JSON-RPC `account/rateLimits/read`) |
+| `d7e4b8b` | Fix: interrupt-resolve non chiude più il notch col cursore dentro |
+| `52f5ae6` | Descrizioni opzioni domande non più troncate |
+| `b0ec1b5` | **Switcher provider** nello strip (icone Claude a colori / Codex template bianco su nero, tap per ciclare) + font 10 + box reply allineato alle card |
+| `0b2a08c` | Ignora SIGPIPE (una pipe rotta della probe Codex non abbatte più l'app) |
+| `4fa32f5` | Fix hover: il notch si apre entrando dal bordo superiore dello schermo |
+| `5e6ae47` | **M6 workaround**: card Codex live via rollout watcher (stato/tool/messaggi) — poi fix `deservesFullRow` (card Codex senza terminale) |
+
+**Task aperti:** #33 M6 integrazione Codex completa (in corso, delegata a Codex — pivot a hook).
+
 ## Verifiche note incrociate (per non riscoprire)
 
 - **Risposta a domande** = hook `PermissionRequest` bloccato → `hookSpecificOutput.decision.updatedInput.answers` (record `{testo_domanda: label}`). VI non ha **nessuna** API di guida terminale (no CGEvent/TIOCSTI/sendText). Il picker nativo appare comunque nel terminale durante il blocco (specchio). Implementato in Vedetta (commit `97ce721`, `ba09521`).
