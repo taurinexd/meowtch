@@ -23,6 +23,10 @@ struct NotchView: View {
     private var showSessionMetadata = false
     var geometry: NotchGeometry
     var onHoverChange: (Bool) -> Void
+    /// Reports the shape's rendered frame (window coords) on every layout
+    /// tick, animation frames included: the controller hit-tests the cursor
+    /// against the REAL shrinking shape, not a static rect.
+    var onShapeFrameChange: (CGRect) -> Void = { _ in }
 
     /// Wing sizes measured pixel-exact against the original: the flat part
     /// of the bar extends 40pt left and 23pt right of the physical notch
@@ -92,6 +96,11 @@ struct NotchView: View {
                 alignment: .top
             )
             .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGRect.self) { proxy in
+                proxy.frame(in: .global)
+            } action: { frame in
+                onShapeFrameChange(frame)
+            }
             // The animated shape swallows/reveals the content while it
             // resizes — this is what makes the collapse "compact".
             .clipShape(NotchShape(
@@ -109,11 +118,10 @@ struct NotchView: View {
             .onHover(perform: onHoverChange)
             // Both curves measured on the recording: expand ~0.35s with a
             // barely-there overshoot; collapse slower (~0.6s), monotonic,
-            // with a long soft settle.
+            // with a long soft settle. Defined in NotchAnimation, shared
+            // with the controller's hover hit-test interpolation.
             .animation(
-                model.isExpanded
-                    ? .spring(response: 0.35, dampingFraction: 0.8)
-                    : .spring(response: 0.55, dampingFraction: 1),
+                model.isExpanded ? NotchAnimation.expand : NotchAnimation.collapse,
                 value: model.isExpanded
             )
             .animation(.easeOut(duration: 0.12), value: model.isPrimed)
