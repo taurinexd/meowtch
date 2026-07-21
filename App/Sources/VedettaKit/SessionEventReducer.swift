@@ -14,6 +14,10 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
     /// gone by jump time, but the chain includes the terminal's live
     /// shell — what the VS Code extension matches terminals against.
     public var pidChain: [Int]?
+    /// True for identities recovered from the Codex rollout writer instead
+    /// of a hook: there `pid`/`pidChain` start at the live writer process,
+    /// not at a bridge that is dead by design.
+    public var isWriterFallback: Bool?
 
     public init(
         tty: String? = nil,
@@ -21,7 +25,8 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
         bundleIdentifier: String? = nil,
         pid: Int32? = nil,
         windowId: Int? = nil,
-        pidChain: [Int]? = nil
+        pidChain: [Int]? = nil,
+        isWriterFallback: Bool? = nil
     ) {
         self.tty = tty
         self.termProgram = termProgram
@@ -29,6 +34,7 @@ public struct TerminalInfo: Codable, Sendable, Equatable {
         self.pid = pid
         self.windowId = windowId
         self.pidChain = pidChain
+        self.isWriterFallback = isWriterFallback
     }
 
     public var isJumpable: Bool {
