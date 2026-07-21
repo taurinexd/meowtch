@@ -33,6 +33,9 @@ final class NotchPanelController {
             geometry: Self.notchGeometry(for: Self.targetScreen()),
             onHoverChange: { [weak self] hovering in
                 self?.hoverChanged(hovering)
+            },
+            onShapeFrameChange: { [weak self] frame in
+                self?.shapeFrameChanged(frame)
             }
         )
         let hostingView = NSHostingView(rootView: rootView)
@@ -71,6 +74,20 @@ final class NotchPanelController {
             Task { @MainActor in
                 guard let self, !self.userHidden else { return }
                 self.show()
+            }
+        }
+
+        // Dev aid: the socket's setExpanded command drives the open/close
+        // animation without a cursor (used to measure animation smoothness).
+        NotificationCenter.default.addObserver(
+            forName: .vedettaDebugSetExpanded,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let expanded = note.userInfo?["expanded"] as? Bool ?? false
+            Task { @MainActor in
+                self?.panel.orderFrontRegardless()
+                self?.setExpanded(expanded)
             }
         }
 
@@ -206,6 +223,9 @@ final class NotchPanelController {
             geometry: Self.notchGeometry(for: Self.targetScreen()),
             onHoverChange: { [weak self] hovering in
                 self?.hoverChanged(hovering)
+            },
+            onShapeFrameChange: { [weak self] frame in
+                self?.shapeFrameChanged(frame)
             }
         )
         (panel.contentView as? NSHostingView<NotchView>)?.rootView = rootView
@@ -255,19 +275,88 @@ final class NotchPanelController {
     private let pinnedExpanded = ProcessInfo.processInfo.arguments.contains("--expanded")
 
     private var isHovering = false
-    private var cooldownWorkItem: DispatchWorkItem?
     private var primeWorkItem: DispatchWorkItem?
-    /// After a collapse, a brief window during which returning the cursor
-    /// does not immediately re-expand — so a quick flick back into the
-    /// area the panel just vacated doesn't reopen it, like the original.
-    private var cooldownUntil: Date?
-    /// Must outlast the post-collapse content unmount (0.65s) so the
-    /// oversized settling hover region can never re-open the panel.
-    private let cooldown: TimeInterval = 0.7
     private var unmountWorkItem: DispatchWorkItem?
     /// Hover-to-open delay, during which the bar swells slightly (prime).
     /// ~3 frames on the original's recording before the expansion starts.
     private let primeDelay: TimeInterval = 0.10
+
+    /// The shape's target frame in window coordinates. Layout callbacks
+    /// report only the endpoints of a transition (SwiftUI animates at the
+    /// render layer), so the controller reconstructs the in-flight geometry
+    /// itself: same curve as the view (NotchAnimation), interpolated from
+    /// the previous frame. Hover decisions test against THAT — the real
+    /// shrinking shape — so the area the panel already vacated can never
+    /// reopen it. No cooldown needed.
+    private var shapeFrameInWindow: CGRect = .zero
+    private var shapeTransitionFrom: CGRect = .zero
+    private var shapeTransitionAt: Date = .distantPast
+    private var shapeExpanding = false
+    private var animLogStart: Date?
+
+    private func shapeFrameChanged(_ frame: CGRect) {
+        guard frame != shapeFrameInWindow else { return }
+        if shapeFrameInWindow == .zero {
+            // First report: no transition to animate from.
+            shapeTransitionFrom = frame
+        } else if Date().timeIntervalSince(shapeTransitionAt) > 0.08 {
+            shapeTransitionFrom = shapeFrameInWindow
+            shapeTransitionAt = Date()
+        }
+        // else: a second layout pass a few ms into the same transition —
+        // keep the original starting geometry and clock.
+        shapeExpanding = frame.height > shapeTransitionFrom.height
+        shapeFrameInWindow = frame
+        logAnimationFrame(frame)
+    }
+
+    /// The shape's frame as rendered right now: the transition endpoints
+    /// interpolated along the shared animation curve.
+    private func currentShapeRect() -> CGRect {
+        let elapsed = Date().timeIntervalSince(shapeTransitionAt)
+        let progress = NotchAnimation.progress(
+            elapsed: elapsed,
+            expanding: shapeExpanding
+        )
+        guard progress < 1 else { return shapeFrameInWindow }
+        let from = shapeTransitionFrom
+        let to = shapeFrameInWindow
+        func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
+            a + (b - a) * CGFloat(progress)
+        }
+        return CGRect(
+            x: lerp(from.minX, to.minX),
+            y: lerp(from.minY, to.minY),
+            width: lerp(from.width, to.width),
+            height: lerp(from.height, to.height)
+        )
+    }
+
+    /// Opt-in animation telemetry (VEDETTA_ANIM_LOG=1): one line per layout
+    /// tick with elapsed time and frame — evidence for animation-smoothness
+    /// bugs, analyzed offline.
+    private func logAnimationFrame(_ frame: CGRect) {
+        guard ProcessInfo.processInfo.environment["VEDETTA_ANIM_LOG"] != nil else { return }
+        let now = Date()
+        if let start = animLogStart, now.timeIntervalSince(start) > 3 {
+            animLogStart = now
+        } else if animLogStart == nil {
+            animLogStart = now
+        }
+        let elapsed = now.timeIntervalSince(animLogStart ?? now)
+        let line = String(
+            format: "%.4f %.2f %.2f %.2f %.2f\n",
+            elapsed, frame.minX, frame.minY, frame.width, frame.height
+        )
+        let path = NSHomeDirectory() + "/.vedetta/run/anim.log"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+    }
 
     /// Debug trace of hover transitions: every event with the real cursor
     /// position, panel frame and state — evidence for hover-region bugs.
@@ -300,38 +389,27 @@ final class NotchPanelController {
         if pinnedExpanded { return }
         isHovering = hovering
         collapseWorkItem?.cancel()
-        cooldownWorkItem?.cancel()
 
         if hovering {
             guard !uiModel.isExpanded else { return }
-            // Trust the real cursor, not the tracking event: while the
-            // expanded content is mounted (transition settling) the hover
-            // region is larger than the visible bar, and spurious enters
-            // from that area must never open the panel.
-            guard cursorOverCollapsedBar() else { return }
-            if let until = cooldownUntil, Date() < until {
-                // In cooldown: don't reopen now. Re-check when it ends and
-                // expand only if the cursor is REALLY on the bar. isHovering
-                // can be stale here: while the collapse animation retreats
-                // from under a stationary cursor SwiftUI emits no hover-exit,
-                // so trusting it would reopen the panel on a quick flick.
-                let remaining = until.timeIntervalSinceNow
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self, self.isHovering, self.cursorOverCollapsedBar() else { return }
-                    self.setExpanded(true)
+            // Trust the real cursor against the REAL shape, not the tracking
+            // event: while the expanded content is mounted (collapse
+            // settling) the hover region is larger than the visible shape,
+            // and an enter from the area the panel already vacated must
+            // never reopen it. The shape frame is live per animation tick,
+            // so mid-collapse the still-covered area legitimately reopens.
+            guard cursorOverShape() else { return }
+            // Prime first (slight swell), then open — like the original.
+            uiModel.isPrimed = true
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.isHovering, self.cursorOverShape() else {
+                    self?.uiModel.isPrimed = false
+                    return
                 }
-                cooldownWorkItem = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: work)
-            } else {
-                // Prime first (slight swell), then open — like the original.
-                uiModel.isPrimed = true
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self, self.isHovering else { return }
-                    self.setExpanded(true)
-                }
-                primeWorkItem = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + primeDelay, execute: work)
+                self.setExpanded(true)
             }
+            primeWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + primeDelay, execute: work)
         } else {
             primeWorkItem?.cancel()
             uiModel.isPrimed = false
@@ -390,7 +468,6 @@ final class NotchPanelController {
             // hover tracking region goes back to just the bar.
             uiModel.collapseSettling = true
             uiModel.isExpanded = false
-            cooldownUntil = Date().addingTimeInterval(cooldown)
             let work = DispatchWorkItem { [weak self] in
                 self?.uiModel.collapseSettling = false
             }
@@ -399,30 +476,50 @@ final class NotchPanelController {
         }
     }
 
-    /// True when the mouse is inside the collapsed bar's rect right now —
+    /// True when the mouse is inside the shape as rendered RIGHT NOW —
     /// queried directly (NSEvent) because hover state can go stale while
     /// the collapse animation moves the shape away from a still cursor.
+    /// Mid-animation the frame is the interpolated one, so this follows
+    /// the shrinking shape instead of any fixed rect.
+    private func cursorOverShape() -> Bool {
+        guard shapeFrameInWindow != .zero else { return cursorOverCollapsedBar() }
+        let shape = currentShapeRect()
+        let window = panel.frame
+        // SwiftUI window coords are top-left origin; screen coords bottom-left.
+        var rect = NSRect(
+            x: window.minX + shape.minX,
+            y: window.maxY - shape.maxY,
+            width: shape.width,
+            height: shape.height
+        )
+        // Reach a few points PAST the screen top: NSRect.contains excludes its
+        // max edge, so without this a cursor glued to the very top edge
+        // (mouseLocation.y == maxY) reads as outside the shape and never opens it.
+        rect.size.height += 6
+        return rect.contains(NSEvent.mouseLocation)
+    }
+
+    /// Static fallback for the instant before the first layout tick reports
+    /// the real shape frame.
     private func cursorOverCollapsedBar() -> Bool {
         guard let screen = Self.targetScreen() else { return false }
         let geometry = Self.notchGeometry(for: screen)
         // Wings + flares as drawn by NotchView, with a small margin.
         let barWidth = geometry.notchWidth + 40 + 23 + 8 + 24
         let barHeight = geometry.barHeight + 8
-        // Reach a few points PAST the screen top: NSRect.contains excludes its
-        // max edge, so without this a cursor glued to the very top edge
-        // (mouseLocation.y == maxY) reads as outside the bar and never opens it.
-        let topOverscan: CGFloat = 6
         let rect = NSRect(
             x: screen.frame.midX - barWidth / 2,
             y: screen.frame.maxY - barHeight,
             width: barWidth,
-            height: barHeight + topOverscan
+            height: barHeight + 6
         )
         return rect.contains(NSEvent.mouseLocation)
     }
 }
 
 extension Notification.Name {
+    /// Debug: drive the expand/collapse animation from the socket.
+    static let vedettaDebugSetExpanded = Notification.Name("vedettaDebugSetExpanded")
     /// Posted by a session card when the user jumps to its terminal.
     static let vedettaDidJump = Notification.Name("vedettaDidJump")
     /// Posted when a session's turn ends (Stop), for the finished peek.

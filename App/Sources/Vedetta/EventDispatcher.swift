@@ -303,6 +303,14 @@ enum EventDispatcher {
                 "nodes": nodes,
             ])
 
+        case "setExpanded":
+            NotificationCenter.default.post(
+                name: .vedettaDebugSetExpanded,
+                object: nil,
+                userInfo: ["expanded": envelope["value"] as? Bool ?? false]
+            )
+            return Data(#"{"ok":true}"#.utf8)
+
         case "decide":
             guard let id = envelope["id"] as? Int else { return nil }
             let allow = envelope["allow"] as? Bool ?? false
