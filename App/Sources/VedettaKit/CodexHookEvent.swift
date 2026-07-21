@@ -28,7 +28,7 @@ public enum JSONValue: Equatable, Sendable {
         }
     }
 
-    var anyValue: Any {
+    public var anyValue: Any {
         switch self {
         case .null: NSNull()
         case .bool(let value): value
