@@ -138,6 +138,22 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.first?.currentTool == nil)
     }
 
+    @Test func anonymousRolloutTurnsDoNotRejectAHookIdentifiedSession() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        coordinator.apply(hook: try hook("UserPromptSubmit", extra: ["prompt": "go"]))
+
+        // The file omitted turn_id: its synthetic id can never match the
+        // hook's turn and must not block enrichment.
+        let tool = CodexRolloutTool(callID: "call-3", name: "Bash", detail: "make app")
+        #expect(coordinator.apply(rollout: rollout(
+            activeTurns: [CodexRolloutTailer.anonymousTurnPrefix + "1"],
+            tools: ["call-3": tool]
+        )))
+        #expect(store.sessions.first?.currentTool == "Bash")
+        #expect(store.sessions.first?.state == .running)
+    }
+
     @Test func rejectsRolloutReadStartedBeforeNewerHookRevision() throws {
         let store = SessionStore()
         let coordinator = CodexIngressCoordinator(store: store)

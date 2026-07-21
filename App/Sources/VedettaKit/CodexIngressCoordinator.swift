@@ -159,9 +159,15 @@ public final class CodexIngressCoordinator {
             suppress(id: id, ledger: &ledger)
             return false
         }
+        // A rollout describing a different (real) turn than the hooks' current
+        // one is a cross-turn straggler. Anonymous ids — the file omitted
+        // turn_id — can never match a hook identity and must not reject.
+        let namedTurns = rollout.activeTurnIDs.filter {
+            !$0.hasPrefix(CodexRolloutTailer.anonymousTurnPrefix)
+        }
         if let currentTurn = session.currentTurnID,
-           !rollout.activeTurnIDs.isEmpty,
-           !rollout.activeTurnIDs.contains(currentTurn) {
+           !namedTurns.isEmpty,
+           !namedTurns.contains(currentTurn) {
             return false
         }
 

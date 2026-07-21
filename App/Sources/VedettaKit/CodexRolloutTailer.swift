@@ -229,9 +229,13 @@ public struct CodexRolloutTailer: Sendable {
         }
     }
 
+    /// Marks turns the rollout reported without a turn_id: they can never
+    /// match a hook-provided turn identity and must not be compared to one.
+    public static let anonymousTurnPrefix = "anonymous-turn-"
+
     private mutating func nextAnonymousTurnID() -> String {
         anonymousTurnSequence += 1
-        return "anonymous-turn-\(anonymousTurnSequence)"
+        return "\(Self.anonymousTurnPrefix)\(anonymousTurnSequence)"
     }
 
     private static func toolDetail(_ input: Any?) -> String? {
