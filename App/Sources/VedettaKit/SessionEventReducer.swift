@@ -87,6 +87,16 @@ public enum SessionEventReducer {
         // subdirectory of the one we have must not replace it; a shallower
         // or unrelated cwd (a real project switch) does.
         if let cwd { session.directory = rootDirectory(current: session.directory, cwd: cwd) }
+        if let model = event["model"] as? String, !model.isEmpty {
+            session.model = model
+        }
+        if source == "codex" {
+            session.codexThreadID = event["codex_thread_id"] as? String
+            session.currentTurnID = (event["codex_turn_id"] as? String)
+                ?? (event["turn_id"] as? String)
+            session.currentToolUseID = event["tool_use_id"] as? String
+            session.permissionMode = event["permission_mode"] as? String
+        }
         session.lastActivityAt = date
 
         switch name {
@@ -126,7 +136,7 @@ public enum SessionEventReducer {
         case "PreToolUse":
             session.state = .running
             session.currentTool = event["tool_name"] as? String
-            session.currentToolDetail = toolDetail(from: event["tool_input"] as? [String: Any])
+            session.currentToolDetail = toolDetail(from: event["tool_input"])
 
         case "PostToolUse":
             // Keep the last tool shown between calls, like the original —
@@ -139,6 +149,9 @@ public enum SessionEventReducer {
             session.currentToolDetail = nil
             session.compactingStartedAt = nil
             session.compactTrigger = nil
+            if let reply = event["last_assistant_message"] as? String, !reply.isEmpty {
+                session.lastAssistantMessage = reply
+            }
             enrich(from: event, into: &session)
             // The final assistant message may not have hit the transcript
             // yet when Stop fires: re-read shortly after.
@@ -241,13 +254,19 @@ public enum SessionEventReducer {
 
     /// Compact one-line description of what the tool is touching,
     /// mirroring the original's tool row (command, file name, …).
-    private static func toolDetail(from input: [String: Any]?) -> String? {
-        guard let input else { return nil }
+    private static func toolDetail(from value: Any?) -> String? {
+        if let text = value as? String, !text.isEmpty { return text }
+        guard let input = value as? [String: Any] else { return nil }
         if let command = input["command"] as? String { return command }
+        if let command = input["cmd"] as? String { return command }
         if let path = input["file_path"] as? String {
             return (path as NSString).lastPathComponent
         }
+        if let path = input["path"] as? String {
+            return (path as NSString).lastPathComponent
+        }
         if let pattern = input["pattern"] as? String { return pattern }
+        if let query = input["query"] as? String { return query }
         if let url = input["url"] as? String { return url }
         if let description = input["description"] as? String { return description }
         return nil

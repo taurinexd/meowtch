@@ -14,11 +14,24 @@ enum EventDispatcher {
         let empty = Data("{}".utf8)
         guard let store,
               let object = try? JSONSerialization.jsonObject(with: data),
-              let envelope = object as? [String: Any] else { return empty }
+              var envelope = object as? [String: Any] else { return empty }
 
         if let command = envelope["cmd"] as? String {
             return handleCommand(command, envelope: envelope, store: store) ?? empty
         }
+
+        var codexHook: CodexHookEvent?
+        if envelope["source"] as? String == "codex" {
+            do {
+                let hook = try CodexHookEvent(envelope: envelope)
+                codexHook = hook
+                envelope = hook.normalizedEnvelope
+            } catch {
+                logHookMetadata(envelope, result: "rejected: \(error.localizedDescription)")
+                return empty
+            }
+        }
+        logHookMetadata(envelope, result: "accepted")
 
         guard let event = envelope["event"] as? [String: Any],
               let name = event["hook_event_name"] as? String,
@@ -37,7 +50,12 @@ enum EventDispatcher {
             // can be the first thing we ever hear from a session), records
             // the terminal identity and enriches title/messages.
             SessionEventReducer.apply(envelope, to: store)
-            return await handlePermissionRequest(event, sessionId: sessionId, store: store)
+            return await handlePermissionRequest(
+                event,
+                source: envelope["source"] as? String ?? "claude",
+                sessionId: sessionId,
+                store: store
+            )
         }
 
         SessionEventReducer.apply(envelope, to: store)
@@ -77,35 +95,24 @@ enum EventDispatcher {
                 userInfo: ["sessionId": sessionId]
             )
         }
-        return empty
+        return codexHook?.nonBlockingResponseData ?? empty
     }
 
     // MARK: - Blocking approvals
 
     private static func handlePermissionRequest(
         _ event: [String: Any],
+        source: String,
         sessionId: String,
         store: SessionStore
     ) async -> Data {
         let toolName = event["tool_name"] as? String ?? "?"
         let toolInput = event["tool_input"] as? [String: Any]
 
-        // Opt-in capture of the raw request (VEDETTA_PR_LOG=1): the exact
-        // AskUserQuestion payload — single vs multi question — drives the
-        // remote-answer design.
-        if ProcessInfo.processInfo.environment["VEDETTA_PR_LOG"] != nil,
-           let data = try? JSONSerialization.data(withJSONObject: event, options: [.prettyPrinted]) {
-            let path = NSHomeDirectory() + "/.vedetta/run/permission.log"
-            let entry = "=== \(toolName) @ \(ISO8601DateFormatter().string(from: Date()))\n"
-                + (String(data: data, encoding: .utf8) ?? "") + "\n"
-            if let handle = FileHandle(forWritingAtPath: path) {
-                handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close()
-            } else {
-                try? entry.write(toFile: path, atomically: true, encoding: .utf8)
-            }
-        }
         let detail = (toolInput?["command"] as? String)
+            ?? (toolInput?["cmd"] as? String)
             ?? (toolInput?["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
+            ?? (toolInput?["path"] as? String).map { ($0 as NSString).lastPathComponent }
             ?? (toolInput?["description"] as? String)
 
         // AskUserQuestion rides the SAME blocking channel as an approval: we
@@ -114,7 +121,8 @@ enum EventDispatcher {
         // decision.updatedInput.answers. Claude Code then resolves the tool
         // with those answers and never shows its terminal picker — no
         // keystroke injection, no focus, nothing to corrupt the terminal.
-        if toolName == "AskUserQuestion", let questions = QuestionStore.parse(toolInput) {
+        if source == "claude", toolName == "AskUserQuestion",
+           let questions = QuestionStore.parse(toolInput) {
             store.transition(id: sessionId, to: .needsApproval)
             SoundEngine.shared.play(.question)
             let answers = await QuestionStore.shared.awaitAnswer(
@@ -166,6 +174,23 @@ enum EventDispatcher {
             ]
         ]
         return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
+    }
+
+    /// Opt-in compatibility diagnostics intentionally exclude prompts, tool
+    /// input/output, and every other payload body.
+    private static func logHookMetadata(_ envelope: [String: Any], result: String) {
+        guard ProcessInfo.processInfo.environment["VEDETTA_HOOK_LOG"] == "1" else { return }
+        let event = envelope["event"] as? [String: Any]
+        let source = envelope["source"] as? String ?? "unknown"
+        let name = event?["hook_event_name"] as? String ?? "unknown"
+        let session = event?["session_id"] as? String ?? "missing"
+        let turn = (event?["codex_turn_id"] as? String)
+            ?? (event?["turn_id"] as? String)
+            ?? "missing"
+        NSLog(
+            "Vedetta hook source=%@ event=%@ session=%@ turn=%@ result=%@",
+            source, name, session, turn, result
+        )
     }
 
     // MARK: - Debug commands

@@ -9,6 +9,7 @@ struct SessionEventReducerTests {
         _ event: String,
         sessionId: String = "s1",
         cwd: String = "/Users/x/Code/progetto",
+        source: String = "claude",
         extra: [String: Any] = [:]
     ) -> [String: Any] {
         var payload: [String: Any] = [
@@ -19,7 +20,7 @@ struct SessionEventReducerTests {
         payload.merge(extra) { _, new in new }
         return [
             "v": 1,
-            "source": "claude",
+            "source": source,
             "terminal": ["termProgram": "vscode", "tty": "/dev/ttys009"],
             "event": payload,
         ]
@@ -162,5 +163,47 @@ struct SessionEventReducerTests {
         SessionEventReducer.apply(envelope("SessionStart"), to: store)
         #expect(store.terminal(for: "s1")?.termProgram == "vscode")
         #expect(store.terminal(for: "s1")?.tty == "/dev/ttys009")
+    }
+
+    @Test func capturedCodexSessionStartCreatesNamespacedCodexSession() throws {
+        let store = SessionStore()
+        let decoded = try CodexHookEvent(envelope: envelope(
+            "SessionStart",
+            sessionId: "019f-thread",
+            source: "codex",
+            extra: [
+                "turn_id": "turn-1",
+                "transcript_path": "/Users/x/.codex/sessions/rollout.jsonl",
+                "model": "gpt-5.6-sol",
+                "permission_mode": "bypassPermissions",
+                "source": "startup",
+            ]
+        ))
+        SessionEventReducer.apply(
+            decoded.normalizedEnvelope,
+            to: store
+        )
+        #expect(store.sessions.first?.id == "codex-019f-thread")
+        #expect(store.sessions.first?.agent == .codex)
+        #expect(store.sessions.first?.model == "gpt-5.6-sol")
+        #expect(store.sessions.first?.codexThreadID == "019f-thread")
+        #expect(store.sessions.first?.currentTurnID == "turn-1")
+        #expect(store.sessions.first?.permissionMode == "bypassPermissions")
+        #expect(store.sessions.first?.state == .running)
+    }
+
+    @Test func codexStopUsesLastAssistantMessageFromHookPayload() {
+        let store = SessionStore()
+        SessionEventReducer.apply(envelope("SessionStart", source: "codex"), to: store)
+        SessionEventReducer.apply(
+            envelope("Stop", source: "codex", extra: [
+                "turn_id": "turn-1",
+                "last_assistant_message": "Implementazione completata.",
+                "stop_hook_active": false,
+            ]),
+            to: store
+        )
+        #expect(store.sessions.first?.lastAssistantMessage == "Implementazione completata.")
+        #expect(store.sessions.first?.state == .waitingForInput)
     }
 }
