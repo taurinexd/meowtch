@@ -376,6 +376,10 @@ enum EventDispatcher {
                 "display": String(describing: usage.displayProvider),
             ])
 
+        case "openOnboarding":
+            Task { @MainActor in OnboardingController.shared.show() }
+            return Data(#"{"ok":true}"#.utf8)
+
         case "openSettings":
             var userInfo: [String: Any] = [:]
             if let page = envelope["page"] as? String { userInfo["page"] = page }
