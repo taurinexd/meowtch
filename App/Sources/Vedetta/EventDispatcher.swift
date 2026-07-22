@@ -262,7 +262,7 @@ enum EventDispatcher {
         switch command {
         case "dump":
             let sessions = store.sessions.map { session -> [String: Any] in
-                [
+                var entry: [String: Any] = [
                     "id": session.id,
                     "title": session.title,
                     "directory": session.directory,
@@ -273,6 +273,19 @@ enum EventDispatcher {
                     "currentToolDetail": session.currentToolDetail ?? "",
                     "recap": session.recap ?? "",
                 ]
+                if let terminal = store.terminal(for: session.id) {
+                    entry["terminal"] = [
+                        "jumpable": terminal.isJumpable,
+                        "tty": terminal.tty ?? "",
+                        "termProgram": terminal.termProgram ?? "",
+                        "bundleIdentifier": terminal.bundleIdentifier ?? "",
+                        "pid": terminal.pid.map(Int.init) ?? 0,
+                        "windowId": terminal.windowId ?? 0,
+                        "pidChain": terminal.pidChain ?? [],
+                        "writerFallback": terminal.isWriterFallback ?? false,
+                    ]
+                }
+                return entry
             }
             return try? JSONSerialization.data(withJSONObject: ["sessions": sessions])
 
