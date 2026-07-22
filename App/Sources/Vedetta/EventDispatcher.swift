@@ -117,6 +117,16 @@ enum EventDispatcher {
             QuestionStore.shared.dismiss(sessionId: sessionId)
         }
 
+        // A fresh process run (startup/resume — NOT compact, which keeps
+        // the live context) resets the task-list freshness baseline: lists
+        // whose files predate it belong to a closed run.
+        if name == "SessionStart", envelope["source"] as? String != "codex",
+           ["startup", "resume", "clear"].contains(event["source"] as? String ?? "") {
+            let at = (envelope["capturedAt"] as? NSNumber)
+                .map { Date(timeIntervalSince1970: $0.doubleValue) } ?? Date()
+            SessionRunRegistry.recordRunStart(sessionId: sessionId, at: at)
+        }
+
         // Names and task lists live anywhere in the transcript: refresh
         // them in the background at turn boundaries. Registering the path
         // also lets the periodic pass re-peek the recap for live sessions.
