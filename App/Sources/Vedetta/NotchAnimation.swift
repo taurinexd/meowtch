@@ -5,7 +5,7 @@ import VedettaKit
 /// with these curves, the controller interpolates hover hit-test geometry
 /// with the same math, so both always agree on where the shape is.
 ///
-/// The collapse is a fixed-duration bezier, not a spring: VI's measured
+/// The collapse is a fixed-duration bezier, not a spring: the original's measured
 /// collapse is ~0.6s, monotonic, with a soft settle — a critically damped
 /// spring over this travel distance crawls asymptotically for ~1.3s and
 /// then visibly clamps a few points at termination (the "snap" at the end).

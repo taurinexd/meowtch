@@ -514,6 +514,19 @@ private struct SoundSettingsPage: View {
 private struct UsageSettingsPage: View {
     @AppStorage(SettingsKey.showUsageLimits) private var showUsage = true
     @AppStorage(SettingsKey.preferredUsageProvider) private var provider = "auto"
+    @State private var statusLineOwner = VedettaSetup.claudeStatusLineOwner()
+    @State private var claimError: String?
+
+    private var claudeSourceSubtitle: String {
+        switch statusLineOwner {
+        case .vedetta:
+            "Active: Vedetta's statusline harvests the rate limits."
+        case .foreign:
+            claimError ?? "Another statusline occupies the Claude Code slot, so Claude usage can't be harvested. Replacing backs the current one up first."
+        case .none:
+            claimError ?? "No statusline installed: Claude usage needs Vedetta's harvester."
+        }
+    }
 
     var body: some View {
         SettingsSection(
@@ -536,6 +549,21 @@ private struct UsageSettingsPage: View {
                     .frame(width: 170)
                     .onChange(of: provider) { _, value in
                         UsageModel.shared.applyPreferredProvider(value)
+                    }
+                }
+                RowDivider()
+                SettingsRow(title: "Claude usage source",
+                            subtitle: claudeSourceSubtitle) {
+                    if statusLineOwner != .vedetta {
+                        Button("Use Vedetta's…") {
+                            do {
+                                try VedettaSetup.claimStatusLine()
+                                claimError = nil
+                            } catch {
+                                claimError = "Replacement failed: \(error.localizedDescription)"
+                            }
+                            statusLineOwner = VedettaSetup.claudeStatusLineOwner()
+                        }
                     }
                 }
             }
@@ -588,7 +616,7 @@ private struct AboutSettingsPage: View {
 
         SettingsSection(title: "License") {
             SettingsRow(title: "MIT License",
-                        subtitle: "Clean-room reimplementation; not affiliated with Vibe Island.") {
+                        subtitle: "Free and open source.") {
                 EmptyView()
             }
         }

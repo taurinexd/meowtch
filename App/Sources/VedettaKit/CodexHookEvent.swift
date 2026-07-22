@@ -94,7 +94,7 @@ public struct CodexHookEvent: Equatable, Sendable {
 
     public var sessionID: String { "codex-\(threadID)" }
 
-    /// VI's Stop hook explicitly prints this benign response. Other
+    /// The original's Stop hook explicitly prints this benign response. Other
     /// non-blocking Codex hooks do not require hook output.
     public var nonBlockingResponse: JSONValue? {
         kind == .stop ? .object(["continue": .bool(true)]) : nil

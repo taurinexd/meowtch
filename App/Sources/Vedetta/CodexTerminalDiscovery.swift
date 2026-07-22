@@ -4,7 +4,7 @@ import Foundation
 import VedettaKit
 
 /// Recovers the terminal for Codex sessions that predate hook installation.
-/// VI does this by retaining the PID that owns the open rollout file
+/// The original does this by retaining the PID that owns the open rollout file
 /// (`codexWriterPid`); on macOS its binary uses `/usr/sbin/lsof -F` for the
 /// lookup. Hooks remain authoritative when they later provide an exact window.
 enum CodexTerminalDiscovery {

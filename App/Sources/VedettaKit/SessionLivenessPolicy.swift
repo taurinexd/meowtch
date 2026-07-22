@@ -1,7 +1,7 @@
 import Foundation
 
 /// Decides when a session's card must leave the panel because its terminal
-/// is provably dead (VI keeps tty + pids per session in its terminal map and
+/// is provably dead (the original keeps tty + pids per session in its terminal map and
 /// its cards follow the terminal's life). Everything here errs toward
 /// keeping: a card is removed only on positive evidence of death.
 public enum SessionLivenessPolicy {
