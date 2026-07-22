@@ -193,6 +193,34 @@ reale (timeline `running → waitingForInput` senza flip), envelope bridge
 sintetici via socket per i percorsi handoff/terminal-routing, dump-order
 stabile con più card running.
 
+## Pass 7 — Codex request_user_input (2026-07-22)
+
+Codex 0.145 introduce `request_user_input` (domande con opzioni, attive in
+Plan mode). Verifica dal binario Codex + test live:
+
+- **Nessun evento hook per le domande**: la lista completa degli eventi del
+  runtime hook Codex è `pre_tool_use, permission_request, post_tool_use,
+  pre_compact, post_compact, session_start, session_end, user_prompt_submit,
+  subagent_start, subagent_stop`. Un test live (monitor sul socket durante una
+  domanda reale) conferma: zero hook.
+- **`updatedInput` rifiutato**: il binario contiene "PermissionRequest hook
+  returned unsupported updatedInput" — il canale-dati che per Claude ci fa
+  rispondere alle AskUserQuestion è esplicitamente non supportato da Codex.
+  Gli hook Codex possono solo allow/deny.
+- La domanda È scritta nel rollout (`function_call request_user_input`, args
+  con `questions[].question/options[].label`), e la risposta arriva come
+  `function_call_output` a risposta data.
+
+**Soluzione Vedetta** (oltre VI, che è pre-0.145): mirroring dal rollout
+(card needsApproval + "Question" + opzioni) e risposta remota via estensione
+VS Code 0.7.0 (`/answer`: individua il terminale esatto per ancestry e digita
+`<numero>⏎` solo lì — mai tastiera globale). Multi-domanda: solo view+jump.
+Migrare al canale hook il giorno in cui OpenAI espone un evento per lo user
+input. Nota colta di passaggio: Codex supporta anche `pre_compact`,
+`post_compact`, `session_end`, `subagent_start`, `pre_tool_use` — eventi che
+il manifest VI non installa; possibile estensione futura del nostro manifest
+(es. contextLimit sound anche per Codex).
+
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
 Tutto su `main` locale (nessun push). Commit principali:
