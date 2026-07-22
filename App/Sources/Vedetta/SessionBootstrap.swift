@@ -248,11 +248,18 @@ enum SessionBootstrap {
         // Live sessions get state and messages from hook events, but the
         // recap is written out-of-band minutes AFTER Stop (while the user
         // is away): re-peek just that, touching nothing the events own.
+        // A /rename lands in the transcript immediately, without any hook:
+        // the user-given name always wins, so it is safe to apply here too
+        // (≤15s latency instead of waiting for the next turn boundary).
         for (id, path) in scannedPaths where liveEventIds.contains(id) {
             guard var session = store.sessions.first(where: { $0.id == id }),
                   session.agent == .claude else { continue }
             let peek = TranscriptPeek.read(path: path)
             var changed = false
+            if let name = peek.sessionName, name != session.title {
+                session.title = name
+                changed = true
+            }
             if session.recap != peek.awaySummary {
                 session.recap = peek.awaySummary
                 changed = true
