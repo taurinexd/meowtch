@@ -77,6 +77,15 @@ final class NotchPanelController {
             }
         }
 
+        // The Settings window's display toggle relocates the panel.
+        NotificationCenter.default.addObserver(
+            forName: .vedettaPanelDisplayChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.relocate() }
+        }
+
         // Dev aid: the socket's setExpanded command drives the open/close
         // animation without a cursor (used to measure animation smoothness).
         NotificationCenter.default.addObserver(
@@ -126,7 +135,9 @@ final class NotchPanelController {
     private var peekKeyMonitor: Any?
     /// How long the peek stays open without interaction (tuned live
     /// against the original: 6s read as one second too long).
-    private let peekDuration: TimeInterval = 5
+    private var peekDuration: TimeInterval {
+        max(2, UserDefaults.standard.double(forKey: SettingsKey.expandDwellSeconds))
+    }
     /// A session won't re-peek within this window: during live work every
     /// turn end fires a Stop, and popping the notch open at each one reads
     /// as the panel expanding on its own (the original peeks occasionally,
@@ -135,6 +146,8 @@ final class NotchPanelController {
     private var lastPeekAt: [String: Date] = [:]
 
     private func maybePeek(sessionId: String) {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.expandPanelForCompletions)
+        else { return }
         guard !pinnedExpanded, !uiModel.isExpanded, !isHovering else { return }
         if let last = lastPeekAt[sessionId],
            Date().timeIntervalSince(last) < peekThrottle { return }
@@ -278,8 +291,10 @@ final class NotchPanelController {
     private var primeWorkItem: DispatchWorkItem?
     private var unmountWorkItem: DispatchWorkItem?
     /// Hover-to-open delay, during which the bar swells slightly (prime).
-    /// ~3 frames on the original's recording before the expansion starts.
-    private let primeDelay: TimeInterval = 0.10
+    /// ~3 frames on the original's recording by default; user-tunable.
+    private var primeDelay: TimeInterval {
+        UserDefaults.standard.double(forKey: SettingsKey.hoverExpandDelay)
+    }
 
     /// The shape's target frame in window coordinates. Layout callbacks
     /// report only the endpoints of a transition (SwiftUI animates at the
@@ -392,6 +407,9 @@ final class NotchPanelController {
 
         if hovering {
             guard !uiModel.isExpanded else { return }
+            guard UserDefaults.standard.bool(forKey: SettingsKey.hoverToExpandEnabled) else {
+                return
+            }
             // Trust the real cursor against the REAL shape, not the tracking
             // event: while the expanded content is mounted (collapse
             // settling) the hover region is larger than the visible shape,
@@ -411,6 +429,8 @@ final class NotchPanelController {
             stopHoverPoll()
             primeWorkItem?.cancel()
             uiModel.isPrimed = false
+            guard UserDefaults.standard.bool(forKey: SettingsKey.autoCollapseOnMouseLeave)
+            else { return }
             // Small delay so the panel doesn't flicker when the pointer
             // grazes the edge.
             let workItem = DispatchWorkItem { [weak self] in
@@ -563,6 +583,8 @@ final class NotchPanelController {
 }
 
 extension Notification.Name {
+    /// Posted when the Settings display toggle changes the target screen.
+    static let vedettaPanelDisplayChanged = Notification.Name("vedettaPanelDisplayChanged")
     /// Debug: drive the expand/collapse animation from the socket.
     static let vedettaDebugSetExpanded = Notification.Name("vedettaDebugSetExpanded")
     /// Posted by a session card when the user jumps to its terminal.

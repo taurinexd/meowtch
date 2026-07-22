@@ -50,6 +50,8 @@ struct SessionRowView: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture {
+            guard !UserDefaults.standard.bool(forKey: SettingsKey.disableClickToJump)
+            else { return }
             guard terminal?.isJumpable == true else { return }
             JumpService.jump(to: session, terminal: terminal)
             // Jumping collapses the panel at once, like the original.
