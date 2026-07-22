@@ -104,6 +104,22 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
   (~5-15s), osservato via socket. Il `dump` ora espone il terminal binding
   (jumpable/tty/chain/writerFallback) per questa diagnostica.
 
+## Round 4 — Settings window (2026-07-22) — `f0db85a`
+
+- [x] Finestra Settings sidebar-style (anatomia VI da `copyscreens/settings`,
+  chiavi defaults cross-checked nel binario). 7 pagine: General,
+  Integrations, Notifications, Display, Sound, Usage, About — SOLO controlli
+  wirati a comportamento reale, zero toggle fantasma.
+- [x] Aperture: gear del notch, menu status bar ("Settings…", ⌘,), comando
+  socket `openSettings` con deep-link per pagina.
+- [x] Menu status bar ridotto a Show/Hide Panel · Settings… · Quit; tutte le
+  voci operative (hook, approvals, AX, display, mute) migrate nei Settings.
+- [x] Nuovi comportamenti wirati: Launch at Login (SMAppService), hover
+  toggle/durata, auto-collapse toggle, peek dwell/enable, disable
+  click-to-jump, volume suoni, visibilità/provider usage strip.
+- Verifica: 146 test verdi; ogni pagina catturata a screenshot dalla build
+  viva (deep-link socket) e confrontata con gli screenshot VI.
+
 ## Residui noti (non bloccanti)
 
 - Il self-cleanup JXA del launcher (`VedettaSetup`) usa ancora
