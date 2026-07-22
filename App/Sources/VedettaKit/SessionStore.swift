@@ -64,6 +64,13 @@ public final class SessionStore: ObservableObject {
         transition(id: id, to: .running, at: date)
     }
 
+    /// One notch answer sent for the session's pending Codex ask: the
+    /// wizard steps to the next question, in store so it survives remounts.
+    public func advanceCodexQuestion(id: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[index].answeredCodexQuestions += 1
+    }
+
     public func remove(id: String) {
         sessions.removeAll { $0.id == id }
         terminals.removeValue(forKey: id)

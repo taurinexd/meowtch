@@ -178,10 +178,18 @@ struct CodexIngressCoordinatorTests {
         #expect(coordinator.apply(rollout: asking))
         #expect(announcements == 1)
 
-        // Answered in the TUI: the attention state releases on its own.
+        // Wizard progress lives in the store (it must survive the panel
+        // collapsing mid-ask) and rollout re-reads must not reset it.
+        store.advanceCodexQuestion(id: "codex-thread-1")
+        #expect(coordinator.apply(rollout: asking))
+        #expect(store.sessions.first?.answeredCodexQuestions == 1)
+
+        // Answered in the TUI: the attention state releases on its own,
+        // clearing the progress for the next ask.
         #expect(coordinator.apply(rollout: rollout(activeTurns: ["turn-1"])))
         #expect(store.sessions.first?.state == .running)
         #expect(store.sessions.first?.pendingCodexQuestions == nil)
+        #expect(store.sessions.first?.answeredCodexQuestions == 0)
     }
 
     @Test func rejectsRolloutReadStartedBeforeNewerHookRevision() throws {
