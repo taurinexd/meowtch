@@ -107,6 +107,27 @@ enum EventDispatcher {
             SessionEventReducer.apply(envelope, to: store)
         }
 
+        // Event chirps ride the hook path itself (instant, like a user's
+        // own afplay hooks); each one is individually silenceable from
+        // Settings (approval/question chirps live in their own flows).
+        switch name {
+        case "SessionStart":
+            // Not on compaction restarts, and never for sessions that made
+            // no card (the resume picker's ghosts).
+            if event["source"] as? String != "compact",
+               store.sessions.contains(where: { $0.id == sessionId }) {
+                SoundEngine.shared.play(.sessionStart)
+            }
+        case "UserPromptSubmit":
+            SoundEngine.shared.play(.taskAcknowledge)
+        case "StopFailure":
+            SoundEngine.shared.play(.taskError)
+        case "PreCompact":
+            SoundEngine.shared.play(.contextLimit)
+        default:
+            break
+        }
+
         // A pending request goes stale when the tool proceeds without our
         // decision (bypass mode) or the user answers in the terminal: the
         // tool's PostToolUse — or the turn moving on — is the signal to

@@ -8,10 +8,18 @@ import Foundation
 final class SoundEngine {
     static let shared = SoundEngine()
 
-    enum Event: String {
+    enum Event: String, CaseIterable {
+        case sessionStart = "session-start"
+        case taskAcknowledge = "task-acknowledge"
+        case sessionComplete = "session-complete"
+        case taskError = "task-error"
         case approvalRequest = "approval-request"
         case question = "question"
-        case sessionComplete = "session-complete"
+        case contextLimit = "context-limit"
+
+        /// Silence rules default: everything audible except the per-prompt
+        /// acknowledge (mirrors the original's defaults).
+        var enabledByDefault: Bool { self != .taskAcknowledge }
     }
 
     private var players: [AVAudioPlayer] = []
@@ -23,8 +31,24 @@ final class SoundEngine {
         set { defaults.set(newValue, forKey: mutedKey) }
     }
 
+    /// Per-event silence rule ("soundEnabled.<event>"; unset = its default).
+    func isEnabled(_ event: Event) -> Bool {
+        defaults.object(forKey: "soundEnabled.\(event.rawValue)") as? Bool
+            ?? event.enabledByDefault
+    }
+
+    func setEnabled(_ event: Event, _ enabled: Bool) {
+        defaults.set(enabled, forKey: "soundEnabled.\(event.rawValue)")
+    }
+
     func play(_ event: Event) {
-        guard !isMuted else { return }
+        guard !isMuted, isEnabled(event) else { return }
+        playPreview(event)
+    }
+
+    /// Unconditional playback (Settings preview must sound even for
+    /// disabled events).
+    func playPreview(_ event: Event) {
 
         let customPath = NSHomeDirectory() + "/.vedetta/custom-sounds/\(event.rawValue).wav"
         let data: Data
@@ -46,12 +70,24 @@ final class SoundEngine {
 
     private static func motif(for event: Event) -> Data {
         switch event {
+        case .sessionStart:
+            // Rising power-on arpeggio.
+            return wav(notes: [(523, 0.05), (659, 0.05), (784, 0.09)])
+        case .taskAcknowledge:
+            // Single short blip.
+            return wav(notes: [(988, 0.05)])
         case .approvalRequest:
             return wav(notes: [(660, 0.07), (0, 0.02), (880, 0.10)])
         case .question:
             return wav(notes: [(660, 0.07), (0, 0.02), (660, 0.07)])
         case .sessionComplete:
             return wav(notes: [(880, 0.06), (0, 0.02), (1320, 0.09)])
+        case .taskError:
+            // Falling minor buzz.
+            return wav(notes: [(440, 0.08), (0, 0.02), (311, 0.14)])
+        case .contextLimit:
+            // Insistent double warning on one tone.
+            return wav(notes: [(1047, 0.06), (0, 0.04), (1047, 0.06), (0, 0.04), (784, 0.10)])
         }
     }
 

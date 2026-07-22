@@ -474,10 +474,20 @@ private struct SoundSettingsPage: View {
     @State private var enabled = !SoundEngine.shared.isMuted
     @AppStorage(SettingsKey.soundVolume) private var volume = 0.5
 
+    private static let events: [(SoundEngine.Event, String, String)] = [
+        (.sessionStart, "Session Start", "New Claude or Codex session"),
+        (.sessionComplete, "Task Complete", "The agent finished its turn"),
+        (.taskError, "Task Error", "The turn failed"),
+        (.approvalRequest, "Approval Needed", "Permission pending"),
+        (.question, "Question", "The agent asked you something"),
+        (.taskAcknowledge, "Task Acknowledge", "You submitted a prompt"),
+        (.contextLimit, "Context Limit", "Context window almost full"),
+    ]
+
     var body: some View {
         SettingsSection(
             title: "Sound Effects",
-            footer: "8-bit chirps for approvals, questions and completions. Drop custom .wav files in ~/.vedetta/custom-sounds to replace them."
+            footer: "8-bit chirps, synthesized in memory. Drop custom .wav files named after an event in ~/.vedetta/custom-sounds to replace them."
         ) {
             SettingsRow(title: "Enable Sound Effects") {
                 Toggle("", isOn: $enabled)
@@ -494,7 +504,7 @@ private struct SoundSettingsPage: View {
                         Slider(
                             value: $volume, in: 0...1,
                             onEditingChanged: { editing in
-                                if !editing { SoundEngine.shared.play(.question) }
+                                if !editing { SoundEngine.shared.playPreview(.question) }
                             }
                         )
                         .frame(width: 180)
@@ -504,6 +514,54 @@ private struct SoundSettingsPage: View {
                             .frame(width: 40, alignment: .trailing)
                     }
                 }
+            }
+        }
+
+        if enabled {
+            SettingsSection(
+                title: "Events",
+                footer: "Approvals and questions still show their cards when silenced — only the chirp is skipped."
+            ) {
+                ForEach(Array(Self.events.enumerated()), id: \.offset) { index, entry in
+                    if index > 0 { RowDivider() }
+                    SoundEventRow(event: entry.0, title: entry.1, subtitle: entry.2)
+                }
+            }
+        }
+    }
+}
+
+/// One silence rule: preview button + per-event toggle.
+private struct SoundEventRow: View {
+    let event: SoundEngine.Event
+    let title: String
+    let subtitle: String
+    @State private var enabled: Bool
+
+    init(event: SoundEngine.Event, title: String, subtitle: String) {
+        self.event = event
+        self.title = title
+        self.subtitle = subtitle
+        _enabled = State(initialValue: SoundEngine.shared.isEnabled(event))
+    }
+
+    var body: some View {
+        SettingsRow(title: title, subtitle: subtitle) {
+            HStack(spacing: 12) {
+                Button {
+                    SoundEngine.shared.playPreview(event)
+                } label: {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                Toggle("", isOn: $enabled)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: enabled) { _, value in
+                        SoundEngine.shared.setEnabled(event, value)
+                    }
             }
         }
     }
