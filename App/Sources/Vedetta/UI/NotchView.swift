@@ -373,8 +373,21 @@ struct NotchView: View {
                 SoundEngine.shared.isMuted.toggle()
                 muted = SoundEngine.shared.isMuted
             } label: {
-                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .contentShape(Rectangle())
+                // SF Symbols has no speaker-with-x variant: compose one so
+                // the muted icon replaces the waves with an x, at the exact
+                // same footprint (fixed frame → the gear never shifts).
+                HStack(spacing: 1.5) {
+                    Image(systemName: "speaker.fill")
+                    if muted {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                    } else {
+                        Image(systemName: "wave.3.right")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                }
+                .frame(width: 24, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(PressFlashStyle())
             Button {
