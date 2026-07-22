@@ -191,6 +191,15 @@ struct SessionRowView: View {
                     .padding(.top, 10)
             }
 
+            // A Codex TUI question mirrored from the rollout: same anatomy
+            // as the Claude bar, but the tap types the option number into
+            // the exact terminal via the extension (no hook channel exists).
+            if session.agent == .codex, session.state == .needsApproval,
+               let options = session.pendingQuestionOptions, !options.isEmpty {
+                codexQuestionBar(options)
+                    .padding(.top, 10)
+            }
+
             // The widget earns its space only while there is work left;
             // an all-done list disappears, like the original.
             if let tasks = session.tasks,
@@ -206,6 +215,64 @@ struct SessionRowView: View {
     /// The live AskUserQuestion(s) shown in the notch. Each question lists
     /// its options (with descriptions); clicking one raises the terminal
     /// and drives the native picker to that choice.
+    @State private var codexAnswerSent = false
+
+    private func codexQuestionBar(_ options: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "questionmark.bubble.fill")
+                    .font(.system(size: 11))
+                Text("Question")
+                    .font(.system(size: 11.5, weight: .bold))
+                Spacer(minLength: 6)
+                Text(codexAnswerSent ? "Sent to terminal" : "Answers in the terminal")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            .foregroundStyle(Theme.color(for: .needsApproval))
+            if let question = session.currentToolDetail {
+                Text(question)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.primaryText)
+            }
+            ForEach(Array(options.enumerated()), id: \.offset) { index, label in
+                Button {
+                    guard !codexAnswerSent else { return }
+                    codexAnswerSent = true
+                    JumpService.answerCodexQuestion(
+                        session: session,
+                        terminal: terminal,
+                        optionNumber: index + 1
+                    )
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("\(index + 1)")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Theme.secondaryText)
+                        Text(label)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.primaryText)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .opacity(codexAnswerSent ? 0.4 : 1)
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onChange(of: session.pendingQuestionOptions) { _, value in
+            // A new question (or the release of this one) re-arms the bar.
+            if value == nil { codexAnswerSent = false }
+        }
+    }
+
     private func questionBar(_ live: QuestionStore.Live) -> some View {
         // One question at a time, like the original's WizardQuestionView and
         // the terminal's tabbed picker — never stacked. Selections accumulate

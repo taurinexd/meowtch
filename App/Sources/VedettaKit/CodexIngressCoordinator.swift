@@ -217,7 +217,12 @@ public final class CodexIngressCoordinator {
             // it resolves itself when the answer lands in the file.
             session.state = .needsApproval
             session.currentTool = "Question"
-            session.currentToolDetail = question
+            session.currentToolDetail = question.question
+            // The TUI's numbered picker follows the payload's option order:
+            // safe to answer remotely only for a single question.
+            session.pendingQuestionOptions =
+                question.isMultiQuestion || question.optionLabels.isEmpty
+                    ? nil : question.optionLabels
             ledger.rolloutSawActiveTurn = !liveTurns.isEmpty
             ledger.questionPending = true
             let newQuestions = Set(rollout.pendingUserInput.keys)
@@ -233,6 +238,7 @@ public final class CodexIngressCoordinator {
                 // owned by the hook flow).
                 ledger.questionPending = false
                 ledger.announcedQuestions.removeAll()
+                session.pendingQuestionOptions = nil
                 if session.state == .needsApproval {
                     session.state = liveTurns.isEmpty ? .waitingForInput : .running
                 }

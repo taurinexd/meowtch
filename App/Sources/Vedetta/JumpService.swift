@@ -42,16 +42,66 @@ enum JumpService {
         // terminal's live shell; the bridge pid alone is dead by now.
         let pids = terminal.pidChain ?? terminal.pid.map { [Int($0)] } ?? []
         if isVSCode, !pids.isEmpty {
-            let pidParams = pids.map { "pid=\($0)" }.joined(separator: "&")
-            let workspace = session.directory.addingPercentEncoding(
-                withAllowedCharacters: .urlQueryAllowed
-            ) ?? ""
-            if let url = URL(string: "vscode://vedetta.terminal-focus/focus?\(pidParams)&workspace=\(workspace)") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    NSWorkspace.shared.open(url)
-                }
-                trace.append("uri-scheduled pids=\(pids.count)")
+            openExtensionURI(path: "focus", pids: pids, session: session, trace: &trace)
+        }
+    }
+
+    /// Answers a Codex TUI question remotely: raises the session's window,
+    /// then the extension types the option number + return into the EXACT
+    /// terminal (request_user_input has no hook channel — the TUI picker is
+    /// the only way to answer, and its options are number-selectable).
+    static func answerCodexQuestion(
+        session: AgentSession,
+        terminal: TerminalInfo?,
+        optionNumber: Int
+    ) {
+        var trace = ["answer \(session.id.prefix(8)) option=\(optionNumber)"]
+        defer { log(trace.joined(separator: " ")) }
+        guard let terminal, terminal.isJumpable else {
+            trace.append("NO-TERMINAL")
+            return
+        }
+        let bundleId = terminal.bundleIdentifier ?? "com.microsoft.VSCode"
+        if let app = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleId).first {
+            raise(
+                app: app,
+                windowId: terminal.windowId,
+                directoryName: session.directoryName,
+                trace: &trace
+            )
+        }
+        let pids = terminal.pidChain ?? terminal.pid.map { [Int($0)] } ?? []
+        guard !pids.isEmpty else { return }
+        openExtensionURI(
+            path: "answer",
+            pids: pids,
+            session: session,
+            extraQuery: "&text=\(optionNumber)%0D",
+            trace: &trace
+        )
+    }
+
+    private static func openExtensionURI(
+        path: String,
+        pids: [Int],
+        session: AgentSession,
+        extraQuery: String = "",
+        trace: inout [String]
+    ) {
+        let pidParams = pids.map { "pid=\($0)" }.joined(separator: "&")
+        let workspace = session.directory.addingPercentEncoding(
+            withAllowedCharacters: .urlQueryAllowed
+        ) ?? ""
+        // The URI lands in the FOCUSED window's extension host: give the
+        // raise a beat so it reaches the session's window.
+        if let url = URL(
+            string: "vscode://vedetta.terminal-focus/\(path)?\(pidParams)&workspace=\(workspace)\(extraQuery)"
+        ) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                NSWorkspace.shared.open(url)
             }
+            trace.append("uri-scheduled pids=\(pids.count)")
         }
     }
 
@@ -183,13 +233,14 @@ enum JumpService {
     static func installVSCodeExtension() {
         let source = Bundle.main.bundlePath + "/Contents/Resources/vscode-extension"
         let extensionsDir = NSHomeDirectory() + "/.vscode/extensions"
-        let target = extensionsDir + "/vedetta.terminal-focus-0.6.0"
+        let target = extensionsDir + "/vedetta.terminal-focus-0.7.0"
         let fm = FileManager.default
         // Outdated versions go away so VS Code always loads the current one.
         for stale in [
             "vedetta.terminal-focus-0.1.0", "vedetta.terminal-focus-0.2.0",
             "vedetta.terminal-focus-0.3.0", "vedetta.terminal-focus-0.4.0", "vedetta.terminal-focus-0.4.1",
             "vedetta.terminal-focus-0.4.2", "vedetta.terminal-focus-0.4.3", "vedetta.terminal-focus-0.5.0",
+            "vedetta.terminal-focus-0.6.0",
         ] {
             try? fm.removeItem(atPath: extensionsDir + "/" + stale)
         }
@@ -200,7 +251,7 @@ enum JumpService {
 
     static func vsCodeExtensionInstalled() -> Bool {
         FileManager.default.fileExists(
-            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.6.0"
+            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.7.0"
         )
     }
 }

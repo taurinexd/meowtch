@@ -21,6 +21,23 @@ public struct CodexRolloutTool: Equatable, Sendable {
     }
 }
 
+/// One pending request_user_input, as written in the rollout: the TUI shows
+/// the options as a numbered picker, so their order IS the answer key.
+public struct CodexPendingQuestion: Equatable, Sendable {
+    public let question: String
+    public let optionLabels: [String]
+    /// Multi-question calls step through the TUI one at a time with
+    /// restarting numbers: remote numeric answers are only safe for a
+    /// single question.
+    public let isMultiQuestion: Bool
+
+    public init(question: String, optionLabels: [String], isMultiQuestion: Bool) {
+        self.question = question
+        self.optionLabels = optionLabels
+        self.isMultiQuestion = isMultiQuestion
+    }
+}
+
 public struct CodexRolloutSnapshot: Equatable, Sendable {
     public enum State: Equatable, Sendable { case running, waiting }
 
@@ -41,12 +58,12 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
     public var reasoningEffort: String?
     public var activeTurnIDs: Set<String> = []
     public var openTools: [String: CodexRolloutTool] = [:]
-    /// Open request_user_input calls (callID → first question text): the
-    /// model is waiting for the USER, not working. Answered in the TUI;
-    /// mirrored in the notch as an attention state with a jump.
-    public var pendingUserInput: [String: String] = [:]
+    /// Open request_user_input calls (callID → question): the model is
+    /// waiting for the USER, not working. Answered in the TUI; mirrored in
+    /// the notch, with number-selectable options when there is one question.
+    public var pendingUserInput: [String: CodexPendingQuestion] = [:]
 
-    public var pendingUserInputQuestion: String? {
+    public var pendingUserInputQuestion: CodexPendingQuestion? {
         pendingUserInput.values.first
     }
 
@@ -183,8 +200,12 @@ public struct CodexRolloutTailer: Sendable {
                 sequence: sequence
             )
             if payload["name"] as? String == "request_user_input" {
-                snapshot.pendingUserInput[callID] =
-                    Self.firstQuestion(input) ?? "Question pending"
+                snapshot.pendingUserInput[callID] = Self.firstQuestion(input)
+                    ?? CodexPendingQuestion(
+                        question: "Question pending",
+                        optionLabels: [],
+                        isMultiQuestion: false
+                    )
             }
         case "function_call_output", "custom_tool_call_output", "tool_search_output":
             if let callID = (payload["call_id"] as? String) ?? (payload["id"] as? String) {
@@ -196,9 +217,10 @@ public struct CodexRolloutTailer: Sendable {
         }
     }
 
-    /// The first question's text from request_user_input arguments
-    /// ({"questions":[{"question":"…","options":[…]}]}, JSON-in-string).
-    private static func firstQuestion(_ input: Any?) -> String? {
+    /// The first question from request_user_input arguments
+    /// ({"questions":[{"question":"…","options":[{"label":"…"},…]}]},
+    /// JSON-in-string).
+    private static func firstQuestion(_ input: Any?) -> CodexPendingQuestion? {
         var value = input
         if let text = value as? String,
            let decoded = try? JSONSerialization.jsonObject(with: Data(text.utf8)) {
@@ -206,9 +228,17 @@ public struct CodexRolloutTailer: Sendable {
         }
         guard let object = value as? [String: Any],
               let questions = object["questions"] as? [[String: Any]],
-              let first = questions.first?["question"] as? String,
-              !first.isEmpty else { return nil }
-        return questions.count > 1 ? "\(first) (+\(questions.count - 1))" : first
+              let firstQuestion = questions.first,
+              let text = firstQuestion["question"] as? String,
+              !text.isEmpty else { return nil }
+        let labels = (firstQuestion["options"] as? [[String: Any]])?
+            .compactMap { $0["label"] as? String } ?? []
+        let multi = questions.count > 1
+        return CodexPendingQuestion(
+            question: multi ? "\(text) (+\(questions.count - 1))" : text,
+            optionLabels: labels,
+            isMultiQuestion: multi
+        )
     }
 
     private mutating func consumeEvent(kind: String, payload: [String: Any]) {
