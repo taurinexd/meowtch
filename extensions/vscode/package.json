@@ -2,14 +2,14 @@
 	"name": "terminal-focus",
 	"displayName": "Vedetta Terminal Focus",
 	"description": "Lets Vedetta jump to the integrated terminal that hosts an agent session",
-	"version": "0.8.0",
+	"version": "0.8.1",
 	"publisher": "vedetta",
 	"license": "MIT",
 	"engines": {
 		"vscode": "^1.85.0"
 	},
 	"categories": ["Other"],
-	"activationEvents": ["onUri"],
+	"activationEvents": ["onStartupFinished", "onUri"],
 	"main": "./extension.js",
 	"contributes": {}
 }
