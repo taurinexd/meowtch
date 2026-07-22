@@ -47,9 +47,10 @@ enum JumpService {
     }
 
     /// Answers a Codex TUI question remotely: raises the session's window,
-    /// then the extension types the option number + return into the EXACT
-    /// terminal (request_user_input has no hook channel — the TUI picker is
-    /// the only way to answer, and its options are number-selectable).
+    /// then the extension types the option NUMBER ALONE into the EXACT
+    /// terminal (request_user_input has no hook channel). The picker
+    /// auto-submits on the digit — measured live: a trailing return leaked
+    /// into the NEXT question and accepted its default.
     static func answerCodexQuestion(
         session: AgentSession,
         terminal: TerminalInfo?,
@@ -77,7 +78,7 @@ enum JumpService {
             path: "answer",
             pids: pids,
             session: session,
-            extraQuery: "&text=\(optionNumber)%0D",
+            extraQuery: "&text=\(optionNumber)",
             trace: &trace
         )
     }
