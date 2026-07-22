@@ -50,17 +50,16 @@ final class OnboardingController {
 // MARK: - Wizard
 
 private enum OnboardingStep: Int, CaseIterable {
-    case welcome, permissions, agents, postcard, allSet
+    case welcome, permissions, agents, allSet
 
     /// Each step borrows the state color of what it is about: green for
     /// the watch itself, orange for the permission decision, blue for the
-    /// working agents, purple for the keepsake, green again to sail.
+    /// working agents, green again to sail.
     var accent: Color {
         switch self {
         case .welcome, .allSet: Theme.color(for: .waitingForInput)
         case .permissions: Theme.color(for: .needsApproval)
         case .agents: Theme.color(for: .running)
-        case .postcard: Theme.compactingPurple
         }
     }
 }
@@ -76,13 +75,6 @@ private struct OnboardingView: View {
     @State private var extensionInstalled = JumpService.vsCodeExtensionInstalled()
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var setupError: String?
-
-    @State private var palette = SightingPalette.all[0]
-    private let sightedOn: String = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
-    }()
 
     var body: some View {
         ZStack {
@@ -109,7 +101,6 @@ private struct OnboardingView: View {
         case .welcome: welcome
         case .permissions: permissions
         case .agents: agents
-        case .postcard: postcard
         case .allSet: allSet
         }
     }
@@ -240,39 +231,6 @@ private struct OnboardingView: View {
         }
     }
 
-    private var postcard: some View {
-        VStack(spacing: 16) {
-            stepHeader(
-                "SIGHTING CARD",
-                prompt: "> a keepsake from your first watch"
-            )
-            SightingCard(palette: palette, sightedOn: sightedOn)
-            HStack(spacing: 14) {
-                Button {
-                    var next = palette
-                    while next == palette {
-                        next = SightingPalette.all.randomElement() ?? palette
-                    }
-                    palette = next
-                } label: {
-                    Label("Shuffle", systemImage: "dice")
-                        .font(.system(size: 11.5, design: .monospaced))
-                }
-                Button {
-                    savePostcard()
-                } label: {
-                    Label("Save PNG…", systemImage: "square.and.arrow.down")
-                        .font(.system(size: 11.5, design: .monospaced))
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(palette.ink)
-            // Above the card's glow, which otherwise dims the buttons.
-            .padding(.top, 6)
-            .zIndex(1)
-        }
-    }
-
     private var allSet: some View {
         VStack(spacing: 18) {
             PixelSprite(
@@ -373,21 +331,4 @@ private struct OnboardingView: View {
         }
     }
 
-    private func savePostcard() {
-        let renderer = ImageRenderer(
-            content: SightingCard(palette: palette, sightedOn: sightedOn)
-                .padding(20)
-                .background(Color.black)
-        )
-        renderer.scale = 2
-        guard let image = renderer.nsImage,
-              let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff),
-              let png = bitmap.representation(using: .png, properties: [:]) else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "vedetta-sighting-\(sightedOn).png"
-        panel.allowedContentTypes = [.png]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? png.write(to: url)
-    }
 }
