@@ -232,7 +232,7 @@ enum JumpService {
     static func installVSCodeExtension() {
         let source = Bundle.main.bundlePath + "/Contents/Resources/vscode-extension"
         let extensionsDir = NSHomeDirectory() + "/.vscode/extensions"
-        let target = extensionsDir + "/vedetta.terminal-focus-0.8.0"
+        let target = extensionsDir + "/vedetta.terminal-focus-0.8.1"
         let fm = FileManager.default
         // Outdated versions go away so VS Code always loads the current one.
         for stale in [
@@ -240,6 +240,7 @@ enum JumpService {
             "vedetta.terminal-focus-0.3.0", "vedetta.terminal-focus-0.4.0", "vedetta.terminal-focus-0.4.1",
             "vedetta.terminal-focus-0.4.2", "vedetta.terminal-focus-0.4.3", "vedetta.terminal-focus-0.5.0",
             "vedetta.terminal-focus-0.6.0", "vedetta.terminal-focus-0.7.0",
+            "vedetta.terminal-focus-0.8.0",
         ] {
             try? fm.removeItem(atPath: extensionsDir + "/" + stale)
         }
@@ -250,7 +251,7 @@ enum JumpService {
 
     static func vsCodeExtensionInstalled() -> Bool {
         FileManager.default.fileExists(
-            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.8.0"
+            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.8.1"
         )
     }
 }
