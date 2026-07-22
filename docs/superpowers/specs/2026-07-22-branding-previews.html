@@ -52,12 +52,44 @@
     display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 2px;
     color: var(--bg); background: var(--dim); border-radius: 4px; padding: 1px 8px;
   }
-  .option.pick { border-color: rgba(107,199,122,.55); }
-  .option.pick .tag { background: var(--green); }
+  .option[data-decision] { cursor: pointer; transition: border-color .15s; }
+  .option[data-decision]:hover { border-color: rgba(255,255,255,.3); }
+  .option.selected { border-color: rgba(107,199,122,.75); box-shadow: inset 0 0 0 1px rgba(107,199,122,.3); }
+  .option.selected .tag { background: var(--green); }
   .option .pickbadge {
+    display: none;
     position: absolute; top: 14px; right: 14px; font-size: 10px; letter-spacing: 2px;
     color: var(--green); border: 1px solid rgba(107,199,122,.4); border-radius: 4px; padding: 1px 7px;
   }
+  .option.selected .pickbadge { display: inline-block; }
+
+  .notes {
+    display: block; width: 100%; margin-top: 16px; min-height: 58px; resize: vertical;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    padding: 10px 12px;
+  }
+  .notes:focus { outline: none; border-color: rgba(107,199,122,.55); }
+  .notes::placeholder { color: var(--faint); }
+
+  #savebar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+    background: rgba(5,7,5,.94); backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 18px;
+    padding: 12px 28px; font-size: 12px;
+  }
+  #savebar .picks { flex: 1; color: var(--dim); letter-spacing: 1px; }
+  #savebar .picks b { color: var(--green); font-weight: 700; }
+  #savebar button {
+    background: #12331a; color: var(--green);
+    border: 1px solid rgba(107,199,122,.5); border-radius: 8px;
+    padding: 8px 16px; font: 700 12px ui-monospace, Menlo, monospace;
+    cursor: pointer; letter-spacing: 1px;
+  }
+  #savebar button:hover { background: #17421f; }
+  #savebar .flash { color: var(--green); opacity: 0; transition: opacity .3s; }
+  #savebar .flash.on { opacity: 1; }
   .option h3 { font-size: 13px; font-weight: 700; margin: 10px 0 2px; }
   .option .desc { color: var(--dim); font-size: 12px; margin-top: 4px; }
 
@@ -126,6 +158,7 @@
     dentro una card di sessione. Gli occhi sono pixel spenti che si muovono: scansione ←→ in running,
     blink in waiting, spalancati per approval, chiusi a done, più il twitch d'antenna/orecchie all'arrivo di un evento.</p>
     <div class="grid cols2" id="candidates"></div>
+    <textarea class="notes" data-decision="d1" placeholder="> opzione extra / altre indicazioni sulla mascotte (forma, espressioni, timing)…"></textarea>
   </section>
 
   <!-- ─────────── 2 · ICONA ─────────── -->
@@ -135,6 +168,7 @@
     <p class="secnote">Tile scuro con angoli macOS, glow verde fosforo. Ogni variante a 128px e a 32px
     (la taglia Dock piccola — il vero test di leggibilità).</p>
     <div class="grid cols3" id="icons"></div>
+    <textarea class="notes" data-decision="d2" placeholder="> opzione extra / altre indicazioni sull'icona…"></textarea>
   </section>
 
   <!-- ─────────── 3 · DMG ─────────── -->
@@ -144,6 +178,7 @@
     <p class="secnote">La finestra d'installazione (600×400, qui in scala). Icona app a sinistra,
     /Applications a destra, freccia pixel, riga typewriter.</p>
     <div class="grid cols3" id="dmgs"></div>
+    <textarea class="notes" data-decision="d3" placeholder="> opzione extra / altre indicazioni sul DMG…"></textarea>
   </section>
 
   <!-- ─────────── 4 · MICRO-ANIMAZIONI ─────────── -->
@@ -154,6 +189,7 @@
     step spinner 0.12s). Al centro la direzione "più arcade": indicatori invariati, il carattere lo
     porta la mascotte (occhi + twitch). A destra la variante "ammorbidita": fade a gradini e scia più lunga.</p>
     <div class="grid cols3" id="anims"></div>
+    <textarea class="notes" data-decision="d4" placeholder="> opzione extra / altre indicazioni sulle animazioni…"></textarea>
   </section>
 
   <!-- ─────────── 5 · GIF CUSTOM ─────────── -->
@@ -164,14 +200,16 @@
     (ridimensionata all'altezza dello sprite, mai ingrandita oltre). File in
     <code>~/.vedetta/custom-sprites/</code>, scelti da Settings → Appearance. Due possibili scope:</p>
     <div class="grid cols2">
-      <div class="option" data-opt="5A">
+      <div class="option" data-decision="d5" data-value="5A">
         <span class="tag">5A</span>
+        <span class="pickbadge">SELEZIONATA</span>
         <h3>Una GIF unica</h3>
         <p class="desc">Un solo file sostituisce la mascotte ovunque (card, notch collassato).
         Gli stati restano comunicati dal colore degli indicatori e dal tint. Semplice da capire e da configurare.</p>
       </div>
-      <div class="option" data-opt="5B">
+      <div class="option" data-decision="d5" data-value="5B">
         <span class="tag">5B</span>
+        <span class="pickbadge">SELEZIONATA</span>
         <h3>Una GIF per stato</h3>
         <p class="desc">running.gif, waiting.gif, approval.gif, done.gif — con fallback alla mascotte
         per gli stati non coperti. Massima personalizzazione, setup più laborioso.</p>
@@ -187,13 +225,22 @@
       <div class="hint">La GIF viene scalata a 15pt d'altezza nella card e 14pt nel notch collassato.
       Reset in un click per tornare alla mascotte.</div>
     </div>
+    <textarea class="notes" data-decision="d5" placeholder="> opzione extra / altre indicazioni sulle GIF custom…"></textarea>
   </section>
 
   <footer class="replybox">
-    Rispondi in chat con le scelte, es. <code>1A · 2A · 3B · 4A · 5A</code> — oppure dimmi cosa
-    cambiare di un candidato (pattern, espressioni, timing) e rigenero la preview.
+    Clicca le opzioni per selezionarle (un altro click deseleziona), scrivi eventuali indicazioni
+    extra nei campi di testo, poi premi <code>SCARICA LE SCELTE</code> qui sotto: il file finisce
+    in ~/Downloads e Claude lo leggerà quando gli dai l'ok in chat. Le scelte restano salvate
+    anche se ricarichi la pagina.
   </footer>
 </main>
+
+<div id="savebar">
+  <div class="picks" id="picksummary"></div>
+  <span class="flash" id="saveflash">salvato in ~/Downloads ✓</span>
+  <button id="savebtn" type="button">SCARICA LE SCELTE</button>
+</div>
 
 <script>
 "use strict";
@@ -310,9 +357,10 @@ function frameFor(cand, state, t) {
 const candGrid = document.getElementById("candidates");
 for (const [id, cand] of Object.entries(CANDIDATES)) {
   const div = document.createElement("div");
-  div.className = "option" + (cand.pick ? " pick" : "");
+  div.className = "option";
+  div.dataset.decision = "d1"; div.dataset.value = id;
   div.innerHTML = `<span class="tag">${id}</span>` +
-    (cand.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<span class="pickbadge">SELEZIONATA</span>` +
     `<h3>${cand.name}</h3><p class="desc">${cand.desc}</p>`;
   candGrid.appendChild(div);
 
@@ -461,9 +509,10 @@ const ICONS = [
 const iconGrid = document.getElementById("icons");
 for (const ic of ICONS) {
   const div = document.createElement("div");
-  div.className = "option" + (ic.pick ? " pick" : "");
+  div.className = "option";
+  div.dataset.decision = "d2"; div.dataset.value = ic.id;
   div.innerHTML = `<span class="tag">${ic.id}</span>` +
-    (ic.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<span class="pickbadge">SELEZIONATA</span>` +
     `<h3>${ic.name}</h3><p class="desc">${ic.desc}</p>`;
   iconGrid.appendChild(div);
   const stage = document.createElement("div");
@@ -552,9 +601,10 @@ const DMGS = [
 const dmgGrid = document.getElementById("dmgs");
 for (const d of DMGS) {
   const div = document.createElement("div");
-  div.className = "option" + (d.pick ? " pick" : "");
+  div.className = "option";
+  div.dataset.decision = "d3"; div.dataset.value = d.id;
   div.innerHTML = `<span class="tag">${d.id}</span>` +
-    (d.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<span class="pickbadge">SELEZIONATA</span>` +
     `<h3>${d.name}</h3><p class="desc">${d.desc}</p>`;
   dmgGrid.appendChild(div);
   const stage = document.createElement("div");
@@ -643,9 +693,11 @@ function addAnim(stage, caption, w, h, draw) {
 const animGrid = document.getElementById("anims");
 for (const p of ANIMPANELS) {
   const div = document.createElement("div");
-  div.className = "option" + (p.pick ? " pick" : "");
+  div.className = "option";
+  div.dataset.decision = "d4";
+  div.dataset.value = p.tag === "OGGI" ? "4-OGGI" : p.tag;
   div.innerHTML = `<span class="tag">${p.tag}</span>` +
-    (p.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<span class="pickbadge">SELEZIONATA</span>` +
     `<h3>${p.name}</h3>`;
   animGrid.appendChild(div);
   const stage = document.createElement("div");
@@ -673,6 +725,67 @@ function drawSky(t) {
     skyCtx.fillRect(x, s.y * H, s.size * 1.7, s.size * 1.7);
   }
 }
+
+/* ── selezioni, note e salvataggio ── */
+const STORE_KEY = "vedetta-branding-choices";
+const DEFAULT_PICKS = { d1: "1A", d2: "2A", d3: "3B", d4: "4A", d5: null };
+let state;
+try { state = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch { state = null; }
+if (!state || typeof state !== "object" || !state.picks) {
+  state = { picks: { ...DEFAULT_PICKS }, notes: {} };
+}
+state.notes = state.notes || {};
+
+function persist() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  renderSummary();
+}
+function applySelection() {
+  document.querySelectorAll(".option[data-decision]").forEach(el => {
+    el.classList.toggle("selected", state.picks[el.dataset.decision] === el.dataset.value);
+  });
+}
+function renderSummary() {
+  const parts = ["d1", "d2", "d3", "d4", "d5"].map(d => {
+    const v = state.picks[d] || "—";
+    const pencil = (state.notes[d] || "").trim() ? " ✎" : "";
+    return `<b>${v}</b>${pencil}`;
+  });
+  document.getElementById("picksummary").innerHTML = "scelte: " + parts.join(" · ");
+}
+document.querySelectorAll(".option[data-decision]").forEach(el => {
+  el.addEventListener("click", () => {
+    const d = el.dataset.decision, v = el.dataset.value;
+    state.picks[d] = state.picks[d] === v ? null : v;
+    applySelection();
+    persist();
+  });
+});
+document.querySelectorAll(".notes").forEach(t => {
+  t.value = state.notes[t.dataset.decision] || "";
+  t.addEventListener("input", () => {
+    state.notes[t.dataset.decision] = t.value;
+    persist();
+  });
+});
+document.getElementById("savebtn").addEventListener("click", () => {
+  const payload = {
+    savedAt: new Date().toISOString(),
+    picks: state.picks,
+    notes: state.notes,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "vedetta-branding-choices.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  const flash = document.getElementById("saveflash");
+  flash.classList.add("on");
+  setTimeout(() => flash.classList.remove("on"), 2500);
+});
+applySelection();
+renderSummary();
 
 /* ── loop ── */
 const t0 = performance.now();
