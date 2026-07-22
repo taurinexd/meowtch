@@ -124,7 +124,15 @@ struct SessionRowView: View {
                             .foregroundStyle(Theme.primaryText)
                             .lineLimit(1)
 
-                            if session.recap == nil || session.recap?.isEmpty == true {
+                            if let recap = session.recap, !recap.isEmpty {
+                                // The away-recap replaces the You:/reply
+                                // lines, in the same text column and color:
+                                // it wraps exactly where they truncate.
+                                Text(recap)
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(Theme.secondaryText)
+                                    .lineLimit(3)
+                            } else {
                                 // Like the original: the user's last words
                                 // always visible, then the running tool while
                                 // working or the agent's reply otherwise.
@@ -159,15 +167,6 @@ struct SessionRowView: View {
                         Spacer(minLength: 8)
                         chips
                             .frame(height: Self.titleLineHeight)
-                    }
-
-                    // The away-recap replaces the You:/reply lines and runs
-                    // full width, under the chips column, like the original.
-                    if let recap = session.recap, !recap.isEmpty {
-                        Text(recap)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Color.white.opacity(0.85))
-                            .lineLimit(3)
                     }
                     if SessionMetadataPresentation.shouldShow(
                         enabled: showSessionMetadata,
