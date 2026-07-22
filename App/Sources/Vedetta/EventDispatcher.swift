@@ -66,7 +66,7 @@ enum EventDispatcher {
                     rawValue: UserDefaults.standard.string(
                         forKey: "codexApprovalMode"
                     ) ?? ""
-                ) ?? .followFocus
+                ) ?? .alwaysNotch
                 let focusedBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
                 let terminalFocused = focusedBundle != nil
                     && focusedBundle == codexHook.terminal.bundleIdentifier
@@ -84,10 +84,22 @@ enum EventDispatcher {
                 )
             } else {
                 SessionEventReducer.apply(envelope, to: store)
-                if ClaudeApprovalPolicy.route(
-                    deferToNative: UserDefaults.standard.bool(
+                let mode = ClaudeApprovalPolicy.mode(
+                    rawValue: UserDefaults.standard.string(forKey: "claudeApprovalMode"),
+                    legacyDeferToNative: UserDefaults.standard.bool(
                         forKey: "deferClaudeApprovalsToNative"
                     )
+                )
+                let focusedBundle = NSWorkspace.shared
+                    .frontmostApplication?.bundleIdentifier
+                let terminalBundle = (envelope["terminal"] as? [String: Any])?[
+                    "bundleIdentifier"
+                ] as? String
+                let terminalFocused = focusedBundle != nil
+                    && focusedBundle == terminalBundle
+                if ClaudeApprovalPolicy.route(
+                    mode: mode,
+                    terminalIsFocused: terminalFocused
                 ) == .terminal {
                     return empty
                 }

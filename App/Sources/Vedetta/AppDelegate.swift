@@ -81,6 +81,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             NSLog("Vedetta: Codex hook heal failed: \(error)")
         }
+        // A Codex question (request_user_input, TUI-only) mirrors into the
+        // notch: chirp + panel expansion, answered in the terminal.
+        codexIngress.onUserInputRequest = {
+            SoundEngine.shared.play(.question)
+            NotificationCenter.default.post(
+                name: .vedettaCodexQuestionPending, object: nil
+            )
+        }
+
         do {
             EventDispatcher.store = store
             EventDispatcher.codexCoordinator = codexIngress

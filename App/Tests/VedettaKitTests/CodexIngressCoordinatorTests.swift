@@ -154,6 +154,30 @@ struct CodexIngressCoordinatorTests {
         #expect(store.sessions.first?.state == .running)
     }
 
+    @Test func rolloutQuestionRaisesAttentionAndReleasesOnAnswer() throws {
+        let store = SessionStore()
+        let coordinator = CodexIngressCoordinator(store: store)
+        var announcements = 0
+        coordinator.onUserInputRequest = { announcements += 1 }
+        coordinator.apply(hook: try hook("UserPromptSubmit", extra: ["prompt": "go"]))
+
+        var asking = rollout(activeTurns: ["turn-1"])
+        asking.pendingUserInput = ["call-q": "Quale prova vuoi fare?"]
+        #expect(coordinator.apply(rollout: asking))
+        #expect(store.sessions.first?.state == .needsApproval)
+        #expect(store.sessions.first?.currentTool == "Question")
+        #expect(store.sessions.first?.currentToolDetail == "Quale prova vuoi fare?")
+        #expect(announcements == 1)
+
+        // Re-reads of the same question do not re-announce.
+        #expect(coordinator.apply(rollout: asking))
+        #expect(announcements == 1)
+
+        // Answered in the TUI: the attention state releases on its own.
+        #expect(coordinator.apply(rollout: rollout(activeTurns: ["turn-1"])))
+        #expect(store.sessions.first?.state == .running)
+    }
+
     @Test func rejectsRolloutReadStartedBeforeNewerHookRevision() throws {
         let store = SessionStore()
         let coordinator = CodexIngressCoordinator(store: store)

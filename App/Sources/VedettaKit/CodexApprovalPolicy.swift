@@ -85,7 +85,24 @@ public enum CodexApprovalPolicy {
 }
 
 public enum ClaudeApprovalPolicy {
-    public static func route(deferToNative: Bool) -> CodexApprovalRoute {
-        deferToNative ? .terminal : .notch
+    public enum Mode: String, CaseIterable, Sendable {
+        case followFocus
+        case alwaysNotch
+        case alwaysTerminal
+    }
+
+    public static func route(mode: Mode, terminalIsFocused: Bool) -> CodexApprovalRoute {
+        switch mode {
+        case .followFocus: terminalIsFocused ? .terminal : .notch
+        case .alwaysNotch: .notch
+        case .alwaysTerminal: .terminal
+        }
+    }
+
+    /// Resolves the stored mode, migrating the legacy boolean
+    /// ("deferClaudeApprovalsToNative") the toggle used to write.
+    public static func mode(rawValue: String?, legacyDeferToNative: Bool) -> Mode {
+        if let rawValue, let mode = Mode(rawValue: rawValue) { return mode }
+        return legacyDeferToNative ? .alwaysTerminal : .alwaysNotch
     }
 }

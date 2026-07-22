@@ -75,6 +75,33 @@ struct CodexRolloutTailerTests {
         #expect(abs(parsed.timeIntervalSince(expected) - 0.128) < 0.001)
     }
 
+    @Test func mirrorsRequestUserInputAsPendingQuestion() throws {
+        let temp = try temporaryFile()
+        defer { try? FileManager.default.removeItem(at: temp.directory) }
+        // Real 0.145 shape: arguments is JSON-in-string with questions[].
+        try Data(("""
+        {"type":"session_meta","payload":{"id":"thread-1","cwd":"/repo"}}
+        {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}
+        {"type":"response_item","payload":{"type":"function_call","call_id":"call-q","name":"request_user_input","arguments":"{\\"questions\\":[{\\"header\\":\\"Test\\",\\"id\\":\\"t\\",\\"question\\":\\"Quale prova vuoi fare?\\",\\"options\\":[{\\"label\\":\\"A\\"},{\\"label\\":\\"B\\"}]}]}"}}
+        """ + "\n").utf8).write(to: temp.file)
+        var tailer = CodexRolloutTailer()
+
+        let pending = try tailer.read(from: temp.file)
+        #expect(pending.pendingUserInputQuestion == "Quale prova vuoi fare?")
+        #expect(pending.currentTool == "Question")
+
+        // The user answers in the TUI: the output releases the question.
+        let handle = try FileHandle(forWritingTo: temp.file)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(("""
+        {"type":"response_item","payload":{"type":"function_call_output","call_id":"call-q","output":"{\\"answers\\":{}}"}}
+        """ + "\n").utf8))
+        try handle.close()
+        let answered = try tailer.read(from: temp.file)
+        #expect(answered.pendingUserInputQuestion == nil)
+        #expect(answered.currentTool == nil)
+    }
+
     @Test func tracksParallelCallsByIDAndReadsCustomInput() throws {
         let temp = try temporaryFile()
         defer { try? FileManager.default.removeItem(at: temp.directory) }

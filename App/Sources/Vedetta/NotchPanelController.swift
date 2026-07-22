@@ -77,6 +77,20 @@ final class NotchPanelController {
             }
         }
 
+        // A Codex question pends in the TUI: surface it like an interrupt
+        // (expand with the orange card on top; the answer stays remote).
+        NotificationCenter.default.addObserver(
+            forName: .vedettaCodexQuestionPending,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, !self.pinnedExpanded else { return }
+                self.panel.orderFrontRegardless()
+                self.setExpanded(true)
+            }
+        }
+
         // The Settings window's display toggle relocates the panel.
         NotificationCenter.default.addObserver(
             forName: .vedettaPanelDisplayChanged,
@@ -583,6 +597,8 @@ final class NotchPanelController {
 }
 
 extension Notification.Name {
+    /// A Codex request_user_input question appeared in a rollout.
+    static let vedettaCodexQuestionPending = Notification.Name("vedettaCodexQuestionPending")
     /// Posted when the Settings display toggle changes the target screen.
     static let vedettaPanelDisplayChanged = Notification.Name("vedettaPanelDisplayChanged")
     /// Debug: drive the expand/collapse animation from the socket.
