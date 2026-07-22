@@ -8,7 +8,10 @@
 // time — the terminal's live shell is matched against terminal.processId)
 // plus its workspace path so a wrong window stays silent:
 //   /focus    reveals the terminal tab (Vedetta raises the window first).
-//   /answer   reveals the tab and types `text` into it (Codex TUI picker).
+//
+// Answers travel over a FILE channel instead (~/.vedetta/run/commands/*.json):
+// every window's instance watches it and only the one owning the terminal
+// types — no URI, no window raise, the user's focus stays untouched.
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 const fs = require("fs");
@@ -87,7 +90,44 @@ function ownsWorkspace(dir) {
 	});
 }
 
+const COMMANDS_DIR = os.homedir() + "/.vedetta/run/commands";
+
+// Consumes one command file: {action:"answer", pids:[…], text:"…", at:epoch}.
+// Every window's instance sees the file; only the one owning the terminal
+// types, then deletes the file (unlink races are harmless no-ops).
+function consumeCommandFile(name) {
+	if (!name || !name.endsWith(".json")) return;
+	const path = COMMANDS_DIR + "/" + name;
+	let command;
+	try {
+		command = JSON.parse(fs.readFileSync(path, "utf8"));
+	} catch (e) {
+		return; // partial write or already consumed
+	}
+	if (command.action !== "answer" || !command.text) return;
+	if (Math.abs(Date.now() / 1000 - (command.at || 0)) > 15) {
+		try { fs.unlinkSync(path); } catch (e) {}
+		return; // stale leftover
+	}
+	const pids = (command.pids || []).filter((pid) => Number.isInteger(pid) && pid > 0);
+	if (pids.length === 0) return;
+	withTerminal(pids, (terminal) => {
+		terminal.sendText(command.text, false);
+		try { fs.unlinkSync(path); } catch (e) {}
+		log(`answer typed silently (${command.text.length} chars)`);
+	});
+}
+
 function activate(context) {
+	try {
+		fs.mkdirSync(COMMANDS_DIR, { recursive: true });
+		const watcher = fs.watch(COMMANDS_DIR, (event, name) => consumeCommandFile(name));
+		context.subscriptions.push({ dispose: () => watcher.close() });
+		// Catch anything written while this window was reloading.
+		for (const name of fs.readdirSync(COMMANDS_DIR)) consumeCommandFile(name);
+	} catch (e) {
+		log("command watcher failed: " + e);
+	}
 	context.subscriptions.push(
 		vscode.window.registerUriHandler({
 			handleUri(uri) {
@@ -101,15 +141,6 @@ function activate(context) {
 					.filter((pid) => Number.isInteger(pid) && pid > 0);
 				if (pids.length === 0) return;
 				if (uri.path === "/focus") withTerminal(pids, (terminal) => terminal.show(false));
-				if (uri.path === "/answer") {
-					const text = params.get("text") || "";
-					if (!text) return;
-					withTerminal(pids, (terminal) => {
-						terminal.show(false);
-						terminal.sendText(text, false);
-						log(`answer sent (${text.length} chars)`);
-					});
-				}
 			},
 		})
 	);
