@@ -52,13 +52,48 @@ struct SessionEventReducerTests {
         #expect(store.terminal(for: "s1")?.pidChain == [11, 22, 33])
     }
 
-    @Test func sessionStartCreatesRunningSession() {
+    @Test func pickerGhostSessionsNeverBecomeCards() {
         let store = SessionStore()
-        SessionEventReducer.apply(envelope("SessionStart"), to: store)
+        // The resume picker's ephemeral session: SessionStart then
+        // SessionEnd, no transcript, no content — no card either way.
+        SessionEventReducer.apply(envelope("SessionStart", sessionId: "ghost"), to: store)
+        #expect(store.sessions.isEmpty)
+        SessionEventReducer.apply(envelope("SessionEnd", sessionId: "ghost"), to: store)
+        #expect(store.sessions.isEmpty)
+        // Its terminal identity is captured anyway, ready for when the
+        // session gains real content.
+        #expect(store.terminal(for: "ghost") != nil)
+
+        // The first real prompt materializes the card.
+        SessionEventReducer.apply(
+            envelope("UserPromptSubmit", sessionId: "ghost",
+                     extra: ["prompt": "adesso scrivo"]),
+            to: store
+        )
+        #expect(store.sessions.count == 1)
+        #expect(store.sessions.first?.title == "adesso scrivo")
+    }
+
+    @Test func sessionStartWithHistoryCreatesRunningSession() throws {
+        // A resumed session's SessionStart points at a transcript with
+        // content: the card appears immediately, titled from it.
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reducer-start-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        try Data("""
+        {"type":"user","message":{"role":"user","content":[{"type":"text","text":"riprendi il checkout"}]}}
+        """.utf8).write(to: transcript)
+
+        let store = SessionStore()
+        SessionEventReducer.apply(
+            envelope("SessionStart", extra: ["transcript_path": transcript.path]),
+            to: store
+        )
         #expect(store.sessions.count == 1)
         #expect(store.sessions.first?.state == .running)
         #expect(store.sessions.first?.agent == .claude)
         #expect(store.sessions.first?.directory == "/Users/x/Code/progetto")
+        #expect(store.sessions.first?.title == "riprendi il checkout")
     }
 
     @Test func userPromptSetsTitleAndMessage() {
@@ -129,7 +164,9 @@ struct SessionEventReducerTests {
     @Test func directoryStaysAtProjectRootWhenAgentCdsIntoSubfolder() {
         let store = SessionStore()
         SessionEventReducer.apply(
-            envelope("SessionStart", cwd: "/Users/x/Code/5om"), to: store
+            envelope("UserPromptSubmit", cwd: "/Users/x/Code/5om",
+                     extra: ["prompt": "tema"]),
+            to: store
         )
         #expect(store.sessions.first?.directoryName == "5om")
         // A cd into a subfolder must not relabel the card.
@@ -191,7 +228,12 @@ struct SessionEventReducerTests {
 
     @Test func sessionEndCompletes() {
         let store = SessionStore()
-        SessionEventReducer.apply(envelope("SessionStart"), to: store)
+        // Established by real content first: a bare SessionStart no longer
+        // creates a card (resume-picker ghosts).
+        SessionEventReducer.apply(
+            envelope("UserPromptSubmit", extra: ["prompt": "chiudi pure"]),
+            to: store
+        )
         SessionEventReducer.apply(envelope("SessionEnd"), to: store)
         #expect(store.sessions.first?.state == .completed)
     }
