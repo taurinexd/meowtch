@@ -99,7 +99,8 @@ final class UsageModel: ObservableObject {
         self.timer = timer
     }
 
-    func refresh() {
+    func refresh(forceCodex: Bool = false) {
+        if forceCodex { lastCodexProbe = nil }
         let fm = FileManager.default
         let freshest = Self.cachePaths
             .compactMap { path -> (path: String, modified: Date)? in

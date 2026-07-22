@@ -360,6 +360,7 @@ struct NotchView: View {
     }
 
     @AppStorage(SettingsKey.showUsageLimits) private var showUsageLimits = true
+    @State private var muted = SoundEngine.shared.isMuted
 
     /// Usage summary on the left, volume + settings icons on the right.
     private var topBar: some View {
@@ -368,17 +369,23 @@ struct NotchView: View {
                 usageSummary
             }
             Spacer()
-            Image(systemName: SoundEngine.shared.isMuted
-                ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .contentShape(Rectangle())
-                .onTapGesture { SoundEngine.shared.isMuted.toggle() }
-            Image(systemName: "gearshape.fill")
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    NotificationCenter.default.post(
-                        name: .vedettaOpenSettings, object: nil
-                    )
-                }
+            Button {
+                SoundEngine.shared.isMuted.toggle()
+                muted = SoundEngine.shared.isMuted
+            } label: {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressFlashStyle())
+            Button {
+                NotificationCenter.default.post(
+                    name: .vedettaOpenSettings, object: nil
+                )
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressFlashStyle())
         }
         .font(.system(size: 12.5))
         .foregroundStyle(Theme.secondaryText)
@@ -410,6 +417,29 @@ struct NotchView: View {
         // so only one fits left of the physical notch at a time.
         .contentShape(Rectangle())
         .onTapGesture { usage.cycleProvider() }
+        // The whole strip flashes briefly on tap: visual receipt of the
+        // provider switch (and of the tap itself when only one provider
+        // has data and nothing else changes).
+        .opacity(usageFlash ? 0.35 : 1)
+        .animation(.easeOut(duration: 0.18), value: usageFlash)
+        .simultaneousGesture(TapGesture().onEnded {
+            usageFlash = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                usageFlash = false
+            }
+        })
+    }
+
+    @State private var usageFlash = false
+
+    /// Press feedback for the top-bar icon buttons: dim + slight shrink.
+    private struct PressFlashStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .opacity(configuration.isPressed ? 0.35 : 1)
+                .scaleEffect(configuration.isPressed ? 0.85 : 1)
+                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        }
     }
 
     /// Provider badge (Claude / Codex) on a black rounded background, left of

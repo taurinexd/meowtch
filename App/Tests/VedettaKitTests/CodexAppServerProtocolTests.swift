@@ -27,6 +27,41 @@ struct CodexAppServerProtocolTests {
         #expect(inbox.takeResponse(id: 3) == .object(["ok": .bool(true)]))
     }
 
+    @Test func acceptsZeroPercentWindowsFromRealServerResponse() throws {
+        // Real codex 0.145 response shape: usedPercent 0 and secondary null.
+        // JSONSerialization bridges 0 to a Bool-castable NSNumber, which used
+        // to turn usedPercent into .bool(false) and reject the whole payload
+        // — the usage strip stayed empty exactly when the quota was fresh.
+        let payload = """
+        {"rateLimits":{"limitId":"codex","limitName":null,\
+        "primary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":1785309299},\
+        "secondary":null,"planType":"team"},\
+        "rateLimitsByLimitId":{},"rateLimitResetCredits":{"availableCount":3}}
+        """
+        let object = try JSONSerialization.jsonObject(with: Data(payload.utf8))
+        let result = try #require(JSONValue(any: object))
+
+        var accumulator = CodexRateLimitAccumulator()
+        let accepted = accumulator.accept(result)
+        #expect(accepted)
+        #expect(accumulator.snapshot?.primary?.usedPercent == 0)
+        #expect(accumulator.snapshot?.secondary == nil)
+    }
+
+    @Test func jsonValueKeepsBoolsAndZerosApart() throws {
+        let object = try JSONSerialization.jsonObject(
+            with: Data(#"{"zero":0,"one":1,"yes":true,"no":false}"#.utf8)
+        )
+        guard case .object(let values)? = JSONValue(any: object) else {
+            Issue.record("not an object")
+            return
+        }
+        #expect(values["zero"] == .number(0))
+        #expect(values["one"] == .number(1))
+        #expect(values["yes"] == .bool(true))
+        #expect(values["no"] == .bool(false))
+    }
+
     @Test func validatesAccountRateLimitsAndKeepsLastGoodSnapshot() {
         var accumulator = CodexRateLimitAccumulator()
         let valid: JSONValue = .object([

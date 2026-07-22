@@ -143,9 +143,11 @@ enum EventDispatcher {
             FullScanScheduler.reloadTasks(sessionId: sessionId)
         }
 
-        // A finished turn may deserve the auto-opened peek (the panel
-        // controller decides based on what's frontmost).
+        // A finished turn chirps right here on the hook path — as instant
+        // as a user's own Stop-hook afplay — and may deserve the
+        // auto-opened peek (the panel controller decides on frontmost).
         if name == "Stop" {
+            SoundEngine.shared.play(.sessionComplete)
             NotificationCenter.default.post(
                 name: .vedettaSessionFinished,
                 object: nil,
@@ -324,6 +326,21 @@ enum EventDispatcher {
             return try? JSONSerialization.data(withJSONObject: [
                 "trusted": AXTitleReader.isTrusted,
                 "nodes": nodes,
+            ])
+
+        case "usage":
+            let usage = UsageModel.shared
+            usage.refresh(forceCodex: true)
+            let describe: (UsageModel.Window?) -> String = {
+                $0.map { "\($0.percent)%" } ?? "-"
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "claude5h": describe(usage.fiveHour),
+                "claude7d": describe(usage.sevenDay),
+                "codexPrimary": describe(usage.codexPrimary),
+                "codexSecondary": describe(usage.codexSecondary),
+                "selected": String(describing: usage.selectedProvider),
+                "display": String(describing: usage.displayProvider),
             ])
 
         case "openSettings":

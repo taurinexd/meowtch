@@ -29,9 +29,28 @@ actor CodexAppServerClient {
     func rateLimits() async -> CodexRateLimitSnapshot? {
         do {
             let result = try await request(method: "account/rateLimits/read")
-            _ = rateAccumulator.accept(result)
-        } catch {}
+            if !rateAccumulator.accept(result) {
+                Self.trace("response not accepted: \(String(describing: result).prefix(200))")
+            } else {
+                Self.trace("accepted, primary=\(rateAccumulator.snapshot?.primary?.usedPercent ?? -1)")
+            }
+        } catch {
+            Self.trace("request failed: \(error)")
+        }
         return rateAccumulator.snapshot
+    }
+
+    /// Opt-out diagnostics for the warm connection (tiny, local, append-only).
+    private static func trace(_ message: String) {
+        let line = "\(Date()) \(message)\n"
+        let path = NSHomeDirectory() + "/.vedetta/run/usage.log"
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? line.write(toFile: path, atomically: true, encoding: .utf8)
+        }
     }
 
     func hookTrust() async -> CodexHookTrustSnapshot {
