@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vedetta — proposte branding</title>
+<style>
+  :root {
+    --bg: #050705;
+    --panel: #0b0e0b;
+    --border: #1c221c;
+    --text: rgba(255,255,255,.92);
+    --dim: rgba(255,255,255,.55);
+    --faint: rgba(255,255,255,.35);
+    --green: #6BC77A;
+    --blue: #5999FF;
+    --orange: #FFA028;
+    --purple: #9D58EF;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+    padding-bottom: 120px;
+  }
+  #sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .5; }
+  main { position: relative; z-index: 1; max-width: 1020px; margin: 0 auto; padding: 0 28px; }
+
+  header.hero { padding: 64px 0 20px; }
+  .hero h1 {
+    font-size: 30px; font-weight: 900; letter-spacing: 12px; color: var(--text);
+  }
+  .hero .prompt { color: var(--dim); margin-top: 10px; }
+  .hero .prompt::after { content: "_"; animation: blink 1.1s steps(1) infinite; color: var(--green); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  section { margin-top: 64px; }
+  .eyebrow { color: var(--faint); font-size: 11px; letter-spacing: 3px; }
+  h2 { font-size: 17px; font-weight: 900; letter-spacing: 4px; margin-top: 6px; color: var(--green); }
+  .secnote { color: var(--dim); margin-top: 8px; max-width: 74ch; }
+
+  .grid { display: grid; gap: 18px; margin-top: 24px; }
+  .grid.cols2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  .grid.cols3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+
+  .option {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 18px 16px; position: relative;
+  }
+  .option .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    color: var(--bg); background: var(--dim); border-radius: 4px; padding: 1px 8px;
+  }
+  .option.pick { border-color: rgba(107,199,122,.55); }
+  .option.pick .tag { background: var(--green); }
+  .option .pickbadge {
+    position: absolute; top: 14px; right: 14px; font-size: 10px; letter-spacing: 2px;
+    color: var(--green); border: 1px solid rgba(107,199,122,.4); border-radius: 4px; padding: 1px 7px;
+  }
+  .option h3 { font-size: 13px; font-weight: 700; margin: 10px 0 2px; }
+  .option .desc { color: var(--dim); font-size: 12px; margin-top: 4px; }
+
+  .stage {
+    background: #000; border: 1px solid #141814; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 14px; padding: 18px 10px; gap: 26px; flex-wrap: wrap;
+  }
+  .stage figure { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .stage figcaption { color: var(--faint); font-size: 10px; letter-spacing: 1px; }
+
+  .states { display: flex; gap: 18px; margin-top: 12px; justify-content: center; flex-wrap: wrap; }
+  .states figure { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .states figcaption { font-size: 9px; letter-spacing: 1px; color: var(--faint); }
+
+  /* Card di sessione finta, a taglia reale */
+  .mockcard {
+    background: rgba(255,255,255,.06); border-radius: 10px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; margin: 14px auto 0; width: 430px; max-width: 100%;
+  }
+  .mockcard .spritebox { display: flex; align-items: center; gap: 6px; min-width: 46px; }
+  .mockcard .txt { flex: 1; min-width: 0; }
+  .mockcard .title { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mockcard .title .sep { color: var(--dim); font-weight: 400; }
+  .mockcard .sub { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mockcard .chip {
+    font-size: 10px; color: var(--dim); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 7px; white-space: nowrap;
+  }
+
+  /* Settings mock (sezione 5) */
+  .settingsmock {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; max-width: 560px; margin-top: 18px;
+  }
+  .settingsmock .srow { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+  .settingsmock .srow label { flex: 1; }
+  .settingsmock .control {
+    background: #161a16; border: 1px solid #242a24; border-radius: 6px;
+    color: var(--text); font: 12px ui-monospace, Menlo, monospace; padding: 4px 12px;
+  }
+  .settingsmock .hint { color: var(--faint); font-size: 11px; margin-top: 6px; }
+
+  footer.replybox {
+    margin-top: 80px; border-top: 1px solid var(--border); padding-top: 24px; color: var(--dim);
+  }
+  footer.replybox code { color: var(--green); }
+  @media (prefers-reduced-motion: reduce) { .hero .prompt::after { animation: none; } }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<main>
+  <header class="hero">
+    <h1>VEDETTA</h1>
+    <div class="prompt">&gt; proposte di branding — mascotte · icona · dmg · animazioni · gif custom </div>
+  </header>
+
+  <!-- ─────────── 1 · MASCOTTE ─────────── -->
+  <section id="s1">
+    <div class="eyebrow">DECISIONE 1</div>
+    <h2>LA MICRO-MASCOTTE (8×7)</h2>
+    <p class="secnote">Sostituisce l'invader alla stessa identica taglia. Ogni candidato è mostrato
+    ingrandito col ciclo completo degli stati, poi i cinque stati fissi, poi <b>a taglia reale</b>
+    dentro una card di sessione. Gli occhi sono pixel spenti che si muovono: scansione ←→ in running,
+    blink in waiting, spalancati per approval, chiusi a done, più il twitch d'antenna/orecchie all'arrivo di un evento.</p>
+    <div class="grid cols2" id="candidates"></div>
+  </section>
+
+  <!-- ─────────── 2 · ICONA ─────────── -->
+  <section id="s2">
+    <div class="eyebrow">DECISIONE 2</div>
+    <h2>ICONA APP</h2>
+    <p class="secnote">Tile scuro con angoli macOS, glow verde fosforo. Ogni variante a 128px e a 32px
+    (la taglia Dock piccola — il vero test di leggibilità).</p>
+    <div class="grid cols3" id="icons"></div>
+  </section>
+
+  <!-- ─────────── 3 · DMG ─────────── -->
+  <section id="s3">
+    <div class="eyebrow">DECISIONE 3</div>
+    <h2>BACKGROUND DMG</h2>
+    <p class="secnote">La finestra d'installazione (600×400, qui in scala). Icona app a sinistra,
+    /Applications a destra, freccia pixel, riga typewriter.</p>
+    <div class="grid cols3" id="dmgs"></div>
+  </section>
+
+  <!-- ─────────── 4 · MICRO-ANIMAZIONI ─────────── -->
+  <section id="s4">
+    <div class="eyebrow">DECISIONE 4</div>
+    <h2>MICRO-ANIMAZIONI</h2>
+    <p class="secnote">A sinistra gli indicatori attuali (timing misurati su VI: blink 1.2s al 60%,
+    step spinner 0.12s). Al centro la direzione "più arcade": indicatori invariati, il carattere lo
+    porta la mascotte (occhi + twitch). A destra la variante "ammorbidita": fade a gradini e scia più lunga.</p>
+    <div class="grid cols3" id="anims"></div>
+  </section>
+
+  <!-- ─────────── 5 · GIF CUSTOM ─────────── -->
+  <section id="s5">
+    <div class="eyebrow">DECISIONE 5 · NUOVA</div>
+    <h2>ANIMAZIONI CUSTOM (GIF) DAI SETTINGS</h2>
+    <p class="secnote">Come i custom sounds: l'utente può sostituire la mascotte con una propria GIF
+    (ridimensionata all'altezza dello sprite, mai ingrandita oltre). File in
+    <code>~/.vedetta/custom-sprites/</code>, scelti da Settings → Appearance. Due possibili scope:</p>
+    <div class="grid cols2">
+      <div class="option" data-opt="5A">
+        <span class="tag">5A</span>
+        <h3>Una GIF unica</h3>
+        <p class="desc">Un solo file sostituisce la mascotte ovunque (card, notch collassato).
+        Gli stati restano comunicati dal colore degli indicatori e dal tint. Semplice da capire e da configurare.</p>
+      </div>
+      <div class="option" data-opt="5B">
+        <span class="tag">5B</span>
+        <h3>Una GIF per stato</h3>
+        <p class="desc">running.gif, waiting.gif, approval.gif, done.gif — con fallback alla mascotte
+        per gli stati non coperti. Massima personalizzazione, setup più laborioso.</p>
+      </div>
+    </div>
+    <div class="settingsmock">
+      <div class="eyebrow" style="margin-bottom:8px">MOCK · SETTINGS → APPEARANCE</div>
+      <div class="srow">
+        <label>Sprite</label>
+        <select class="control"><option>Built-in · bot</option><option>Custom GIF…</option></select>
+        <button class="control">Choose…</button>
+      </div>
+      <div class="hint">La GIF viene scalata a 15pt d'altezza nella card e 14pt nel notch collassato.
+      Reset in un click per tornare alla mascotte.</div>
+    </div>
+  </section>
+
+  <footer class="replybox">
+    Rispondi in chat con le scelte, es. <code>1A · 2A · 3B · 4A · 5A</code> — oppure dimmi cosa
+    cambiare di un candidato (pattern, espressioni, timing) e rigenero la preview.
+  </footer>
+</main>
+
+<script>
+"use strict";
+const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const DPR = window.devicePixelRatio || 1;
+const anims = [];  // {draw(t)}
+
+function makeCanvas(parent, w, h, cls) {
+  const c = document.createElement("canvas");
+  c.width = w * DPR; c.height = h * DPR;
+  c.style.width = w + "px"; c.style.height = h + "px";
+  if (cls) c.className = cls;
+  parent.appendChild(c);
+  const ctx = c.getContext("2d");
+  ctx.scale(DPR, DPR);
+  return { c, ctx, w, h };
+}
+
+/* ── renderer sprite: '#' = pixel acceso, tutto il resto trasparente ── */
+function drawPattern(ctx, pattern, px, color, ox = 0, oy = 0, glow = true) {
+  const inset = px * 0.07;
+  ctx.save();
+  if (glow) { ctx.shadowColor = color; ctx.shadowBlur = px * 1.4; }
+  ctx.fillStyle = color;
+  for (let r = 0; r < pattern.length; r++) {
+    const line = pattern[r];
+    for (let c = 0; c < line.length; c++) {
+      if (line[c] === "#") {
+        ctx.fillRect(ox + c * px + inset, oy + r * px + inset, px - inset * 2, px - inset * 2);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+/* ── candidati: base + varianti occhi/twitch (o = occhio spento) ── */
+function withRow(pat, i, row) { const p = pat.slice(); p[i] = row; return p; }
+
+const BOT_BASE = ["..#..#..", ".######.", ".#o##o#.", ".######.", "..####..", ".#.##.#.", "..#..#.."];
+const CAT_BASE = [".#....#.", ".##..##.", ".######.", ".#o##o#.", ".######.", "..####..", "..#..#.."];
+const OWL_BASE = ["..#..#..", ".######.", "##o##o##", "########", ".######.", "..####..", "..#..#.."];
+const BLOB_BASE = ["..####..", ".######.", ".#o##o#.", ".######.", ".######.", ".#.##.#.", "..#..#.."];
+
+const CANDIDATES = {
+  "1A": {
+    name: "Bot sentinella", pick: true,
+    desc: "Robottino di guardia con due antenne — tematico per un'app che sorveglia coding agent; le antenne twitchano all'arrivo di un evento.",
+    base: BOT_BASE, eyeRow: 2,
+    left:  withRow(BOT_BASE, 2, ".o##o##."),
+    right: withRow(BOT_BASE, 2, ".##o##o."),
+    wide:  withRow(BOT_BASE, 3, ".#o##o#."),
+    closed: withRow(withRow(BOT_BASE, 2, ".######."), 3, ".#o##o#."),
+    twitch: withRow(BOT_BASE, 0, ".#....#."),
+  },
+  "1B": {
+    name: "Gattino di guardia", pick: false,
+    desc: "Orecchie a triangolo, warm e immediato — i gatti fissano fuori dalla finestra per ore. Il twitch è il flick d'orecchie.",
+    base: CAT_BASE, eyeRow: 3,
+    left:  withRow(CAT_BASE, 3, ".o##o##."),
+    right: withRow(CAT_BASE, 3, ".##o##o."),
+    wide:  withRow(CAT_BASE, 4, ".#o##o#."),
+    closed: withRow(withRow(CAT_BASE, 3, ".######."), 4, ".#o##o#."),
+    twitch: withRow(CAT_BASE, 0, "..#...#."),
+  },
+  "1C": {
+    name: "Gufetto", pick: false,
+    desc: "La guardia notturna: faccia larga, ciuffetti piccoli. Lega col cielo stellato dell'onboarding; twitch dei ciuffi.",
+    base: OWL_BASE, eyeRow: 2,
+    left:  withRow(OWL_BASE, 2, "#o##o###"),
+    right: withRow(OWL_BASE, 2, "###o##o#"),
+    wide:  withRow(OWL_BASE, 3, "##o##o##"),
+    closed: withRow(withRow(OWL_BASE, 2, "########"), 3, "##o##o##"),
+    twitch: withRow(OWL_BASE, 0, ".#....#."),
+  },
+  "1D": {
+    name: "Blob guardiano", pick: false,
+    desc: "Spiritello tondo tutto nostro, nessun animale né robot: zero baggage, massima originalità. Il twitch è un piccolo hop.",
+    base: BLOB_BASE, eyeRow: 2,
+    left:  withRow(BLOB_BASE, 2, ".o##o##."),
+    right: withRow(BLOB_BASE, 2, ".##o##o."),
+    wide:  withRow(BLOB_BASE, 3, ".#o##o#."),
+    closed: withRow(withRow(BLOB_BASE, 2, ".######."), 3, ".#o##o#."),
+    twitch: withRow(withRow(BLOB_BASE, 5, "#..##..#"), 6, "........"),
+  },
+};
+
+const STATE_COLORS = {
+  running: "#5999FF", waiting: "#6BC77A", approval: "#FFA028",
+  compacting: "#9D58EF", done: "#8E8E93",
+};
+const STATE_ORDER = ["running", "waiting", "approval", "compacting", "done"];
+
+/* Frame per stato con i timing dell'app (PixelClock). */
+function frameFor(cand, state, t) {
+  switch (state) {
+    case "running":
+    case "compacting": {
+      const seq = [cand.base, cand.left, cand.base, cand.right];
+      return seq[Math.floor(t / 0.36) % 4];
+    }
+    case "waiting":
+      return (t % 1.2) < 0.72 ? cand.base : cand.closed;
+    case "approval": return cand.wide;
+    case "done": return cand.closed;
+    case "twitch": {
+      const ph = t % 2.6;
+      return (ph < 0.14 || (ph > 0.28 && ph < 0.42)) ? cand.twitch : cand.base;
+    }
+    default: return cand.base;
+  }
+}
+
+/* ── sezione 1: card candidati ── */
+const candGrid = document.getElementById("candidates");
+for (const [id, cand] of Object.entries(CANDIDATES)) {
+  const div = document.createElement("div");
+  div.className = "option" + (cand.pick ? " pick" : "");
+  div.innerHTML = `<span class="tag">${id}</span>` +
+    (cand.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<h3>${cand.name}</h3><p class="desc">${cand.desc}</p>`;
+  candGrid.appendChild(div);
+
+  // Grande: ciclo automatico degli stati + twitch
+  const stage = document.createElement("div");
+  stage.className = "stage";
+  div.appendChild(stage);
+  const bigFig = document.createElement("figure");
+  stage.appendChild(bigFig);
+  const big = makeCanvas(bigFig, 8 * 11, 7 * 11);
+  const bigCap = document.createElement("figcaption");
+  bigFig.appendChild(bigCap);
+  anims.push({
+    draw(t) {
+      const phase = Math.floor(t / 2.6) % STATE_ORDER.length;
+      const state = STATE_ORDER[phase];
+      const local = t % 2.6;
+      // il twitch parte all'inizio d'ogni stato: è l'"evento" che lo cambia
+      const frame = local < 0.45 && state !== "done"
+        ? frameFor(cand, "twitch", local)
+        : frameFor(cand, state, t);
+      big.ctx.clearRect(0, 0, big.w, big.h);
+      drawPattern(big.ctx, frame, 11, STATE_COLORS[state]);
+      bigCap.textContent = state.toUpperCase();
+      bigCap.style.color = STATE_COLORS[state];
+    }
+  });
+
+  // Striscia dei cinque stati, ciascuno animato
+  const states = document.createElement("div");
+  states.className = "states";
+  div.appendChild(states);
+  for (const st of STATE_ORDER) {
+    const fig = document.createElement("figure");
+    states.appendChild(fig);
+    const s = makeCanvas(fig, 8 * 5, 7 * 5);
+    const cap = document.createElement("figcaption");
+    cap.textContent = st;
+    fig.appendChild(cap);
+    anims.push({
+      draw(t) {
+        s.ctx.clearRect(0, 0, s.w, s.h);
+        drawPattern(s.ctx, frameFor(cand, st, t), 5, STATE_COLORS[st]);
+      }
+    });
+  }
+
+  // Card di sessione a taglia reale (running, blu, con spinner)
+  const card = document.createElement("div");
+  card.className = "mockcard";
+  card.innerHTML = `<div class="spritebox"></div>
+    <div class="txt"><div class="title">vedetta<span class="sep"> · </span>branding previews</div>
+    <div class="sub">Bash: make app…</div></div><span class="chip">^G ↗</span>`;
+  div.appendChild(card);
+  const box = card.querySelector(".spritebox");
+  const real = makeCanvas(box, Math.ceil(8 * 2.2) + 4, Math.ceil(7 * 2.2) + 4);
+  const spin = makeCanvas(box, 9 + 4, 9 + 4);
+  anims.push({
+    draw(t) {
+      real.ctx.clearRect(0, 0, real.w, real.h);
+      drawPattern(real.ctx, frameFor(cand, "running", t), 2.2, STATE_COLORS.running, 2, 2);
+      spin.ctx.clearRect(0, 0, spin.w, spin.h);
+      drawSpinner(spin.ctx, t, 3, "#5999FF", 2, 2, 0.13);
+    }
+  });
+}
+
+/* ── spinner / barra / "?" (replicano StateIndicator.swift) ── */
+const RING = [[0,0],[1,0],[2,0],[2,1],[2,2],[1,2],[0,2],[0,1]];
+function drawSpinner(ctx, t, cell, color, ox = 0, oy = 0, falloff = 0.13) {
+  const tick = Math.floor(t / 0.12);
+  const inset = cell * 0.07;
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = cell * 1.4;
+  for (let i = 0; i < 8; i++) {
+    const d = ((i - tick) % 8 + 8) % 8;
+    ctx.globalAlpha = Math.max(0, 1 - d * falloff);
+    ctx.fillStyle = color;
+    ctx.fillRect(ox + RING[i][0] * cell + inset, oy + RING[i][1] * cell + inset,
+                 cell - inset * 2, cell - inset * 2);
+  }
+  ctx.restore();
+}
+const BAR = ["##", "##", "##", "##"];
+const QMARK = [".###.", "#...#", "....#", "...#.", "..#..", "..#.."];
+
+/* ── sezione 2: icone ── */
+function tileRect(S) { const inset = S * 0.09; return { x: inset, y: inset, w: S - inset * 2, h: S - inset * 2 }; }
+function roundedTile(ctx, S) {
+  const t = tileRect(S);
+  ctx.beginPath();
+  ctx.roundRect(t.x, t.y, t.w, t.h, t.w * 0.22);
+  return t;
+}
+function notchPath(ctx, x, y, w, h) {
+  const r = h * 0.4;
+  ctx.beginPath();
+  ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.closePath();
+}
+const iconStars = lcgStars(24, 0x1C0);
+function drawIcon(ctx, S, style, t) {
+  ctx.clearRect(0, 0, S, S);
+  const tile = roundedTile(ctx, S);
+  ctx.fillStyle = "#0C0E0C"; ctx.fill();
+  ctx.save();
+  roundedTile(ctx, S); ctx.clip();
+
+  let botPx, botY;
+  if (style === "notch") {
+    ctx.fillStyle = "#232B23";
+    ctx.fillRect(tile.x, tile.y, tile.w, tile.h * 0.20);
+    const nw = tile.w * 0.4, nh = tile.h * 0.115;
+    notchPath(ctx, tile.x + (tile.w - nw) / 2, tile.y, nw, nh);
+    ctx.fillStyle = "#000"; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = Math.max(1, S * 0.008);
+    ctx.stroke();
+    botPx = tile.w * 0.6 / 8;
+    botY = tile.y + nh + botPx * 0.15;   // antenne appena sotto il notch
+  } else {
+    botPx = tile.w * 0.68 / 8;
+    botY = tile.y + (tile.h - botPx * 7) / 2;
+  }
+  if (style === "stars") {
+    ctx.fillStyle = "rgba(255,255,255,.35)";
+    for (const s of iconStars) {
+      ctx.fillRect(tile.x + s.x * tile.w, tile.y + s.y * tile.h, S * 0.012 * s.size, S * 0.012 * s.size);
+    }
+  }
+  const bot = CANDIDATES["1A"];
+  const frame = REDUCE ? bot.base : frameFor(bot, "waiting", t);
+  drawPattern(ctx, frame, botPx, "#6BC77A", tile.x + (tile.w - botPx * 8) / 2, botY);
+  ctx.restore();
+}
+const ICONS = [
+  { id: "2A", name: "Bot dal notch", pick: true,
+    desc: "Il bot fa capolino da sotto il notch: è letteralmente il prodotto. Nessun'altra icona ha questa composizione.", style: "notch" },
+  { id: "2B", name: "Bot centrato", pick: false,
+    desc: "Evoluzione diretta dell'icona attuale: bot intero, glow verde. Massima semplicità, ma non racconta il notch.", style: "center" },
+  { id: "2C", name: "Bot + starfield", pick: false,
+    desc: "Bot centrato con stelline pixel. Più atmosfera, ma a 32px le stelle diventano rumore.", style: "stars" },
+];
+const iconGrid = document.getElementById("icons");
+for (const ic of ICONS) {
+  const div = document.createElement("div");
+  div.className = "option" + (ic.pick ? " pick" : "");
+  div.innerHTML = `<span class="tag">${ic.id}</span>` +
+    (ic.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<h3>${ic.name}</h3><p class="desc">${ic.desc}</p>`;
+  iconGrid.appendChild(div);
+  const stage = document.createElement("div");
+  stage.className = "stage";
+  div.appendChild(stage);
+  for (const size of [128, 32]) {
+    const fig = document.createElement("figure");
+    stage.appendChild(fig);
+    const cv = makeCanvas(fig, size, size);
+    const cap = document.createElement("figcaption");
+    cap.textContent = size + "px";
+    fig.appendChild(cap);
+    anims.push({ draw(t) { drawIcon(cv.ctx, size, ic.style, t); } });
+  }
+}
+
+/* ── sezione 3: dmg ── */
+function lcgStars(count, seed) {
+  let s = BigInt(seed >>> 0) + 0x5EED_CAFEn;
+  const next = () => {
+    s = (s * 6364136223846793005n + 1442695040888963407n) & 0xFFFFFFFFFFFFFFFFn;
+    return Number((s >> 33n) & 0x7FFFFFFFn) / 0x7FFFFFFF;
+  };
+  return Array.from({ length: count }, () => ({
+    x: next(), y: next(), size: next() > 0.72 ? 1.6 : 1, a: 0.2 + next() * 0.5, ph: next() * Math.PI * 2,
+  }));
+}
+const dmgStars = lcgStars(70, 7);
+function drawDMGCommon(ctx, W, H, t) {
+  ctx.fillStyle = "#040604"; ctx.fillRect(0, 0, W, H);
+  for (const s of dmgStars) {
+    const tw = REDUCE ? 1 : 0.75 + 0.25 * Math.sin(t * 1.3 + s.ph);
+    ctx.fillStyle = `rgba(255,255,255,${(s.a * tw).toFixed(3)})`;
+    ctx.fillRect(s.x * W, s.y * H, s.size * 1.6, s.size * 1.6);
+  }
+  // icona app (usa la 2A) e cartella Applications
+  const iconS = W * 0.19;
+  const iy = H * 0.34;
+  if (!drawDMGCommon.off) {
+    const off = document.createElement("canvas");
+    off.width = iconS * DPR; off.height = iconS * DPR;
+    drawDMGCommon.off = off;
+    drawDMGCommon.octx = off.getContext("2d");
+    drawDMGCommon.octx.scale(DPR, DPR);
+  }
+  drawIcon(drawDMGCommon.octx, iconS, "notch", t);
+  ctx.drawImage(drawDMGCommon.off, W * 0.16, iy, iconS, iconS);
+  // folder
+  const fx = W * 0.66, fw = iconS * 0.92, fy = iy + iconS * 0.08;
+  ctx.fillStyle = "#4A6FA5";
+  ctx.beginPath(); ctx.roundRect(fx, fy, fw * 0.42, fw * 0.14, 3); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(fx, fy + fw * 0.09, fw, fw * 0.6, 5); ctx.fill();
+  ctx.fillStyle = "#5C82B8";
+  ctx.beginPath(); ctx.roundRect(fx, fy + fw * 0.16, fw, fw * 0.53, 5); ctx.fill();
+  // labels
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  ctx.font = `${Math.round(W * 0.023)}px ui-monospace, Menlo, monospace`;
+  ctx.textAlign = "center";
+  ctx.fillText("Vedetta", W * 0.16 + iconS / 2, iy + iconS + W * 0.045);
+  ctx.fillText("Applications", fx + fw / 2, iy + iconS + W * 0.045);
+  // freccia pixel
+  const b = W * 0.02, ax = W * 0.435, ay = iy + iconS * 0.42;
+  ctx.fillStyle = "#6BC77A";
+  ctx.shadowColor = "#6BC77A"; ctx.shadowBlur = b;
+  for (let i = 0; i < 3; i++) ctx.fillRect(ax + i * b * 1.25, ay, b, b);
+  ctx.fillRect(ax + 3 * b * 1.25, ay - b * 1.25, b, b);
+  ctx.fillRect(ax + 3 * b * 1.25, ay, b, b);
+  ctx.fillRect(ax + 3 * b * 1.25, ay + b * 1.25, b, b);
+  ctx.fillRect(ax + 4 * b * 1.25, ay, b, b);
+  ctx.shadowBlur = 0;
+  // riga typewriter
+  const blink = REDUCE || (t % 1.1) < 0.6 ? "_" : " ";
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  ctx.textAlign = "center";
+  ctx.fillText("> drag to install " + blink, W / 2, H * 0.88);
+  ctx.textAlign = "left";
+}
+const DMGS = [
+  { id: "3A", name: "Bot che osserva dall'alto",
+    desc: "Il bordo superiore diventa il notch: il bot fa capolino e osserva l'installazione. Stessa gag dell'icona.", variant: "peek", pick: false },
+  { id: "3B", name: "Starfield minimale", pick: true,
+    desc: "Solo cielo stellato, freccia e prompt: lascia parlare l'icona (che già contiene bot e notch).", variant: "plain" },
+  { id: "3C", name: "Diorama completo",
+    desc: "Orizzonte pixel e torretta di vedetta. Più spettacolare, ma compete con le icone da trascinare.", variant: "full", pick: false },
+];
+const dmgGrid = document.getElementById("dmgs");
+for (const d of DMGS) {
+  const div = document.createElement("div");
+  div.className = "option" + (d.pick ? " pick" : "");
+  div.innerHTML = `<span class="tag">${d.id}</span>` +
+    (d.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<h3>${d.name}</h3><p class="desc">${d.desc}</p>`;
+  dmgGrid.appendChild(div);
+  const stage = document.createElement("div");
+  stage.className = "stage";
+  div.appendChild(stage);
+  const W = 252, H = 168;
+  const cv = makeCanvas(stage, W, H);
+  cv.c.style.borderRadius = "8px";
+  anims.push({
+    draw(t) {
+      drawDMGCommon(cv.ctx, W, H, t);
+      const ctx = cv.ctx;
+      if (d.variant === "peek") {
+        // menubar + notch + testa del bot
+        ctx.fillStyle = "#101410"; ctx.fillRect(0, 0, W, H * 0.055);
+        const nw = W * 0.24, nh = H * 0.055;
+        notchPath(ctx, (W - nw) / 2, 0, nw, nh);
+        ctx.fillStyle = "#000"; ctx.fill();
+        const px = nw * 0.7 / 8;
+        const head = frameFor(CANDIDATES["1A"], "waiting", t).slice(1, 4);
+        drawPattern(ctx, head, px, "#6BC77A", (W - px * 8) / 2, nh + 1);
+      } else if (d.variant === "full") {
+        // orizzonte + torretta col bot
+        ctx.fillStyle = "#0D130D";
+        const hb = H * 0.075;
+        for (let x = 0; x < W; x += 12) {
+          const hh = hb + ((x * 7919) % 5);
+          ctx.fillRect(x, H - hh, 12, hh);
+        }
+        const tx = W * 0.055, tw = 20, th = 34, base = H * 0.985;
+        ctx.fillStyle = "#152015";
+        ctx.fillRect(tx, base - th, tw, th);
+        ctx.fillRect(tx - 3, base - th, tw + 6, 4);
+        const px = 2;
+        drawPattern(ctx, frameFor(CANDIDATES["1A"], "waiting", t), px, "#6BC77A",
+                    tx + (tw - px * 8) / 2, base - th - px * 7 - 2);
+      }
+    }
+  });
+}
+
+/* ── sezione 4: micro-animazioni ── */
+const ANIMPANELS = [
+  { id: "4·OGGI", name: "Indicatori attuali", pick: false, tag: "OGGI",
+    build(stage) {
+      addAnim(stage, "spinner · running", 40, 40, (ctx, t) => drawSpinner(ctx, t, 8, "#5999FF", 8, 8));
+      addAnim(stage, "barra · waiting", 40, 40, (ctx, t) => {
+        if ((t % 1.2) < 0.72) drawPattern(ctx, BAR, 6, "#6BC77A", 14, 8);
+      });
+      addAnim(stage, "? · approval", 40, 52, (ctx, t) => {
+        drawPattern(ctx, QMARK, 5, "#FFA028", 8, 2);
+        if ((t % 1.2) < 0.72) drawPattern(ctx, ["##", "##"], 5, "#FFA028", 16, 36);
+      });
+    } },
+  { id: "4A", name: "Più arcade, col bot protagonista", pick: true, tag: "4A",
+    build(stage) {
+      addAnim(stage, "twitch d'antenna (evento)", 8 * 8, 7 * 8, (ctx, t) =>
+        drawPattern(ctx, frameFor(CANDIDATES["1A"], "twitch", t), 8, "#6BC77A"));
+      addAnim(stage, "occhi ←→ (running)", 8 * 8, 7 * 8, (ctx, t) =>
+        drawPattern(ctx, frameFor(CANDIDATES["1A"], "running", t), 8, "#5999FF"));
+      addAnim(stage, "indicatori: invariati", 40, 40, (ctx, t) => drawSpinner(ctx, t, 8, "#5999FF", 8, 8));
+    } },
+  { id: "4B", name: "Ammorbidire gli indicatori", pick: false, tag: "4B",
+    build(stage) {
+      addAnim(stage, "barra · fade a gradini", 40, 40, (ctx, t) => {
+        const p = t % 1.2;
+        const alpha = p < 0.6 ? 1 : p < 0.75 ? 0.55 : p < 0.9 ? 0.2 : p < 1.05 ? 0.55 : 1;
+        ctx.globalAlpha = alpha;
+        drawPattern(ctx, BAR, 6, "#6BC77A", 14, 8);
+        ctx.globalAlpha = 1;
+      });
+      addAnim(stage, "spinner · scia lunga", 40, 40, (ctx, t) => drawSpinner(ctx, t, 8, "#5999FF", 8, 8, 0.08));
+      addAnim(stage, "bot: statico", 8 * 8, 7 * 8, (ctx) =>
+        drawPattern(ctx, CANDIDATES["1A"].base, 8, "#6BC77A"));
+    } },
+];
+function addAnim(stage, caption, w, h, draw) {
+  const fig = document.createElement("figure");
+  stage.appendChild(fig);
+  const cv = makeCanvas(fig, w, h);
+  const cap = document.createElement("figcaption");
+  cap.textContent = caption;
+  fig.appendChild(cap);
+  anims.push({ draw(t) { cv.ctx.clearRect(0, 0, cv.w, cv.h); draw(cv.ctx, t); } });
+}
+const animGrid = document.getElementById("anims");
+for (const p of ANIMPANELS) {
+  const div = document.createElement("div");
+  div.className = "option" + (p.pick ? " pick" : "");
+  div.innerHTML = `<span class="tag">${p.tag}</span>` +
+    (p.pick ? `<span class="pickbadge">SCELTA PROVVISORIA</span>` : "") +
+    `<h3>${p.name}</h3>`;
+  animGrid.appendChild(div);
+  const stage = document.createElement("div");
+  stage.className = "stage";
+  div.appendChild(stage);
+  p.build(stage);
+}
+
+/* ── starfield della pagina ── */
+const sky = document.getElementById("sky");
+const skyCtx = sky.getContext("2d");
+const pageStars = lcgStars(140, 99);
+function drawSky(t) {
+  const W = innerWidth, H = innerHeight;
+  if (sky.width !== W * DPR) {
+    sky.width = W * DPR; sky.height = H * DPR;
+  }
+  skyCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  skyCtx.clearRect(0, 0, W, H);
+  for (const s of pageStars) {
+    const speed = s.size > 1 ? 4.8 : 2;
+    const x = (s.x * W + (REDUCE ? 0 : t * speed)) % W;
+    const tw = REDUCE ? 1 : 0.75 + 0.25 * Math.sin(t * 1.3 + s.ph);
+    skyCtx.fillStyle = `rgba(255,255,255,${(s.a * tw * 0.8).toFixed(3)})`;
+    skyCtx.fillRect(x, s.y * H, s.size * 1.7, s.size * 1.7);
+  }
+}
+
+/* ── loop ── */
+const t0 = performance.now();
+function tick() {
+  const t = (performance.now() - t0) / 1000;
+  drawSky(t);
+  for (const a of anims) a.draw(t);
+  if (!REDUCE) requestAnimationFrame(tick);
+}
+tick();
+if (REDUCE) { drawSky(0); for (const a of anims) a.draw(0); }
+</script>
+</body>
+</html>
