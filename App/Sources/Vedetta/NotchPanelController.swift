@@ -416,6 +416,9 @@ final class NotchPanelController {
     private func hoverChanged(_ hovering: Bool) {
         logHover(hovering)
         if pinnedExpanded { return }
+        // A real tracking event means SwiftUI's hover state is live again:
+        // the post-collapse resync watchdog is no longer needed.
+        stopHoverResync()
         isHovering = hovering
         collapseWorkItem?.cancel()
 
@@ -552,7 +555,47 @@ final class NotchPanelController {
             }
             unmountWorkItem = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.65, execute: work)
+            // A programmatic collapse (jump, peek close, interrupt drain)
+            // can leave SwiftUI's tracking convinced the cursor is still
+            // inside: the next enter never fires and the bar stops opening
+            // until the cursor leaves and returns. Follow the cursor
+            // directly until a real hover event resyncs the state.
+            startHoverResync()
         }
+    }
+
+    /// Post-collapse watchdog: opens the bar when the cursor reaches the
+    /// shape while hover events are desynced. Stops on the first real hover
+    /// event, on expansion, or after its deadline.
+    private var resyncPollTimer: Timer?
+    private var resyncDeadline = Date.distantPast
+
+    private func startHoverResync() {
+        resyncDeadline = Date().addingTimeInterval(60)
+        guard resyncPollTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.05, repeats: true) { _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if Date() > self.resyncDeadline || self.uiModel.isExpanded {
+                    self.stopHoverResync()
+                    return
+                }
+                if self.cursorOverShape(),
+                   UserDefaults.standard.bool(forKey: SettingsKey.hoverToExpandEnabled) {
+                    // The cursor IS here, whatever the tracking believes.
+                    self.isHovering = true
+                    self.stopHoverResync()
+                    self.primeAndExpand()
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        resyncPollTimer = timer
+    }
+
+    private func stopHoverResync() {
+        resyncPollTimer?.invalidate()
+        resyncPollTimer = nil
     }
 
     /// True when the mouse is inside the shape as rendered RIGHT NOW —

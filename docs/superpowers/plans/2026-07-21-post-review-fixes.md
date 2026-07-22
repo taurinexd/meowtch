@@ -151,12 +151,11 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
 
 ## Coda (segnalazioni in attesa)
 
-- [ ] **Hover post-jump**: dopo il click su una card (jump), il primo
-  ritorno del cursore sul notch non lo espande; serve uscire e rientrare.
-  Sospetto: il collapse da jump avviene col cursore dentro → nessun
-  hover-exit (region che si restringe sotto cursore fermo) → `isHovering`
-  resta true e l'enter successivo non scatta. Da verificare con
-  VEDETTA_HOVER_LOG.
+- [x] **Hover post-jump** — dopo un collasso programmatico il tracking
+  SwiftUI resta desincronizzato ("cursore dentro") e il primo ritorno sul
+  notch non genera l'enter. Fix: watchdog di risincronizzazione post-collapse
+  (poll 50ms, max 60s) che segue il cursore contro la shape e si spegne al
+  primo evento hover reale. In attesa di conferma di Matteo sul gesto.
 
 ## Residui noti (non bloccanti)
 
