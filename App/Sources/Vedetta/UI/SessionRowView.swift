@@ -195,8 +195,8 @@ struct SessionRowView: View {
             // as the Claude bar, but the tap types the option number into
             // the exact terminal via the extension (no hook channel exists).
             if session.agent == .codex, session.state == .needsApproval,
-               let options = session.pendingQuestionOptions, !options.isEmpty {
-                codexQuestionBar(options)
+               let pending = session.pendingCodexQuestions, !pending.isEmpty {
+                codexQuestionBar(pending)
                     .padding(.top, 10)
             }
 
@@ -215,38 +215,50 @@ struct SessionRowView: View {
     /// The live AskUserQuestion(s) shown in the notch. Each question lists
     /// its options (with descriptions); clicking one raises the terminal
     /// and drives the native picker to that choice.
+    /// Index of the TUI's current question: the rollout records nothing
+    /// between questions of one call, so a remote answer advances it
+    /// locally, exactly mirroring the TUI's own stepping.
+    @State private var codexQuestionIndex = 0
     @State private var codexAnswerSent = false
 
-    private func codexQuestionBar(_ options: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func codexQuestionBar(_ questions: [CodexPendingQuestion]) -> some View {
+        let index = min(codexQuestionIndex, questions.count - 1)
+        let question = questions[index]
+        let done = codexAnswerSent && index == questions.count - 1
+        let status = done
+            ? "Sent to terminal"
+            : (questions.count > 1 ? "\(index + 1)/\(questions.count)" : "Answers in the terminal")
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "questionmark.bubble.fill")
                     .font(.system(size: 11))
                 Text("Question")
                     .font(.system(size: 11.5, weight: .bold))
                 Spacer(minLength: 6)
-                Text(codexAnswerSent ? "Sent to terminal" : "Answers in the terminal")
+                Text(status)
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.secondaryText)
             }
             .foregroundStyle(Theme.color(for: .needsApproval))
-            if let question = session.currentToolDetail {
-                Text(question)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Theme.primaryText)
-            }
-            ForEach(Array(options.enumerated()), id: \.offset) { index, label in
+            Text(question.question)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(Theme.primaryText)
+            ForEach(Array(question.optionLabels.enumerated()), id: \.offset) { optionIndex, label in
                 Button {
-                    guard !codexAnswerSent else { return }
-                    codexAnswerSent = true
+                    guard !done else { return }
                     JumpService.answerCodexQuestion(
                         session: session,
                         terminal: terminal,
-                        optionNumber: index + 1
+                        optionNumber: optionIndex + 1
                     )
+                    if index < questions.count - 1 {
+                        codexQuestionIndex = index + 1
+                    } else {
+                        codexAnswerSent = true
+                    }
                 } label: {
                     HStack(spacing: 8) {
-                        Text("\(index + 1)")
+                        Text("\(optionIndex + 1)")
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundStyle(Theme.secondaryText)
                         Text(label)
@@ -261,15 +273,18 @@ struct SessionRowView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .opacity(codexAnswerSent ? 0.4 : 1)
+                .opacity(done ? 0.4 : 1)
             }
         }
         .padding(12)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onChange(of: session.pendingQuestionOptions) { _, value in
-            // A new question (or the release of this one) re-arms the bar.
-            if value == nil { codexAnswerSent = false }
+        .onChange(of: session.pendingCodexQuestions) { _, value in
+            // A new ask (or the release of this one) re-arms the wizard.
+            if value == nil {
+                codexQuestionIndex = 0
+                codexAnswerSent = false
+            }
         }
     }
 
