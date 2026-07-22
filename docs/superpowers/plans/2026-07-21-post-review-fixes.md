@@ -120,6 +120,22 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
 - Verifica: 146 test verdi; ogni pagina catturata a screenshot dalla build
   viva (deep-link socket) e confrontata con gli screenshot VI.
 
+## Round 5 — rifiniture live + suoni completi (2026-07-22)
+
+- [x] Recap nella colonna testo, colore standard, wrap al punto di troncatura
+  delle altre righe (`82a226f`).
+- [x] Bug `JSONValue` bool-bridging: quota Codex a 0% rigettata dal parser →
+  switcher usage morto; fix con test sulla risposta reale 0.145 (`1905e24`).
+- [x] Press feedback su speaker/gear/usage strip; icona mute composita
+  (speaker+X) a ingombro fisso (`1905e24`, `82a226f`).
+- [x] Suono di fine turno mancante + 3 nuovi eventi (Session Start, Task
+  Error, Context Limit) + Task Acknowledge (default off); **silence rules
+  per-evento** con preview in Settings → Sound (`5e72b1a`) → il punto
+  "silence rules" di M7 è CHIUSO. Di M7 resta solo l'estetica card
+  domande/wizard.
+- [x] Hook audio personali di Matteo disattivati per il test (ripristino:
+  `~/.claude/personal-sound-hooks.disabled.json`).
+
 ## Residui noti (non bloccanti)
 
 - Il self-cleanup JXA del launcher (`VedettaSetup`) usa ancora
