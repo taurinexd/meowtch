@@ -21,20 +21,16 @@ public struct CodexRolloutTool: Equatable, Sendable {
     }
 }
 
-/// One pending request_user_input, as written in the rollout: the TUI shows
-/// the options as a numbered picker, so their order IS the answer key.
+/// One pending request_user_input question, as written in the rollout: the
+/// TUI shows its options as a numbered picker (numbers restart on each
+/// question of a multi-question call), so option order IS the answer key.
 public struct CodexPendingQuestion: Equatable, Sendable {
     public let question: String
     public let optionLabels: [String]
-    /// Multi-question calls step through the TUI one at a time with
-    /// restarting numbers: remote numeric answers are only safe for a
-    /// single question.
-    public let isMultiQuestion: Bool
 
-    public init(question: String, optionLabels: [String], isMultiQuestion: Bool) {
+    public init(question: String, optionLabels: [String]) {
         self.question = question
         self.optionLabels = optionLabels
-        self.isMultiQuestion = isMultiQuestion
     }
 }
 
@@ -58,12 +54,12 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
     public var reasoningEffort: String?
     public var activeTurnIDs: Set<String> = []
     public var openTools: [String: CodexRolloutTool] = [:]
-    /// Open request_user_input calls (callID → question): the model is
-    /// waiting for the USER, not working. Answered in the TUI; mirrored in
-    /// the notch, with number-selectable options when there is one question.
-    public var pendingUserInput: [String: CodexPendingQuestion] = [:]
+    /// Open request_user_input calls (callID → questions): the model is
+    /// waiting for the USER, not working. Answered in the TUI one question
+    /// at a time; mirrored in the notch with number-selectable options.
+    public var pendingUserInput: [String: [CodexPendingQuestion]] = [:]
 
-    public var pendingUserInputQuestion: CodexPendingQuestion? {
+    public var pendingUserInputQuestions: [CodexPendingQuestion]? {
         pendingUserInput.values.first
     }
 
@@ -200,12 +196,8 @@ public struct CodexRolloutTailer: Sendable {
                 sequence: sequence
             )
             if payload["name"] as? String == "request_user_input" {
-                snapshot.pendingUserInput[callID] = Self.firstQuestion(input)
-                    ?? CodexPendingQuestion(
-                        question: "Question pending",
-                        optionLabels: [],
-                        isMultiQuestion: false
-                    )
+                snapshot.pendingUserInput[callID] = Self.questions(input)
+                    ?? [CodexPendingQuestion(question: "Question pending", optionLabels: [])]
             }
         case "function_call_output", "custom_tool_call_output", "tool_search_output":
             if let callID = (payload["call_id"] as? String) ?? (payload["id"] as? String) {
@@ -217,28 +209,24 @@ public struct CodexRolloutTailer: Sendable {
         }
     }
 
-    /// The first question from request_user_input arguments
+    /// All questions from request_user_input arguments
     /// ({"questions":[{"question":"…","options":[{"label":"…"},…]}]},
     /// JSON-in-string).
-    private static func firstQuestion(_ input: Any?) -> CodexPendingQuestion? {
+    private static func questions(_ input: Any?) -> [CodexPendingQuestion]? {
         var value = input
         if let text = value as? String,
            let decoded = try? JSONSerialization.jsonObject(with: Data(text.utf8)) {
             value = decoded
         }
         guard let object = value as? [String: Any],
-              let questions = object["questions"] as? [[String: Any]],
-              let firstQuestion = questions.first,
-              let text = firstQuestion["question"] as? String,
-              !text.isEmpty else { return nil }
-        let labels = (firstQuestion["options"] as? [[String: Any]])?
-            .compactMap { $0["label"] as? String } ?? []
-        let multi = questions.count > 1
-        return CodexPendingQuestion(
-            question: multi ? "\(text) (+\(questions.count - 1))" : text,
-            optionLabels: labels,
-            isMultiQuestion: multi
-        )
+              let questions = object["questions"] as? [[String: Any]] else { return nil }
+        let parsed = questions.compactMap { entry -> CodexPendingQuestion? in
+            guard let text = entry["question"] as? String, !text.isEmpty else { return nil }
+            let labels = (entry["options"] as? [[String: Any]])?
+                .compactMap { $0["label"] as? String } ?? []
+            return CodexPendingQuestion(question: text, optionLabels: labels)
+        }
+        return parsed.isEmpty ? nil : parsed
     }
 
     private mutating func consumeEvent(kind: String, payload: [String: Any]) {

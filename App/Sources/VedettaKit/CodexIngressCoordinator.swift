@@ -210,19 +210,17 @@ public final class CodexIngressCoordinator {
         // still miss its task_complete. A turn the hooks already finalized
         // must not count as live activity, or the card flips back to blue.
         let liveTurns = rollout.activeTurnIDs.subtracting(ledger.hookFinalTurns)
-        if let question = rollout.pendingUserInputQuestion {
+        if let questions = rollout.pendingUserInputQuestions,
+           let first = questions.first {
             // request_user_input never reaches the hooks (TUI-only): the
             // rollout is the sole signal that the model is waiting for the
-            // USER mid-turn. Attention state + the question on the card;
-            // it resolves itself when the answer lands in the file.
+            // USER mid-turn. Attention state + the questions on the card;
+            // it resolves itself when the answers land in the file.
             session.state = .needsApproval
             session.currentTool = "Question"
-            session.currentToolDetail = question.question
-            // The TUI's numbered picker follows the payload's option order:
-            // safe to answer remotely only for a single question.
-            session.pendingQuestionOptions =
-                question.isMultiQuestion || question.optionLabels.isEmpty
-                    ? nil : question.optionLabels
+            session.currentToolDetail = questions.count > 1
+                ? "\(first.question) (+\(questions.count - 1))" : first.question
+            session.pendingCodexQuestions = questions
             ledger.rolloutSawActiveTurn = !liveTurns.isEmpty
             ledger.questionPending = true
             let newQuestions = Set(rollout.pendingUserInput.keys)
@@ -238,7 +236,7 @@ public final class CodexIngressCoordinator {
                 // owned by the hook flow).
                 ledger.questionPending = false
                 ledger.announcedQuestions.removeAll()
-                session.pendingQuestionOptions = nil
+                session.pendingCodexQuestions = nil
                 if session.state == .needsApproval {
                     session.state = liveTurns.isEmpty ? .waitingForInput : .running
                 }

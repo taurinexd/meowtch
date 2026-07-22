@@ -87,10 +87,10 @@ struct CodexRolloutTailerTests {
         var tailer = CodexRolloutTailer()
 
         let pending = try tailer.read(from: temp.file)
-        let question = try #require(pending.pendingUserInputQuestion)
-        #expect(question.question == "Quale prova vuoi fare?")
-        #expect(question.optionLabels == ["A", "B"])
-        #expect(!question.isMultiQuestion)
+        let questions = try #require(pending.pendingUserInputQuestions)
+        #expect(questions.count == 1)
+        #expect(questions.first?.question == "Quale prova vuoi fare?")
+        #expect(questions.first?.optionLabels == ["A", "B"])
         #expect(pending.currentTool == "Question")
 
         // The user answers in the TUI: the output releases the question.
@@ -101,7 +101,7 @@ struct CodexRolloutTailerTests {
         """ + "\n").utf8))
         try handle.close()
         let answered = try tailer.read(from: temp.file)
-        #expect(answered.pendingUserInputQuestion == nil)
+        #expect(answered.pendingUserInputQuestions == nil)
         #expect(answered.currentTool == nil)
     }
 
