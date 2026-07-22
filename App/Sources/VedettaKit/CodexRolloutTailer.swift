@@ -41,6 +41,14 @@ public struct CodexRolloutSnapshot: Equatable, Sendable {
     public var reasoningEffort: String?
     public var activeTurnIDs: Set<String> = []
     public var openTools: [String: CodexRolloutTool] = [:]
+    /// Open request_user_input calls (callID → first question text): the
+    /// model is waiting for the USER, not working. Answered in the TUI;
+    /// mirrored in the notch as an attention state with a jump.
+    public var pendingUserInput: [String: String] = [:]
+
+    public var pendingUserInputQuestion: String? {
+        pendingUserInput.values.first
+    }
 
     public var state: State { activeTurnIDs.isEmpty ? .waiting : .running }
     public var currentTool: String? {
@@ -174,13 +182,33 @@ public struct CodexRolloutTailer: Sendable {
                 detail: Self.toolDetail(input),
                 sequence: sequence
             )
+            if payload["name"] as? String == "request_user_input" {
+                snapshot.pendingUserInput[callID] =
+                    Self.firstQuestion(input) ?? "Question pending"
+            }
         case "function_call_output", "custom_tool_call_output", "tool_search_output":
             if let callID = (payload["call_id"] as? String) ?? (payload["id"] as? String) {
                 snapshot.openTools.removeValue(forKey: callID)
+                snapshot.pendingUserInput.removeValue(forKey: callID)
             }
         default:
             break
         }
+    }
+
+    /// The first question's text from request_user_input arguments
+    /// ({"questions":[{"question":"…","options":[…]}]}, JSON-in-string).
+    private static func firstQuestion(_ input: Any?) -> String? {
+        var value = input
+        if let text = value as? String,
+           let decoded = try? JSONSerialization.jsonObject(with: Data(text.utf8)) {
+            value = decoded
+        }
+        guard let object = value as? [String: Any],
+              let questions = object["questions"] as? [[String: Any]],
+              let first = questions.first?["question"] as? String,
+              !first.isEmpty else { return nil }
+        return questions.count > 1 ? "\(first) (+\(questions.count - 1))" : first
     }
 
     private mutating func consumeEvent(kind: String, payload: [String: Any]) {
@@ -198,6 +226,7 @@ public struct CodexRolloutTailer: Sendable {
             }
             if snapshot.activeTurnIDs.isEmpty {
                 snapshot.openTools.removeAll()
+                snapshot.pendingUserInput.removeAll()
             }
             snapshot.lastActivityAt = Self.date(payload["completed_at"])
                 ?? snapshot.lastActivityAt
@@ -209,12 +238,14 @@ public struct CodexRolloutTailer: Sendable {
             }
             if snapshot.activeTurnIDs.isEmpty {
                 snapshot.openTools.removeAll()
+                snapshot.pendingUserInput.removeAll()
             }
             snapshot.lastActivityAt = Self.date(payload["completed_at"])
                 ?? snapshot.lastActivityAt
         case "thread_rolled_back":
             snapshot.activeTurnIDs.removeAll()
             snapshot.openTools.removeAll()
+            snapshot.pendingUserInput.removeAll()
         case "user_message":
             if let message = payload["message"] as? String, !message.isEmpty {
                 if snapshot.firstUserMessage == nil { snapshot.firstUserMessage = message }
@@ -262,6 +293,7 @@ public struct CodexRolloutTailer: Sendable {
         case "apply_patch": "Edit"
         case "read_file": "Read"
         case "web_search": "WebSearch"
+        case "request_user_input": "Question"
         default: name
         }
     }

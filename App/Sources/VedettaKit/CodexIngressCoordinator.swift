@@ -14,10 +14,19 @@ public final class CodexIngressCoordinator {
         var hasIndexTitle = false
         var suppressed = false
         var lastHookAt: Date?
+        /// callIDs of request_user_input already announced (sound/expand
+        /// fire once per question, not on every rollout re-read).
+        var announcedQuestions: Set<String> = []
+        /// True while the attention state was set by a rollout question —
+        /// the only needsApproval the rollout itself may release.
+        var questionPending = false
     }
 
     private let store: SessionStore
     private var ledgers: [String: Ledger] = [:]
+    /// Fired once per new request_user_input question (the TUI holds the
+    /// answer; the notch mirrors the question and plays its chirp).
+    public var onUserInputRequest: (@MainActor () -> Void)?
 
     public init(store: SessionStore) {
         self.store = store
@@ -201,14 +210,43 @@ public final class CodexIngressCoordinator {
         // still miss its task_complete. A turn the hooks already finalized
         // must not count as live activity, or the card flips back to blue.
         let liveTurns = rollout.activeTurnIDs.subtracting(ledger.hookFinalTurns)
-        if !liveTurns.isEmpty {
-            ledger.rolloutSawActiveTurn = true
-            if session.state != .needsApproval { session.state = .running }
-        } else if !ledger.hookSeen || ledger.rolloutSawActiveTurn || session.state == .waitingForInput {
-            session.state = .waitingForInput
-            session.currentTool = nil
-            session.currentToolDetail = nil
-            ledger.rolloutSawActiveTurn = false
+        if let question = rollout.pendingUserInputQuestion {
+            // request_user_input never reaches the hooks (TUI-only): the
+            // rollout is the sole signal that the model is waiting for the
+            // USER mid-turn. Attention state + the question on the card;
+            // it resolves itself when the answer lands in the file.
+            session.state = .needsApproval
+            session.currentTool = "Question"
+            session.currentToolDetail = question
+            ledger.rolloutSawActiveTurn = !liveTurns.isEmpty
+            ledger.questionPending = true
+            let newQuestions = Set(rollout.pendingUserInput.keys)
+                .subtracting(ledger.announcedQuestions)
+            if !newQuestions.isEmpty {
+                ledger.announcedQuestions.formUnion(newQuestions)
+                onUserInputRequest?()
+            }
+        } else {
+            if ledger.questionPending {
+                // The user answered in the TUI: release the attention state
+                // (only a question's needsApproval — a hook approval's is
+                // owned by the hook flow).
+                ledger.questionPending = false
+                ledger.announcedQuestions.removeAll()
+                if session.state == .needsApproval {
+                    session.state = liveTurns.isEmpty ? .waitingForInput : .running
+                }
+            }
+            if !liveTurns.isEmpty {
+                ledger.rolloutSawActiveTurn = true
+                if session.state != .needsApproval { session.state = .running }
+            } else if !ledger.hookSeen || ledger.rolloutSawActiveTurn
+                        || session.state == .waitingForInput {
+                session.state = .waitingForInput
+                session.currentTool = nil
+                session.currentToolDetail = nil
+                ledger.rolloutSawActiveTurn = false
+            }
         }
 
         ledger.revision += 1

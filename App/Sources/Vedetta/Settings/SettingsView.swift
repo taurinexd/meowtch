@@ -251,8 +251,14 @@ private struct IntegrationsSettingsPage: View {
     @State private var axTrusted = AXIsProcessTrusted()
     @State private var trustReport: String?
     @State private var operationError: String?
-    @AppStorage("codexApprovalMode") private var codexApprovalMode = "followFocus"
-    @AppStorage("deferClaudeApprovalsToNative") private var nativeClaudeApprovals = false
+    @AppStorage("codexApprovalMode") private var codexApprovalMode = "alwaysNotch"
+    @AppStorage("claudeApprovalMode") private var claudeApprovalMode =
+        ClaudeApprovalPolicy.mode(
+            rawValue: UserDefaults.standard.string(forKey: "claudeApprovalMode"),
+            legacyDeferToNative: UserDefaults.standard.bool(
+                forKey: "deferClaudeApprovalsToNative"
+            )
+        ).rawValue
 
     var body: some View {
         SettingsSection(
@@ -290,22 +296,27 @@ private struct IntegrationsSettingsPage: View {
 
         SettingsSection(
             title: "Approvals",
-            footer: "Follow Focus routes a Codex approval to the terminal when you are already looking at it, to the notch otherwise. Auto-reviewed requests stay silent."
+            footer: "Always Notch (default) mirrors every approval and question as a card. Follow Focus leaves it in the terminal when you are already looking at it. Always Terminal never uses the notch. Auto-reviewed Codex requests stay silent."
         ) {
-            SettingsRow(title: "When Codex needs your approval") {
-                Picker("", selection: $codexApprovalMode) {
-                    Text("Follow Focus").tag("followFocus")
+            SettingsRow(title: "When Claude needs your approval") {
+                Picker("", selection: $claudeApprovalMode) {
                     Text("Always Notch").tag("alwaysNotch")
+                    Text("Follow Focus").tag("followFocus")
                     Text("Always Terminal").tag("alwaysTerminal")
-                    Text("Native Codex").tag("nativeCodex")
                 }
                 .labelsHidden()
                 .frame(width: 170)
             }
             RowDivider()
-            SettingsRow(title: "Use Native Claude Code Approvals",
-                        subtitle: "Skip notch approval cards; Claude Code asks in the terminal.") {
-                Toggle("", isOn: $nativeClaudeApprovals).toggleStyle(.switch).labelsHidden()
+            SettingsRow(title: "When Codex needs your approval") {
+                Picker("", selection: $codexApprovalMode) {
+                    Text("Always Notch").tag("alwaysNotch")
+                    Text("Follow Focus").tag("followFocus")
+                    Text("Always Terminal").tag("alwaysTerminal")
+                    Text("Native Codex").tag("nativeCodex")
+                }
+                .labelsHidden()
+                .frame(width: 170)
             }
         }
 

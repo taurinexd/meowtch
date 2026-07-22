@@ -1,6 +1,24 @@
 import Testing
 @testable import VedettaKit
 
+struct ClaudeApprovalPolicyTests {
+    @Test func routesByModeAndFocus() {
+        #expect(ClaudeApprovalPolicy.route(mode: .alwaysNotch, terminalIsFocused: true) == .notch)
+        #expect(ClaudeApprovalPolicy.route(mode: .alwaysTerminal, terminalIsFocused: false) == .terminal)
+        #expect(ClaudeApprovalPolicy.route(mode: .followFocus, terminalIsFocused: true) == .terminal)
+        #expect(ClaudeApprovalPolicy.route(mode: .followFocus, terminalIsFocused: false) == .notch)
+    }
+
+    @Test func migratesLegacyNativeToggle() {
+        #expect(ClaudeApprovalPolicy.mode(rawValue: nil, legacyDeferToNative: false) == .alwaysNotch)
+        #expect(ClaudeApprovalPolicy.mode(rawValue: nil, legacyDeferToNative: true) == .alwaysTerminal)
+        // An explicit stored mode always wins over the legacy boolean.
+        #expect(ClaudeApprovalPolicy.mode(
+            rawValue: "followFocus", legacyDeferToNative: true
+        ) == .followFocus)
+    }
+}
+
 struct CodexApprovalPolicyTests {
     private let request = CodexApprovalRequest(
         threadID: "thread-1",
@@ -58,8 +76,4 @@ struct CodexApprovalPolicyTests {
         #expect(CodexApprovalPolicy.fingerprint(for: request) == baseline)
     }
 
-    @Test func claudeNativeToggleHandsApprovalBackToTerminal() {
-        #expect(ClaudeApprovalPolicy.route(deferToNative: false) == .notch)
-        #expect(ClaudeApprovalPolicy.route(deferToNative: true) == .terminal)
-    }
 }
