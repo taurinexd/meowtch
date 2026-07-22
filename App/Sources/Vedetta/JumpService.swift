@@ -46,11 +46,11 @@ enum JumpService {
         }
     }
 
-    /// Answers a Codex TUI question remotely: raises the session's window,
-    /// then the extension types the option NUMBER ALONE into the EXACT
-    /// terminal (request_user_input has no hook channel). The picker
-    /// auto-submits on the digit — measured live: a trailing return leaked
-    /// into the NEXT question and accepted its default.
+    /// Answers a Codex TUI question remotely, WITHOUT touching focus: the
+    /// answer goes through a file channel that every VS Code window's
+    /// extension instance watches — only the one owning the terminal types
+    /// the option NUMBER ALONE into it (the picker auto-submits on the
+    /// digit; a trailing return leaked into the next question's default).
     static func answerCodexQuestion(
         session: AgentSession,
         terminal: TerminalInfo?,
@@ -62,25 +62,23 @@ enum JumpService {
             trace.append("NO-TERMINAL")
             return
         }
-        let bundleId = terminal.bundleIdentifier ?? "com.microsoft.VSCode"
-        if let app = NSRunningApplication
-            .runningApplications(withBundleIdentifier: bundleId).first {
-            raise(
-                app: app,
-                windowId: terminal.windowId,
-                directoryName: session.directoryName,
-                trace: &trace
-            )
-        }
         let pids = terminal.pidChain ?? terminal.pid.map { [Int($0)] } ?? []
         guard !pids.isEmpty else { return }
-        openExtensionURI(
-            path: "answer",
-            pids: pids,
-            session: session,
-            extraQuery: "&text=\(optionNumber)",
-            trace: &trace
+        let commandsDir = NSHomeDirectory() + "/.vedetta/run/commands"
+        try? FileManager.default.createDirectory(
+            atPath: commandsDir, withIntermediateDirectories: true
         )
+        let command: [String: Any] = [
+            "action": "answer",
+            "pids": pids,
+            "text": "\(optionNumber)",
+            "at": Date().timeIntervalSince1970,
+        ]
+        let path = commandsDir + "/answer-\(UUID().uuidString).json"
+        if let data = try? JSONSerialization.data(withJSONObject: command) {
+            try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            trace.append("command-file pids=\(pids.count)")
+        }
     }
 
     private static func openExtensionURI(
@@ -234,14 +232,14 @@ enum JumpService {
     static func installVSCodeExtension() {
         let source = Bundle.main.bundlePath + "/Contents/Resources/vscode-extension"
         let extensionsDir = NSHomeDirectory() + "/.vscode/extensions"
-        let target = extensionsDir + "/vedetta.terminal-focus-0.7.0"
+        let target = extensionsDir + "/vedetta.terminal-focus-0.8.0"
         let fm = FileManager.default
         // Outdated versions go away so VS Code always loads the current one.
         for stale in [
             "vedetta.terminal-focus-0.1.0", "vedetta.terminal-focus-0.2.0",
             "vedetta.terminal-focus-0.3.0", "vedetta.terminal-focus-0.4.0", "vedetta.terminal-focus-0.4.1",
             "vedetta.terminal-focus-0.4.2", "vedetta.terminal-focus-0.4.3", "vedetta.terminal-focus-0.5.0",
-            "vedetta.terminal-focus-0.6.0",
+            "vedetta.terminal-focus-0.6.0", "vedetta.terminal-focus-0.7.0",
         ] {
             try? fm.removeItem(atPath: extensionsDir + "/" + stale)
         }
@@ -252,7 +250,7 @@ enum JumpService {
 
     static func vsCodeExtensionInstalled() -> Bool {
         FileManager.default.fileExists(
-            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.7.0"
+            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.8.0"
         )
     }
 }
