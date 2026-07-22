@@ -53,6 +53,10 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     /// shown as tappable answers, one question at a time like the TUI; the
     /// extension types the option number into the exact terminal.
     public var pendingCodexQuestions: [CodexPendingQuestion]?
+    /// How many of those questions were already answered from the notch.
+    /// Lives in the session (not view @State): the wizard must survive the
+    /// panel collapsing and reopening mid-ask, like Claude's QuestionStore.
+    public var answeredCodexQuestions: Int = 0
     public var lastMessage: String?
     public var lastAssistantMessage: String?
     /// Claude's away-recap: when present it replaces the You:/reply lines

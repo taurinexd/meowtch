@@ -227,6 +227,7 @@ public final class CodexIngressCoordinator {
                 .subtracting(ledger.announcedQuestions)
             if !newQuestions.isEmpty {
                 ledger.announcedQuestions.formUnion(newQuestions)
+                session.answeredCodexQuestions = 0
                 onUserInputRequest?()
             }
         } else {
@@ -237,6 +238,7 @@ public final class CodexIngressCoordinator {
                 ledger.questionPending = false
                 ledger.announcedQuestions.removeAll()
                 session.pendingCodexQuestions = nil
+                session.answeredCodexQuestions = 0
                 if session.state == .needsApproval {
                     session.state = liveTurns.isEmpty ? .waitingForInput : .running
                 }

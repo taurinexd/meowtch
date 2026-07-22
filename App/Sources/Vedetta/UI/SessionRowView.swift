@@ -215,16 +215,14 @@ struct SessionRowView: View {
     /// The live AskUserQuestion(s) shown in the notch. Each question lists
     /// its options (with descriptions); clicking one raises the terminal
     /// and drives the native picker to that choice.
-    /// Index of the TUI's current question: the rollout records nothing
-    /// between questions of one call, so a remote answer advances it
-    /// locally, exactly mirroring the TUI's own stepping.
-    @State private var codexQuestionIndex = 0
-    @State private var codexAnswerSent = false
-
     private func codexQuestionBar(_ questions: [CodexPendingQuestion]) -> some View {
-        let index = min(codexQuestionIndex, questions.count - 1)
+        // The TUI's current question index is the count of answers already
+        // sent — persisted on the session (the rollout records nothing
+        // between questions, and view @State dies with the panel collapse).
+        let answered = session.answeredCodexQuestions
+        let index = min(answered, questions.count - 1)
         let question = questions[index]
-        let done = codexAnswerSent && index == questions.count - 1
+        let done = answered >= questions.count
         let status = done
             ? "Sent to terminal"
             : (questions.count > 1 ? "\(index + 1)/\(questions.count)" : "Answers in the terminal")
@@ -253,11 +251,7 @@ struct SessionRowView: View {
                         terminal: terminal,
                         optionNumber: optionIndex + 1
                     )
-                    if index < questions.count - 1 {
-                        codexQuestionIndex = index + 1
-                    } else {
-                        codexAnswerSent = true
-                    }
+                    EventDispatcher.store?.advanceCodexQuestion(id: session.id)
                 }
                 .opacity(done ? 0.4 : 1)
             }
@@ -265,13 +259,6 @@ struct SessionRowView: View {
         .padding(12)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onChange(of: session.pendingCodexQuestions) { _, value in
-            // A new ask (or the release of this one) re-arms the wizard.
-            if value == nil {
-                codexQuestionIndex = 0
-                codexAnswerSent = false
-            }
-        }
     }
 
     private func questionBar(_ live: QuestionStore.Live) -> some View {
