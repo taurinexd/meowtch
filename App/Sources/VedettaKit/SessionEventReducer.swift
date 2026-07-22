@@ -98,7 +98,8 @@ public enum SessionEventReducer {
         // still real: they DID run inside the session's terminal.
         if isStale { return }
 
-        var session = store.sessions.first { $0.id == sessionId }
+        let existing = store.sessions.first { $0.id == sessionId }
+        var session = existing
             ?? AgentSession(
                 id: sessionId,
                 agent: AgentKind(rawValue: source) ?? .claude,
@@ -211,6 +212,20 @@ public enum SessionEventReducer {
         // title yet: backfill it from the transcript.
         if session.title.isEmpty || session.lastMessage == nil {
             enrich(from: event, into: &session)
+        }
+
+        // Ephemeral ids with nothing to show — Claude's resume/new-
+        // conversation picker fires SessionStart/End for sessions that
+        // never get a transcript — must not become empty gray ghost cards.
+        // Their terminal identity is recorded above; the card materializes
+        // with the first real content (prompt, reply, or an interrupt).
+        if existing == nil,
+           source == "claude",
+           name == "SessionStart" || name == "SessionEnd",
+           session.title.isEmpty,
+           session.lastMessage == nil,
+           session.lastAssistantMessage == nil {
+            return
         }
 
         store.upsert(session)
