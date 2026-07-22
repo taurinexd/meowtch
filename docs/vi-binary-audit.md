@@ -211,12 +211,19 @@ Plan mode). Verifica dal binario Codex + test live:
   con `questions[].question/options[].label`), e la risposta arriva come
   `function_call_output` a risposta data.
 
-**Soluzione Vedetta** (oltre VI, che è pre-0.145): mirroring dal rollout
-(card needsApproval + "Question" + opzioni) e risposta remota via estensione
-VS Code 0.7.0 (`/answer`: individua il terminale esatto per ancestry e digita
-`<numero>⏎` solo lì — mai tastiera globale). Multi-domanda: solo view+jump.
-Migrare al canale hook il giorno in cui OpenAI espone un evento per lo user
-input. Nota colta di passaggio: Codex supporta anche `pre_compact`,
+**Soluzione Vedetta** (oltre VI, che è pre-0.145), verificata live da Matteo:
+mirroring dal rollout (card needsApproval + "Question" + opzioni via il
+componente condiviso con Claude) e risposta remota SILENZIOSA via estensione
+VS Code 0.8.1: il tap scrive un file in `~/.vedetta/run/commands/`, ogni
+finestra VS Code lo osserva (activation onStartupFinished) e solo l'istanza
+che possiede il terminale digita la CIFRA — niente URI, niente raise, il
+focus dell'utente non si muove. Lezioni misurate sul campo: (1) il picker
+TUI auto-submitta alla cifra — un ⏎ extra fa accettare il default della
+domanda successiva; (2) il wizard multi-domanda avanza localmente
+(il rollout non registra nulla tra le domande) e il progresso vive nello
+STORE di sessione, non in view @State: deve sopravvivere al collasso del
+pannello (pattern QuestionStore di Claude). Migrare al canale hook il
+giorno in cui OpenAI espone un evento per lo user input. Nota colta di passaggio: Codex supporta anche `pre_compact`,
 `post_compact`, `session_end`, `subagent_start`, `pre_tool_use` — eventi che
 il manifest VI non installa; possibile estensione futura del nostro manifest
 (es. contextLimit sound anche per Codex).
