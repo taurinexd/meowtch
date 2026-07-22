@@ -93,6 +93,17 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
   sul notch anche mid-settle (dopo `acee803`, che ha chiuso l'ultimo caso:
   enter perso nella regione sovradimensionata → poll cursore-vs-forma).
 
+## Round 3 — jump Codex ai terminal tab (2026-07-22, confermato da Matteo)
+
+- [x] Due terminali Codex hook-bound in VS Code (5 finestre aperte): entrambe
+  le card jumpable con chain a 7 pid, zero writer-fallback; click → AX raisa
+  la finestra giusta (non frontmost) + URI `/focus` all'estensione col
+  pidChain → **tab esatto selezionato**, per entrambe. Jump Claude ok nello
+  stesso giro. Card pre-hook senza processo vivo correttamente non jumpable.
+- [x] Chiusura dei due tab → card rimosse dalla liveness sweep al primo giro
+  (~5-15s), osservato via socket. Il `dump` ora espone il terminal binding
+  (jumpable/tty/chain/writerFallback) per questa diagnostica.
+
 ## Residui noti (non bloccanti)
 
 - Il self-cleanup JXA del launcher (`VedettaSetup`) usa ancora
