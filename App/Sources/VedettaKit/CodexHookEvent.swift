@@ -13,10 +13,15 @@ public enum JSONValue: Equatable, Sendable {
             self = .null
             return
         }
-        if let value = value as? Bool {
-            self = .bool(value)
-        } else if let value = value as? NSNumber {
-            self = .number(value.doubleValue)
+        if let number = value as? NSNumber {
+            // NSNumber bridges 0/1 to Bool successfully, so `as? Bool` would
+            // turn a numeric zero (e.g. usedPercent: 0) into .bool(false).
+            // Only a true CFBoolean is a bool.
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                self = .bool(number.boolValue)
+            } else {
+                self = .number(number.doubleValue)
+            }
         } else if let value = value as? String {
             self = .string(value)
         } else if let value = value as? [Any] {
