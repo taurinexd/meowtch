@@ -87,7 +87,10 @@ struct CodexRolloutTailerTests {
         var tailer = CodexRolloutTailer()
 
         let pending = try tailer.read(from: temp.file)
-        #expect(pending.pendingUserInputQuestion == "Quale prova vuoi fare?")
+        let question = try #require(pending.pendingUserInputQuestion)
+        #expect(question.question == "Quale prova vuoi fare?")
+        #expect(question.optionLabels == ["A", "B"])
+        #expect(!question.isMultiQuestion)
         #expect(pending.currentTool == "Question")
 
         // The user answers in the TUI: the output releases the question.

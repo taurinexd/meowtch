@@ -49,6 +49,10 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var subagentNickname: String?
     public var currentTool: String?
     public var currentToolDetail: String?
+    /// Options of a pending Codex request_user_input (mirrored from the
+    /// rollout): shown as tappable answers; the extension types the number
+    /// into the exact terminal. Nil when no single-question ask is pending.
+    public var pendingQuestionOptions: [String]?
     public var lastMessage: String?
     public var lastAssistantMessage: String?
     /// Claude's away-recap: when present it replaces the You:/reply lines
@@ -93,6 +97,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         subagentNickname: String? = nil,
         currentTool: String? = nil,
         currentToolDetail: String? = nil,
+        pendingQuestionOptions: [String]? = nil,
         lastMessage: String? = nil,
         lastAssistantMessage: String? = nil,
         recap: String? = nil,
@@ -121,6 +126,7 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
         self.subagentNickname = subagentNickname
         self.currentTool = currentTool
         self.currentToolDetail = currentToolDetail
+        self.pendingQuestionOptions = pendingQuestionOptions
         self.lastMessage = lastMessage
         self.lastAssistantMessage = lastAssistantMessage
         self.recap = recap

@@ -1,13 +1,14 @@
 // Vedetta Terminal Focus — bridges Vedetta to the integrated terminal that
-// hosts an agent session, for the JUMP action only. Answering questions does
-// NOT go through here: Vedetta hands the answer straight back to the agent as
-// data on the hook (decision.updatedInput.answers), so nothing is ever typed
-// into the terminal.
+// hosts an agent session. Claude answers never come through here (they ride
+// the hook as data); Codex TUI questions have no hook channel, so their
+// answer is typed into the EXACT terminal via the API — never a global
+// keystroke.
 //
-// One URI, carrying the session's process ancestry (pid=A&pid=B&…, captured at
-// hook time — the terminal's live shell is matched against terminal.processId)
+// URIs carry the session's process ancestry (pid=A&pid=B&…, captured at hook
+// time — the terminal's live shell is matched against terminal.processId)
 // plus its workspace path so a wrong window stays silent:
-//   /focus   reveals the terminal tab (Vedetta raises the window first).
+//   /focus    reveals the terminal tab (Vedetta raises the window first).
+//   /answer   reveals the tab and types `text` into it (Codex TUI picker).
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 const fs = require("fs");
@@ -100,6 +101,15 @@ function activate(context) {
 					.filter((pid) => Number.isInteger(pid) && pid > 0);
 				if (pids.length === 0) return;
 				if (uri.path === "/focus") withTerminal(pids, (terminal) => terminal.show(false));
+				if (uri.path === "/answer") {
+					const text = params.get("text") || "";
+					if (!text) return;
+					withTerminal(pids, (terminal) => {
+						terminal.show(false);
+						terminal.sendText(text, false);
+						log(`answer sent (${text.length} chars)`);
+					});
+				}
 			},
 		})
 	);
