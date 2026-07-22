@@ -136,6 +136,15 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
 - [x] Hook audio personali di Matteo disattivati per il test (ripristino:
   `~/.claude/personal-sound-hooks.disabled.json`).
 
+## Coda (segnalazioni in attesa)
+
+- [ ] **Hover post-jump**: dopo il click su una card (jump), il primo
+  ritorno del cursore sul notch non lo espande; serve uscire e rientrare.
+  Sospetto: il collapse da jump avviene col cursore dentro → nessun
+  hover-exit (region che si restringe sotto cursore fermo) → `isHovering`
+  resta true e l'enter successivo non scatta. Da verificare con
+  VEDETTA_HOVER_LOG.
+
 ## Residui noti (non bloccanti)
 
 - Il self-cleanup JXA del launcher (`VedettaSetup`) usa ancora
