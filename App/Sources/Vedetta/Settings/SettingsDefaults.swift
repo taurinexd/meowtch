@@ -1,7 +1,7 @@
 import Foundation
 
 /// Every user-tunable preference key, with its default. Names mirror the
-/// original's defaults (verified in the VI binary: hoverToExpandEnabled,
+/// original's defaults (verified against the original: hoverToExpandEnabled,
 /// hoverExpandDelay, autoCollapseOnMouseLeave, expandDwellSeconds,
 /// disableClickToJump, …) so the audit can cross-check them 1:1.
 enum SettingsKey {

@@ -84,13 +84,10 @@ final class UsageModel: ObservableObject {
     }
 
     private var timer: Timer?
-    /// Our harvest first; while the original is installed its statusline
-    /// owns the slot, so we read the same data from its cache.
+    /// The statusline harvester's drop. If another statusline owns the
+    /// Claude Code slot, Settings → Usage offers to take it over.
     private static var cachePaths: [String] {
-        [
-            NSHomeDirectory() + "/.vedetta/cache/rl.json",
-            NSHomeDirectory() + "/.vibe-island/cache/rl.json",
-        ]
+        [NSHomeDirectory() + "/.vedetta/cache/rl.json"]
     }
 
     func start() {

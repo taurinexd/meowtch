@@ -86,7 +86,7 @@ enum SessionBootstrap {
         let fm = FileManager.default
         let cutoff = Date().addingTimeInterval(-recencyWindow)
         // One lsof snapshot associates every currently open rollout with its
-        // Codex writer PID, matching VI's pre-hook terminal fallback.
+        // Codex writer PID, matching the original's pre-hook terminal fallback.
         let openTerminals = CodexTerminalDiscovery.openRollouts()
         for codexHome in homes where codexHome.isAvailable {
             guard let enumerator = fm.enumerator(atPath: codexHome.sessionsPath) else { continue }
@@ -157,7 +157,7 @@ enum SessionBootstrap {
     }
 
     /// Removes cards whose terminal is provably dead (killed tab, exited
-    /// writer), the way VI's cards follow the terminal's life. Runs on the
+    /// writer), the way the original's cards follow the terminal's life. Runs on the
     /// periodic timer; the policy errs toward keeping on missing evidence.
     @MainActor
     static func sweepDeadTerminals(in store: SessionStore) {

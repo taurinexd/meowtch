@@ -1,7 +1,7 @@
 import Foundation
 
 /// Parses the process/file records emitted by the same macOS `lsof -F`
-/// mechanism VI uses to associate an open rollout with its Codex writer.
+/// mechanism the original uses to associate an open rollout with its Codex writer.
 public enum CodexOpenRolloutFiles {
     public static func parse(lsofOutput: String) -> [String: Int32] {
         var ownerPID: Int32?

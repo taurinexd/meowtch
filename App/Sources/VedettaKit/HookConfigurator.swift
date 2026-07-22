@@ -17,7 +17,7 @@ public enum HookConfigurator {
         "PermissionRequest", "PreCompact",
     ]
 
-    /// Exact Codex event set observed in Vibe Island 1.0.42's embedded
+    /// Exact Codex event set observed in the original's embedded
     /// manifest and installed hooks.json.
     public static let codexEvents = [
         "SessionStart", "UserPromptSubmit", "PermissionRequest",

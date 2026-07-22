@@ -127,7 +127,7 @@ enum EventDispatcher {
         }
 
         // Task tool calls mutate the live task files: refresh the widget
-        // right away so it tracks the agent's list mid-turn, like VI.
+        // right away so it tracks the agent's list mid-turn, like the original.
         if name == "PostToolUse",
            (event["tool_name"] as? String)?.hasPrefix("Task") == true {
             FullScanScheduler.reloadTasks(sessionId: sessionId)

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Filters background-only Codex workers observed in the VI binary and live
+/// Filters background-only Codex workers observed in the original and live
 /// Codex/Claude companion artifacts. Rules are intentionally prefix/metadata
 /// based so ordinary user conversations mentioning these terms remain visible.
 public enum CodexAdmissionRules {

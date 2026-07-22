@@ -1,7 +1,7 @@
 import Foundation
 
 /// Sole state writer for Codex sessions. Each ingress source is allowed to
-/// update only its observed VI fields, and an optional captured revision
+/// update only its observed upstream fields, and an optional captured revision
 /// prevents a slow asynchronous rollout read from overwriting a newer hook.
 @MainActor
 public final class CodexIngressCoordinator {
@@ -27,7 +27,7 @@ public final class CodexIngressCoordinator {
         ledgers[sessionID(threadID)]?.revision ?? 0
     }
 
-    /// VI retains the process writing each rollout so a pre-hook Codex
+    /// The original retains the process writing each rollout so a pre-hook Codex
     /// session remains jumpable. A resumed thread may acquire a new writer,
     /// so rollout-derived bindings can refresh one another. A later hook
     /// carries the more precise tty/window identity and always wins.

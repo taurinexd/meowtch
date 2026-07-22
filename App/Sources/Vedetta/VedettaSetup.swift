@@ -283,6 +283,43 @@ enum VedettaSetup {
         )
     }
 
+    /// Who owns the Claude statusLine slot (the harvest source for the
+    /// Claude usage strip).
+    enum StatusLineOwner: Equatable {
+        case vedetta
+        case foreign(String)
+        case none
+    }
+
+    static func claudeStatusLineOwner() -> StatusLineOwner {
+        guard let settings = try? configStore.read(
+            at: URL(fileURLWithPath: claudeSettingsPath)
+        ), let statusLine = settings["statusLine"] as? [String: Any],
+           let command = statusLine["command"] as? String, !command.isEmpty
+        else { return .none }
+        return command.contains("vedetta") ? .vedetta : .foreign(command)
+    }
+
+    /// Replaces whatever occupies the statusLine slot with Vedetta's
+    /// harvester (timestamped backup first). Only ever called from an
+    /// explicit user action in Settings — never automatically: a foreign
+    /// statusLine may be the user's own.
+    @discardableResult
+    static func claimStatusLine() throws -> Bool {
+        try ensureRuntimeLayout()
+        return try configStore.mutate(
+            at: URL(fileURLWithPath: claudeSettingsPath),
+            backupDirectory: URL(fileURLWithPath: backupsDir),
+            backupName: "settings.json"
+        ) { settings in
+            HookConfigurator.installingStatusLine(
+                into: settings,
+                command: statusLinePath,
+                canReplace: { _ in true }
+            )
+        }.changed
+    }
+
     /// A foreign statusLine is claimable only when it is an orphan: every
     /// filesystem path it names is gone (e.g. another notch app that owned
     /// the slot was uninstalled). A live command — anything still pointing
