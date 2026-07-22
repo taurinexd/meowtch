@@ -15,12 +15,23 @@ enum FullScanScheduler {
         if let last = lastScan[sessionId], now.timeIntervalSince(last) < throttle { return }
         lastScan[sessionId] = now
 
+        let runStartedAt = SessionRunRegistry.runStart(for: sessionId)
         Task.detached(priority: .utility) {
             let result = TranscriptFullScan.run(path: path)
             // The live task files are authoritative; the transcript rebuild
             // is only a fallback for sessions with no task directory (it
-            // can resurrect tasks cleared before a compaction).
-            let tasks = SessionTasks.load(sessionId: sessionId) ?? result.tasks
+            // can resurrect tasks cleared before a compaction). Files last
+            // touched before the current run are a closed run's leftovers:
+            // show nothing rather than a list the session no longer has.
+            let tasks: SessionTasks?
+            if SessionTasks.isAbandoned(
+                latestModification: SessionTasks.latestModification(sessionId: sessionId),
+                runStartedAt: runStartedAt
+            ) {
+                tasks = SessionTasks(items: [])
+            } else {
+                tasks = SessionTasks.load(sessionId: sessionId) ?? result.tasks
+            }
             await apply(result, tasks: tasks, to: sessionId)
         }
     }

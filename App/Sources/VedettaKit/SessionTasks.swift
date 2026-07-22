@@ -55,6 +55,38 @@ public struct SessionTasks: Sendable, Equatable {
         items.sort { (Int($0.id) ?? 0) < (Int($1.id) ?? 0) }
         return SessionTasks(items: items)
     }
+
+    /// When the task files were last touched (the newest .json in the
+    /// session's directory). Directory mtime won't do: an in-place status
+    /// update rewrites a file without touching the directory.
+    public static func latestModification(
+        sessionId: String,
+        baseDir: String = NSHomeDirectory() + "/.claude/tasks"
+    ) -> Date? {
+        let dir = baseDir + "/" + sessionId
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(atPath: dir) else { return nil }
+        return files
+            .filter { $0.hasSuffix(".json") && !$0.hasPrefix(".") }
+            .compactMap {
+                (try? fm.attributesOfItem(atPath: dir + "/" + $0))?[.modificationDate] as? Date
+            }
+            .max()
+    }
+
+    /// A task list belongs to the run that wrote it: files last touched
+    /// BEFORE the session's current run started are leftovers of a closed
+    /// run (Claude Code never deletes the directory), and the resumed
+    /// context no longer carries that list. Unknown run start (sessions
+    /// adopted without a SessionStart) keeps the list visible.
+    public static func isAbandoned(
+        latestModification: Date?,
+        runStartedAt: Date?
+    ) -> Bool {
+        guard let runStartedAt else { return false }
+        guard let latestModification else { return true }
+        return latestModification < runStartedAt
+    }
 }
 
 /// Streaming full-file transcript scan: extracts what the bounded windows
