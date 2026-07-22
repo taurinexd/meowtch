@@ -243,8 +243,10 @@ struct SessionRowView: View {
             Text(question.question)
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(Theme.primaryText)
+            // The same option component the Claude bar uses: identical
+            // look, hover highlight included.
             ForEach(Array(question.optionLabels.enumerated()), id: \.offset) { optionIndex, label in
-                Button {
+                QuestionOption(index: optionIndex, label: label) {
                     guard !done else { return }
                     JumpService.answerCodexQuestion(
                         session: session,
@@ -256,23 +258,7 @@ struct SessionRowView: View {
                     } else {
                         codexAnswerSent = true
                     }
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("\(optionIndex + 1)")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Theme.secondaryText)
-                        Text(label)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.primaryText)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.07))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
                 .opacity(done ? 0.4 : 1)
             }
         }
