@@ -12,6 +12,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var codexWatchers: [CodexWatcher] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        SettingsDefaults.register()
+        UsageModel.shared.applyPreferredProvider(
+            UserDefaults.standard.string(forKey: SettingsKey.preferredUsageProvider) ?? "auto"
+        )
+        NotificationCenter.default.addObserver(
+            forName: .vedettaOpenSettings,
+            object: nil,
+            queue: .main
+        ) { note in
+            let page = (note.userInfo?["page"] as? String)
+                .flatMap(SettingsView.Page.init(rawValue:))
+            Task { @MainActor in SettingsWindowController.shared.show(page: page) }
+        }
         if ProcessInfo.processInfo.arguments.contains("--mock") {
             MockSessions.seed(into: store)
         } else {

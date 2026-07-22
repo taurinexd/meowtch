@@ -50,6 +50,23 @@ final class UsageModel: ObservableObject {
         guard available.count > 1, let current = displayProvider,
               let index = available.firstIndex(of: current) else { return }
         selectedProvider = available[(index + 1) % available.count]
+        // "Auto" restores the last provider the user cycled to.
+        UserDefaults.standard.set(
+            selectedProvider == .codex ? "lastCodex" : "lastClaude",
+            forKey: SettingsKey.lastUsageProvider
+        )
+    }
+
+    /// Applies the Settings "Preferred Provider" choice: a fixed provider
+    /// selects it outright; Auto restores the last one the user cycled to.
+    func applyPreferredProvider(_ raw: String) {
+        switch raw {
+        case "claude": selectedProvider = .claude
+        case "codex": selectedProvider = .codex
+        default:
+            let last = UserDefaults.standard.string(forKey: SettingsKey.lastUsageProvider)
+            selectedProvider = last == "lastCodex" ? .codex : .claude
+        }
     }
 
     /// The windows (with short labels) for a provider, in display order. The

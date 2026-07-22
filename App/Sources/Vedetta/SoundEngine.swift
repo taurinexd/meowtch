@@ -35,7 +35,8 @@ final class SoundEngine {
         }
 
         guard let player = try? AVAudioPlayer(data: data) else { return }
-        player.volume = 0.5
+        let volume = defaults.object(forKey: SettingsKey.soundVolume) as? Double ?? 0.5
+        player.volume = Float(volume)
         player.play()
         players.append(player)
         players.removeAll { !$0.isPlaying && $0 !== player }

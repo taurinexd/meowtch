@@ -197,6 +197,12 @@ enum JumpService {
         try? fm.createDirectory(atPath: extensionsDir, withIntermediateDirectories: true)
         try? fm.copyItem(atPath: source, toPath: target)
     }
+
+    static func vsCodeExtensionInstalled() -> Bool {
+        FileManager.default.fileExists(
+            atPath: NSHomeDirectory() + "/.vscode/extensions/vedetta.terminal-focus-0.6.0"
+        )
+    }
 }
 
 /// Persists the session→terminal map across app restarts, so adopted

@@ -359,13 +359,26 @@ struct NotchView: View {
         }
     }
 
+    @AppStorage(SettingsKey.showUsageLimits) private var showUsageLimits = true
+
     /// Usage summary on the left, volume + settings icons on the right.
     private var topBar: some View {
         HStack(spacing: 14) {
-            usageSummary
+            if showUsageLimits {
+                usageSummary
+            }
             Spacer()
-            Image(systemName: "speaker.wave.2.fill")
+            Image(systemName: SoundEngine.shared.isMuted
+                ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .contentShape(Rectangle())
+                .onTapGesture { SoundEngine.shared.isMuted.toggle() }
             Image(systemName: "gearshape.fill")
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    NotificationCenter.default.post(
+                        name: .vedettaOpenSettings, object: nil
+                    )
+                }
         }
         .font(.system(size: 12.5))
         .foregroundStyle(Theme.secondaryText)

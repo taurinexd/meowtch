@@ -316,6 +316,14 @@ enum EventDispatcher {
                 "nodes": nodes,
             ])
 
+        case "openSettings":
+            var userInfo: [String: Any] = [:]
+            if let page = envelope["page"] as? String { userInfo["page"] = page }
+            NotificationCenter.default.post(
+                name: .vedettaOpenSettings, object: nil, userInfo: userInfo
+            )
+            return Data(#"{"ok":true}"#.utf8)
+
         case "setExpanded":
             NotificationCenter.default.post(
                 name: .vedettaDebugSetExpanded,
