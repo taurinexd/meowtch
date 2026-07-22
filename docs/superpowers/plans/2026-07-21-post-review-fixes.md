@@ -136,6 +136,19 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
 - [x] Hook audio personali di Matteo disattivati per il test (ripristino:
   `~/.claude/personal-sound-hooks.disabled.json`).
 
+## Round 6 — domande Codex interattive (2026-07-22, confermato da Matteo)
+
+- [x] Mirroring `request_user_input` dal rollout: card arancione, chirp,
+  opzioni cliccabili col componente condiviso Claude (`193830b`…`0402f16`).
+- [x] Risposta remota silenziosa via file channel + estensione 0.8.1
+  (auto-submit sulla cifra; niente raise/URI; focus intatto).
+- [x] Wizard multi-domanda sequenziale con progresso persistito nello store
+  (sopravvive al collasso del notch — bug trovato da Matteo).
+- [x] Approvals: default Always Notch per entrambi gli agenti; dropdown
+  unificato Claude/Codex nei Settings.
+- Bug rientrati durante i test: ⏎ extra che accettava i default; estensione
+  attivata solo onUri (canale file mai partito); @State perso al collasso.
+
 ## Coda (segnalazioni in attesa)
 
 - [ ] **Hover post-jump**: dopo il click su una card (jump), il primo
