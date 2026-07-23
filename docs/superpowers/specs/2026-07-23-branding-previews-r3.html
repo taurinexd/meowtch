@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vedetta — branding round 3: spinner e "?"</title>
+<style>
+  :root {
+    --bg: #050705;
+    --panel: #0b0e0b;
+    --border: #1c221c;
+    --text: rgba(255,255,255,.92);
+    --dim: rgba(255,255,255,.55);
+    --faint: rgba(255,255,255,.35);
+    --green: #6BC77A;
+    --blue: #5999FF;
+    --orange: #FFA028;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+    padding-bottom: 140px;
+  }
+  #sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .5; }
+  main { position: relative; z-index: 1; max-width: 1020px; margin: 0 auto; padding: 0 28px; }
+
+  header.hero { padding: 64px 0 8px; }
+  .hero h1 { font-size: 30px; font-weight: 900; letter-spacing: 12px; }
+  .hero .prompt { color: var(--dim); margin-top: 10px; }
+  .hero .prompt::after { content: "_"; animation: blink 1.1s steps(1) infinite; color: var(--green); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  section { margin-top: 56px; }
+  .eyebrow { color: var(--faint); font-size: 11px; letter-spacing: 3px; }
+  h2 { font-size: 17px; font-weight: 900; letter-spacing: 4px; margin-top: 6px; }
+  h2.st-running { color: var(--blue); }
+  h2.st-approval { color: var(--orange); }
+  .secnote { color: var(--dim); margin-top: 8px; max-width: 74ch; }
+
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid.cols3 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+  .option {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; position: relative;
+  }
+  .option .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    color: var(--bg); background: var(--dim); border-radius: 4px; padding: 1px 8px;
+  }
+  .option[data-decision] { cursor: pointer; transition: border-color .15s; }
+  .option[data-decision]:hover { border-color: rgba(255,255,255,.3); }
+  .option.selected { border-color: rgba(107,199,122,.75); box-shadow: inset 0 0 0 1px rgba(107,199,122,.3); }
+  .option.selected .tag { background: var(--green); }
+  .option .pickbadge {
+    display: none;
+    position: absolute; top: 12px; right: 12px; font-size: 10px; letter-spacing: 2px;
+    color: var(--green); border: 1px solid rgba(107,199,122,.4); border-radius: 4px; padding: 1px 7px;
+  }
+  .option.selected .pickbadge { display: inline-block; }
+  .option h3 { font-size: 12.5px; font-weight: 700; margin: 10px 0 2px; }
+  .option .desc { color: var(--dim); font-size: 11.5px; margin-top: 3px; }
+
+  .stage {
+    background: #000; border: 1px solid #141814; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 12px; padding: 14px 10px; min-height: 96px;
+  }
+
+  .notes {
+    display: block; width: 100%; margin-top: 16px; min-height: 54px; resize: vertical;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+    padding: 10px 12px;
+  }
+  .notes:focus { outline: none; border-color: rgba(107,199,122,.55); }
+  .notes::placeholder { color: var(--faint); }
+
+  #savebar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 5;
+    background: rgba(5,7,5,.94); backdrop-filter: blur(8px);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 18px;
+    padding: 12px 28px; font-size: 12px;
+  }
+  #savebar .picks { flex: 1; color: var(--dim); letter-spacing: 1px; }
+  #savebar .picks b { color: var(--green); font-weight: 700; }
+  #savebar button {
+    background: #12331a; color: var(--green);
+    border: 1px solid rgba(107,199,122,.5); border-radius: 8px;
+    padding: 8px 16px; font: 700 12px ui-monospace, Menlo, monospace;
+    cursor: pointer; letter-spacing: 1px;
+  }
+  #savebar button:hover { background: #17421f; }
+  #savebar .flash { color: var(--green); opacity: 0; transition: opacity .3s; }
+  #savebar .flash.on { opacity: 1; }
+
+  footer.replybox {
+    margin-top: 72px; border-top: 1px solid var(--border); padding-top: 24px; color: var(--dim);
+  }
+  footer.replybox code { color: var(--green); }
+  @media (prefers-reduced-motion: reduce) { .hero .prompt::after { animation: none; } }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<main>
+  <header class="hero">
+    <h1>VEDETTA · R3</h1>
+    <div class="prompt">&gt; round 3 — nove spinner · nove punti interrogativi </div>
+  </header>
+
+  <section id="spinnersec">
+    <div class="eyebrow">RUNNING · COME DA TUA NOTA, ≥8 VARIANTI</div>
+    <h2 class="st-running">LO SPINNER</h2>
+    <p class="secnote">Nove spinner, tutti hard-edged 8-bit, tutti animati coi timing reali.
+    La <b>A</b> è l'attuale (parità VI). Lo spinner scelto varrà anche per il compacting tinto di
+    viola, mentre resta lo "schiaccia-blocchi" (C del round 2) se preferisci tenerli distinti —
+    dillo nelle note.</p>
+    <div class="grid cols3" id="spinners"></div>
+    <textarea class="notes" data-decision="spinner" placeholder="> opzione extra / altre indicazioni sullo spinner…"></textarea>
+  </section>
+
+  <section id="qmarksec">
+    <div class="eyebrow">APPROVAL · COME DA TUA NOTA, ≥8 DESIGN (NON ANIMAZIONE)</div>
+    <h2 class="st-approval">IL PUNTO INTERROGATIVO</h2>
+    <p class="secnote">Nove disegni del glifo. L'animazione resta identica per tutti — il punto
+    lampeggia a 1.2s come oggi — cambia solo la forma. La <b>A</b> è l'attuale (parità VI).</p>
+    <div class="grid cols3" id="qmarks"></div>
+    <textarea class="notes" data-decision="qmark" placeholder="> opzione extra / altre indicazioni sul punto interrogativo…"></textarea>
+  </section>
+
+  <footer class="replybox">
+    Click = seleziona (niente più toggle: il doppio click non annulla). Poi
+    <code>SCARICA LE SCELTE R3</code> → <code>vedetta-branding-round3.json</code> in ~/Downloads,
+    e il tuo ok in chat.
+  </footer>
+</main>
+
+<div id="savebar">
+  <div class="picks" id="picksummary"></div>
+  <span class="flash" id="saveflash">salvato in ~/Downloads ✓</span>
+  <button id="savebtn" type="button">SCARICA LE SCELTE R3</button>
+</div>
+
+<script>
+"use strict";
+const REDUCE = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const DPR = window.devicePixelRatio || 1;
+const anims = [];
+const BLUE = "#5999FF", ORANGE = "#FFA028";
+
+function makeCanvas(parent, w, h) {
+  const c = document.createElement("canvas");
+  c.width = w * DPR; c.height = h * DPR;
+  c.style.width = w + "px"; c.style.height = h + "px";
+  parent.appendChild(c);
+  const ctx = c.getContext("2d");
+  ctx.scale(DPR, DPR);
+  return { c, ctx, w, h };
+}
+function drawPattern(ctx, pattern, px, color, ox = 0, oy = 0) {
+  const inset = px * 0.07;
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = px * 1.4;
+  ctx.fillStyle = color;
+  for (let r = 0; r < pattern.length; r++) {
+    const line = pattern[r];
+    for (let c = 0; c < line.length; c++) {
+      if (line[c] === "#") {
+        ctx.fillRect(ox + c * px + inset, oy + r * px + inset, px - inset * 2, px - inset * 2);
+      }
+    }
+  }
+  ctx.restore();
+}
+function cellRect(ctx, color, x, y, cell, alpha = 1) {
+  const inset = cell * 0.07;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.fillRect(x + inset, y + inset, cell - inset * 2, cell - inset * 2);
+  ctx.globalAlpha = 1;
+}
+const blinkOn = t => (t % 1.2) < 0.72;
+
+/* Anelli perimetrali (senso orario) */
+const RING3 = [[0,0],[1,0],[2,0],[2,1],[2,2],[1,2],[0,2],[0,1]];
+const RING4 = [[0,0],[1,0],[2,0],[3,0],[3,1],[3,2],[3,3],[2,3],[1,3],[0,3],[0,2],[0,1]];
+function chase(ctx, t, ring, cell, color, ox, oy, falloff, step) {
+  const tick = Math.floor(t / step);
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = cell * 1.4;
+  for (let i = 0; i < ring.length; i++) {
+    const d = ((i - tick) % ring.length + ring.length) % ring.length;
+    const a = Math.max(0, 1 - d * falloff);
+    if (a > 0) cellRect(ctx, color, ox + ring[i][0] * cell, oy + ring[i][1] * cell, cell, a);
+  }
+  ctx.restore();
+}
+
+/* ── i nove spinner ── */
+const SPINNERS = [
+  { id: "A", name: "Perimetro 3×3 (attuale)",
+    desc: "Blocco che insegue se stesso sull'anello, scia corta. Step 0.12s.",
+    draw(ctx, t, w, h) { chase(ctx, t, RING3, 7, BLUE, (w - 21) / 2, (h - 21) / 2, 0.13, 0.12); } },
+  { id: "B", name: "Perimetro 4×4",
+    desc: "Anello più largo, 12 posizioni: rotazione più fluida, ingombro maggiore.",
+    draw(ctx, t, w, h) { chase(ctx, t, RING4, 5.5, BLUE, (w - 22) / 2, (h - 22) / 2, 0.09, 0.10); } },
+  { id: "C", name: "Doppio inseguimento",
+    desc: "Due blocchi opposti sullo stesso anello 3×3 — simmetrico, più denso.",
+    draw(ctx, t, w, h) {
+      const cell = 7, ox = (w - 21) / 2, oy = (h - 21) / 2;
+      const tick = Math.floor(t / 0.12);
+      ctx.save(); ctx.shadowColor = BLUE; ctx.shadowBlur = cell * 1.4;
+      for (let i = 0; i < 8; i++) {
+        const d1 = ((i - tick) % 8 + 8) % 8;
+        const d2 = ((i - tick - 4) % 8 + 8) % 8;
+        const a = Math.max(0, 1 - Math.min(d1, d2) * 0.3);
+        if (a > 0) cellRect(ctx, BLUE, ox + RING3[i][0] * cell, oy + RING3[i][1] * cell, cell, a);
+      }
+      ctx.restore();
+    } },
+  { id: "D", name: "Lancetta",
+    desc: "Un perno fisso e una lancetta di due blocchi che scatta N-E-S-O, da orologio.",
+    draw(ctx, t, w, h) {
+      const cell = 7, cx = w / 2 - cell / 2, cy = h / 2 - cell / 2;
+      const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+      const d = dirs[Math.floor(t / 0.24) % 4];
+      ctx.save(); ctx.shadowColor = BLUE; ctx.shadowBlur = cell * 1.4;
+      cellRect(ctx, BLUE, cx, cy, cell);
+      cellRect(ctx, BLUE, cx + d[0] * cell, cy + d[1] * cell, cell, 0.9);
+      cellRect(ctx, BLUE, cx + d[0] * cell * 2, cy + d[1] * cell * 2, cell, 0.55);
+      ctx.restore();
+    } },
+  { id: "E", name: "Orbita con nucleo",
+    desc: "Nucleo fisso al centro, satellite che gli orbita attorno con una piccola scia.",
+    draw(ctx, t, w, h) {
+      const cell = 6, R = 10;
+      const ox = w / 2 - R - cell / 2, oy = h / 2 - R - cell / 2;
+      ctx.save(); ctx.shadowColor = BLUE; ctx.shadowBlur = cell * 1.4;
+      cellRect(ctx, BLUE, w / 2 - 4, h / 2 - 4, 8);
+      const tick = Math.floor(t / 0.12);
+      for (let k = 0; k < 3; k++) {
+        const i = ((tick - k) % 8 + 8) % 8;
+        cellRect(ctx, BLUE, ox + RING3[i][0] * R, oy + RING3[i][1] * R, cell, 1 - k * 0.35);
+      }
+      ctx.restore();
+    } },
+  { id: "F", name: "Quadrato che ruota",
+    desc: "Quadrato → rombo → croce: la rotazione di un solido vista in 8-bit, 3 frame.",
+    draw(ctx, t, w, h) {
+      const frames = [
+        ["###", "###", "###"],
+        [".#.", "###", ".#."],
+        [".#.", "#.#", ".#."],
+      ];
+      const seq = [0, 1, 2, 1];
+      const f = frames[seq[Math.floor(t / 0.18) % 4]];
+      drawPattern(ctx, f, 7, BLUE, (w - 21) / 2, (h - 21) / 2);
+    } },
+  { id: "G", name: "Cometa",
+    desc: "Stesso anello dell'attuale ma scia lunga: tutto il perimetro in dissolvenza.",
+    draw(ctx, t, w, h) { chase(ctx, t, RING3, 7, BLUE, (w - 21) / 2, (h - 21) / 2, 0.055, 0.12); } },
+  { id: "H", name: "Equalizer",
+    desc: "Tre colonnine che saltano ad altezze diverse — lavoro a pieno regime.",
+    draw(ctx, t, w, h) {
+      const cell = 5.5, heights = [2, 4, 3, 1, 3, 2, 4, 1];
+      const tick = Math.floor(t / 0.15);
+      const ox = (w - 3 * cell - 6) / 2, base = h / 2 + 11;
+      ctx.save(); ctx.shadowColor = BLUE; ctx.shadowBlur = cell;
+      for (let i = 0; i < 3; i++) {
+        const n = heights[(tick + i * 3) % heights.length];
+        for (let r = 0; r < n; r++) {
+          cellRect(ctx, BLUE, ox + i * (cell + 3), base - (r + 1) * cell, cell);
+        }
+      }
+      ctx.restore();
+    } },
+  { id: "I", name: "Scambio",
+    desc: "Due blocchi che si scambiano di posto in verticale, passandosi accanto.",
+    draw(ctx, t, w, h) {
+      const cell = 7, cx = w / 2, cy = h / 2;
+      const ph = Math.floor(t / 0.15) % 4;
+      const posA = [[0, -9], [-5, -3], [0, 9], [5, 3]][ph];
+      const posB = [[0, 9], [5, 3], [0, -9], [-5, -3]][ph];
+      ctx.save(); ctx.shadowColor = BLUE; ctx.shadowBlur = cell * 1.4;
+      cellRect(ctx, BLUE, cx - cell / 2 + posA[0], cy - cell / 2 + posA[1], cell);
+      cellRect(ctx, BLUE, cx - cell / 2 + posB[0], cy - cell / 2 + posB[1], cell, 0.75);
+      ctx.restore();
+    } },
+];
+
+/* ── i nove "?" ──
+   Stessa animazione per tutti (punto blink 1.2s); cambia solo il glifo.
+   dotInsideRow: il punto sta dentro il glifo (badge/fumetto) a quella riga. */
+const QMARKS = [
+  { id: "A", name: "Attuale", cell: 4.5,
+    desc: "Il glifo di oggi: occhiello aperto, gambo corto. Parità VI.",
+    glyph: [".###.", "#...#", "....#", "...#.", "..#..", "..#.."],
+    dot: ["##", "##"], dotx: 1.5 },
+  { id: "B", name: "Tondo classico", cell: 4.2,
+    desc: "Occhiello chiuso, curva piena: il \"?\" dei font arcade anni '80.",
+    glyph: [".####.", "#....#", "#....#", "...##.", "..#...", "..#..."],
+    dot: ["##", "##"], dotx: 2 },
+  { id: "C", name: "Bold", cell: 4,
+    desc: "Tratto doppio, presenza massima: si legge anche con la coda dell'occhio.",
+    glyph: [".#####.", "##...##", "#....##", "....##.", "...##..", "...##.."],
+    dot: ["###", "###"], dotx: 2 },
+  { id: "D", name: "Minimal", cell: 5,
+    desc: "Tre pixel di larghezza, l'essenza del punto di domanda.",
+    glyph: ["###", "..#", ".##", ".#.", ".#."],
+    dot: ["##"], dotx: 0.5 },
+  { id: "E", name: "Squadrato", cell: 4.5,
+    desc: "Solo angoli retti, niente curve: stile OCR/terminale industriale.",
+    glyph: ["#####", "....#", "....#", "..###", "..#..", "..#.."],
+    dot: ["##", "##"], dotx: 1.5 },
+  { id: "F", name: "Nel badge", cell: 3.4,
+    desc: "Un riquadro attorno al \"?\": diventa un bottone, più superficie accesa.",
+    glyph: ["###########", "#.........#", "#...###...#", "#..#...#..#", "#......#..#",
+            "#.....#...#", "#....#....#", "#....#....#", "#.........#", "#.........#",
+            "###########"],
+    dot: ["##"], dotx: 4.5, dotInsideRow: 8.4 },
+  { id: "G", name: "Corsivo", cell: 4.2,
+    desc: "Il glifo inclinato in avanti: più dinamico, meno istituzionale.",
+    glyph: ["...###.", "..#...#", "......#", ".....#.", "...#...", "..#...."],
+    dot: ["##", "##"], dotx: 1.5 },
+  { id: "H", name: "Fumetto", cell: 3.4,
+    desc: "Il \"?\" dentro una nuvoletta con la coda: una domanda rivolta a te.",
+    glyph: [".#########.", "#.........#", "#...###...#", "#..#...#..#", "#......#..#",
+            "#.....#...#", "#....#....#", "#.........#", ".####.####.", "....#......"],
+    dot: ["##"], dotx: 4.5, dotInsideRow: 7 },
+  { id: "I", name: "Negativo", cell: 3.2,
+    desc: "Blocco pieno col \"?\" scavato: il punto è un foro che lampeggia.",
+    negative: true },
+];
+/* Blocco del "Negativo": il "?" è scavato; le due righe del punto si aprono col blink. */
+const NEG_TOP = [
+  "#########",
+  "#########",
+  "###...###",
+  "##.###.##",
+  "######.##",
+  "#####.###",
+  "####.####",
+  "####.####",
+  "#########",
+];
+const NEG_DOT_OPEN = ["####..###", "####..###"];
+const NEG_DOT_SOLID = ["#########", "#########"];
+const NEG_BOTTOM = ["#########"];
+
+function drawQ(ctx, q, t, w, h) {
+  if (q.negative) {
+    const cell = q.cell;
+    const dot = blinkOn(t) ? NEG_DOT_OPEN : NEG_DOT_SOLID;
+    const pattern = NEG_TOP.concat(dot, NEG_BOTTOM);
+    const gw = 9 * cell, gh = pattern.length * cell;
+    drawPattern(ctx, pattern, cell, ORANGE, (w - gw) / 2, (h - gh) / 2);
+    return;
+  }
+  const cell = q.cell;
+  const gw = q.glyph[0].length * cell, gh = q.glyph.length * cell;
+  const below = q.dotInsideRow == null ? q.dot.length * cell + 4 : 0;
+  const ox = (w - gw) / 2, oy = (h - gh - below) / 2;
+  drawPattern(ctx, q.glyph, cell, ORANGE, ox, oy);
+  if (blinkOn(t)) {
+    const dy = q.dotInsideRow != null ? oy + q.dotInsideRow * cell : oy + gh + 4;
+    drawPattern(ctx, q.dot, cell, ORANGE, ox + q.dotx * cell, dy);
+  }
+}
+
+/* ── montaggio delle sezioni ── */
+function buildOptions(hostId, decision, list, drawFn) {
+  const grid = document.getElementById(hostId);
+  for (const opt of list) {
+    const div = document.createElement("div");
+    div.className = "option";
+    div.dataset.decision = decision;
+    div.dataset.value = opt.id;
+    div.innerHTML = `<span class="tag">${opt.id}</span>` +
+      `<span class="pickbadge">SELEZIONATA</span>` +
+      `<h3>${opt.name}</h3><p class="desc">${opt.desc}</p>`;
+    grid.appendChild(div);
+    const stage = document.createElement("div");
+    stage.className = "stage";
+    div.appendChild(stage);
+    const cv = makeCanvas(stage, 120, 76);
+    anims.push({
+      draw(t) {
+        cv.ctx.clearRect(0, 0, cv.w, cv.h);
+        drawFn(cv.ctx, opt, t, cv.w, cv.h);
+      }
+    });
+  }
+}
+buildOptions("spinners", "spinner", SPINNERS, (ctx, opt, t, w, h) => opt.draw(ctx, t, w, h));
+buildOptions("qmarks", "qmark", QMARKS, (ctx, opt, t, w, h) => drawQ(ctx, opt, t, w, h));
+
+/* ── selezioni, note e salvataggio ── */
+const STORE_KEY = "vedetta-branding-round3";
+const DEFAULT_PICKS = { spinner: "A", qmark: "A" };
+let state;
+try { state = JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch { state = null; }
+if (!state || typeof state !== "object" || !state.picks) {
+  state = { picks: { ...DEFAULT_PICKS }, notes: {} };
+}
+state.notes = state.notes || {};
+
+function persist() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  renderSummary();
+}
+function applySelection() {
+  document.querySelectorAll(".option[data-decision]").forEach(el => {
+    el.classList.toggle("selected", state.picks[el.dataset.decision] === el.dataset.value);
+  });
+}
+function renderSummary() {
+  const parts = ["spinner", "qmark"].map(d => {
+    const v = state.picks[d] || "—";
+    const pencil = (state.notes[d] || "").trim() ? " ✎" : "";
+    return `${d}:<b>${v}</b>${pencil}`;
+  });
+  document.getElementById("picksummary").innerHTML = parts.join(" · ");
+}
+document.querySelectorAll(".option[data-decision]").forEach(el => {
+  el.addEventListener("click", () => {
+    state.picks[el.dataset.decision] = el.dataset.value;   // radio, niente toggle
+    applySelection();
+    persist();
+  });
+});
+document.querySelectorAll(".notes").forEach(t => {
+  t.value = state.notes[t.dataset.decision] || "";
+  t.addEventListener("input", () => {
+    state.notes[t.dataset.decision] = t.value;
+    persist();
+  });
+});
+document.getElementById("savebtn").addEventListener("click", () => {
+  const payload = {
+    savedAt: new Date().toISOString(),
+    round: 3,
+    picks: state.picks,
+    notes: state.notes,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "vedetta-branding-round3.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  const flash = document.getElementById("saveflash");
+  flash.classList.add("on");
+  setTimeout(() => flash.classList.remove("on"), 2500);
+});
+applySelection();
+renderSummary();
+
+/* ── starfield ── */
+function lcgStars(count, seed) {
+  let s = BigInt(seed >>> 0) + 0x5EED_CAFEn;
+  const next = () => {
+    s = (s * 6364136223846793005n + 1442695040888963407n) & 0xFFFFFFFFFFFFFFFFn;
+    return Number((s >> 33n) & 0x7FFFFFFFn) / 0x7FFFFFFF;
+  };
+  return Array.from({ length: count }, () => ({
+    x: next(), y: next(), size: next() > 0.72 ? 1.6 : 1, a: 0.2 + next() * 0.5, ph: next() * Math.PI * 2,
+  }));
+}
+const sky = document.getElementById("sky");
+const skyCtx = sky.getContext("2d");
+const pageStars = lcgStars(140, 99);
+function drawSky(t) {
+  const W = innerWidth, H = innerHeight;
+  if (sky.width !== W * DPR) { sky.width = W * DPR; sky.height = H * DPR; }
+  skyCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  skyCtx.clearRect(0, 0, W, H);
+  for (const s of pageStars) {
+    const speed = s.size > 1 ? 4.8 : 2;
+    const x = (s.x * W + (REDUCE ? 0 : t * speed)) % W;
+    const tw = REDUCE ? 1 : 0.75 + 0.25 * Math.sin(t * 1.3 + s.ph);
+    skyCtx.fillStyle = `rgba(255,255,255,${(s.a * tw * 0.8).toFixed(3)})`;
+    skyCtx.fillRect(x, s.y * H, s.size * 1.7, s.size * 1.7);
+  }
+}
+
+/* ── loop ── */
+const t0 = performance.now();
+function tick() {
+  const t = (performance.now() - t0) / 1000;
+  drawSky(t);
+  for (const a of anims) a.draw(t);
+  if (!REDUCE) requestAnimationFrame(tick);
+}
+tick();
+if (REDUCE) { drawSky(0); for (const a of anims) a.draw(0); }
+</script>
+</body>
+</html>

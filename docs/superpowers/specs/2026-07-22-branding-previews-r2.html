@@ -647,7 +647,7 @@ function renderSummary() {
 document.querySelectorAll(".option[data-decision]").forEach(el => {
   el.addEventListener("click", () => {
     const d = el.dataset.decision, v = el.dataset.value;
-    state.picks[d] = state.picks[d] === v ? null : v;
+    state.picks[d] = v;   // radio: il doppio click non deseleziona più
     applySelection();
     persist();
   });
