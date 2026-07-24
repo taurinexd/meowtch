@@ -11,8 +11,9 @@ import VedettaKit
 struct UsageDrilldownView: View {
     @ObservedObject var usage: UsageModel
     @ObservedObject var store: SessionStore
-    @State private var copiedAccountId: String?
     @State private var hoveredAccountId: String?
+    @State private var switchingId: String?
+    @State private var feedback: (id: String, text: String)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -38,14 +39,10 @@ struct UsageDrilldownView: View {
         .padding(.top, 2)
     }
 
-    /// The account whose sessions were active most recently (nil tag =
-    /// the default account).
-    private var activeAccountPath: String? {
-        let defaultPath = VedettaSetup.claudeAccounts.first?.path
-        return store.sessions
-            .filter { $0.agent == .claude && $0.state != .completed }
-            .max { $0.lastActivityAt < $1.lastActivityAt }
-            .map { $0.claudeConfigDir ?? defaultPath ?? "" }
+    /// The account currently in the default slot — the one a click made
+    /// active, that plain `claude` everywhere resolves to.
+    private var activeAccountPath: String {
+        AccountSwitcher.activeDefaultPath
     }
 
     /// email · plan under the account name, when known.
@@ -81,8 +78,12 @@ struct UsageDrilldownView: View {
                 }
             }
             Spacer(minLength: 8)
-            if copiedAccountId == entry.id {
-                Text("command copied")
+            if switchingId == entry.id {
+                Text("switching…")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.secondaryText)
+            } else if feedback?.id == entry.id {
+                Text(feedback?.text ?? "")
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.color(for: .waitingForInput))
             } else if let sample = entry.sample {
@@ -123,7 +124,7 @@ struct UsageDrilldownView: View {
         .onHover { hovering in
             hoveredAccountId = hovering ? entry.id : nil
         }
-        .onTapGesture { copyLoginCommand(entry.account) }
+        .onTapGesture { switchTo(entry.account) }
     }
 
     private func windowCell(label: String, window: UsageModel.Window) -> some View {
@@ -153,17 +154,35 @@ struct UsageDrilldownView: View {
         return "\(seconds)s"
     }
 
-    /// The nice-to-have: hand the user a ready login/switch command. No
-    /// terminal is raised and no focus moves — it lands in the clipboard.
-    private func copyLoginCommand(_ account: ClaudeAccount) {
-        let command = account.isDefault
-            ? "claude"
-            : "CLAUDE_CONFIG_DIR=\(account.path) claude"
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(command, forType: .string)
-        copiedAccountId = account.id
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-            if copiedAccountId == account.id { copiedAccountId = nil }
+    /// Global switch: make this account the default one every terminal
+    /// uses (credential swap in the shared Keychain slot, like `/login`).
+    /// Off the main thread — the Keychain write may pause for a prompt.
+    private func switchTo(_ account: ClaudeAccount) {
+        guard account.path != activeAccountPath else { return }
+        switchingId = account.id
+        DispatchQueue.global().async {
+            let result = AccountSwitcher.switchDefault(to: account)
+            DispatchQueue.main.async {
+                switchingId = nil
+                switch result {
+                case .ok:
+                    usage.activeClaudeAccountPath =
+                        ClaudeAccountRegistry.canonical(account.path)
+                    usage.refresh()
+                    showFeedback("switched", for: account.id)
+                case .noCredential:
+                    showFeedback("log in first", for: account.id)
+                case .failed:
+                    showFeedback("switch failed", for: account.id)
+                }
+            }
+        }
+    }
+
+    private func showFeedback(_ text: String, for id: String) {
+        feedback = (id, text)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+            if feedback?.id == id { feedback = nil }
         }
     }
 }

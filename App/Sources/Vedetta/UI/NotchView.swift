@@ -139,11 +139,9 @@ struct NotchView: View {
     }
 
     private func syncActiveAccount() {
-        let defaultPath = VedettaSetup.claudeAccounts.first?.path
-        let active = store.sessions
-            .filter { $0.agent == .claude && $0.state != .completed }
-            .max { $0.lastActivityAt < $1.lastActivityAt }
-            .map { $0.claudeConfigDir ?? defaultPath ?? "" }
+        // The strip follows the account in the default slot (what a global
+        // switch selects), so its windows match the ● in the drill-down.
+        let active = AccountSwitcher.activeDefaultPath
         if usage.activeClaudeAccountPath != active {
             usage.activeClaudeAccountPath = active
         }
