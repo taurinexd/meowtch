@@ -15,6 +15,9 @@ enum SettingsKey {
     static let showUsageLimits = "showUsageLimits"
     static let preferredUsageProvider = "preferredUsageProvider"
     static let lastUsageProvider = "lastUsageProvider"
+    /// Opt-in network probe of the per-account Claude quota (the only
+    /// network Vedetta ever touches; off = fully offline).
+    static let claudeNetworkRefresh = "claudeNetworkRefresh"
     static let soundVolume = "soundVolume"
     // Pre-existing keys, listed for the single source of truth:
     // "showSessionMetadata" (SessionMetadataPresentation.defaultsKey),
@@ -33,6 +36,7 @@ enum SettingsDefaults {
             SettingsKey.disableClickToJump: false,
             SettingsKey.showUsageLimits: true,
             SettingsKey.preferredUsageProvider: "auto",
+            SettingsKey.claudeNetworkRefresh: false,
             SettingsKey.soundVolume: 0.5,
         ])
     }
