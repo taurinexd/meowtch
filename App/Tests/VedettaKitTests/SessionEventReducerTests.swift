@@ -307,4 +307,20 @@ struct SessionEventReducerTests {
         #expect(store.sessions.first?.lastAssistantMessage == "Implementazione completata.")
         #expect(store.sessions.first?.state == .waitingForInput)
     }
+
+    @Test func tagsSessionWithClaudeConfigDir() {
+        let store = SessionStore()
+        var tagged = envelope("Stop", sessionId: "s1")
+        tagged["configDir"] = "/Users/x/foo/../.claude-work"
+        SessionEventReducer.apply(tagged, to: store)
+        #expect(store.sessions.first?.claudeConfigDir == "/Users/x/.claude-work")
+
+        // A later event without the env var must not erase the tag.
+        SessionEventReducer.apply(envelope("UserPromptSubmit", sessionId: "s1"), to: store)
+        #expect(store.sessions.first?.claudeConfigDir == "/Users/x/.claude-work")
+
+        // No tag at all = default account.
+        SessionEventReducer.apply(envelope("Stop", sessionId: "s2"), to: store)
+        #expect(store.sessions.first { $0.id == "s2" }?.claudeConfigDir == nil)
+    }
 }
