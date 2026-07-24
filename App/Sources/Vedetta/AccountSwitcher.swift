@@ -34,7 +34,9 @@ enum AccountSwitcher {
     /// Blocks on the Keychain; call off the main thread.
     @discardableResult
     static func switchDefault(to account: ClaudeAccount) -> Result {
-        ensureDefaultBackup()
+        // Never overwrite the slot before the account leaving it has a
+        // durable copy — otherwise a denied backup write would lose it.
+        guard ensureCurrentSlotBacked() else { return .failed }
         let source = namespacedService(for: account.path)
         guard let token = keychainReadRaw(service: source) else { return .noCredential }
         guard keychainWrite(service: legacyService, value: token) else { return .failed }
@@ -44,14 +46,15 @@ enum AccountSwitcher {
         return .ok
     }
 
-    /// One-time: give the original default account its own namespaced item
-    /// mirroring the current slot, so switching away isn't destructive.
-    /// A no-op once the backup exists (or if the slot is empty).
-    private static func ensureDefaultBackup() {
-        let backup = namespacedService(for: defaultConfigDir)
-        guard keychainReadRaw(service: backup) == nil else { return }
-        guard let current = keychainReadRaw(service: legacyService) else { return }
-        _ = keychainWrite(service: backup, value: current)
+    /// Ensures the account CURRENTLY in the default slot has a namespaced
+    /// copy of its token. Custom accounts already do (from login); only the
+    /// original default lacks one — mirror the slot into it, once. Returns
+    /// false only if that backup write fails, so the caller can abort.
+    private static func ensureCurrentSlotBacked() -> Bool {
+        let backup = namespacedService(for: activeDefaultPath)
+        if keychainReadRaw(service: backup) != nil { return true }
+        guard let current = keychainReadRaw(service: legacyService) else { return true }
+        return keychainWrite(service: backup, value: current)
     }
 
     // MARK: - Keychain via the `security` CLI
