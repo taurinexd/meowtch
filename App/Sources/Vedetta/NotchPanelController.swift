@@ -533,6 +533,7 @@ final class NotchPanelController {
         if !expanded {
             uiModel.peekSessionId = nil
             uiModel.showAllSessions = false
+            uiModel.usageDrilldown = false
             peekCloseWorkItem?.cancel()
             if let monitor = peekKeyMonitor {
                 NSEvent.removeMonitor(monitor)
@@ -666,6 +667,10 @@ final class NotchUIModel: ObservableObject {
     /// Set when the user taps "Show all" during an interrupt, to reveal the
     /// whole list instead of the single focused card; reset on collapse.
     @Published var showAllSessions = false
+    /// The expanded panel shows the provider→accounts usage view instead
+    /// of the session list; entered by tapping the usage strip, reset on
+    /// collapse like showAllSessions. An interrupt still takes over.
+    @Published var usageDrilldown = false
     /// True while the collapse animation swallows the expanded content:
     /// it stays mounted through it, then unmounts so the hover tracking
     /// region shrinks back to the bar alone.

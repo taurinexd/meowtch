@@ -129,6 +129,21 @@ struct NotchView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
+        // The strip shows the account whose sessions are most recently
+        // active: keep the usage model's notion in sync with the store.
+        .onReceive(store.objectWillChange) { _ in syncActiveAccount() }
+        .onAppear(perform: syncActiveAccount)
+    }
+
+    private func syncActiveAccount() {
+        let defaultPath = VedettaSetup.claudeAccounts.first?.path
+        let active = store.sessions
+            .filter { $0.agent == .claude && $0.state != .completed }
+            .max { $0.lastActivityAt < $1.lastActivityAt }
+            .map { $0.claudeConfigDir ?? defaultPath ?? "" }
+        if usage.activeClaudeAccountPath != active {
+            usage.activeClaudeAccountPath = active
+        }
     }
 
     // MARK: - Collapsed
@@ -238,6 +253,8 @@ struct NotchView: View {
             topBar
             if let session = focusedSession {
                 peekContent(session)
+            } else if model.usageDrilldown {
+                UsageDrilldownView(usage: usage, store: store)
             } else {
                 sessionList
             }
@@ -426,10 +443,10 @@ struct NotchView: View {
             }
         }
         .font(.system(size: 10))
-        // Tap anywhere on the strip to cycle providers (Claude → Codex → …),
-        // so only one fits left of the physical notch at a time.
+        // Tap anywhere on the strip to open/close the provider→accounts
+        // drill-down (provider cycling lives inside that view now).
         .contentShape(Rectangle())
-        .onTapGesture { usage.cycleProvider() }
+        .onTapGesture { model.usageDrilldown.toggle() }
         // The whole strip flashes briefly on tap: visual receipt of the
         // provider switch (and of the tap itself when only one provider
         // has data and nothing else changes).
