@@ -14,6 +14,7 @@ struct UsageDrilldownView: View {
     @State private var hoveredAccountId: String?
     @State private var switchingId: String?
     @State private var feedback: (id: String, text: String)?
+    @State private var switchNote: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -22,6 +23,14 @@ struct UsageDrilldownView: View {
                 ForEach(usage.claudeUsages) { entry in
                     accountRow(entry)
                 }
+            }
+            if let switchNote {
+                Text(switchNote)
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.secondaryText.opacity(0.85))
+                    .padding(.leading, 18)
+                    .padding(.trailing, 15)
+                    .transition(.opacity)
             }
             let codexWindows = usage.windows(for: .codex)
             if !codexWindows.isEmpty {
@@ -80,12 +89,12 @@ struct UsageDrilldownView: View {
             Spacer(minLength: 8)
             if switchingId == entry.id {
                 Text("switching…")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Theme.secondaryText)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Theme.color(for: .running))
             } else if feedback?.id == entry.id {
                 Text(feedback?.text ?? "")
                     .font(.system(size: 10))
-                    .foregroundStyle(Theme.color(for: .waitingForInput))
+                    .foregroundStyle(Theme.color(for: .needsApproval))
             } else if let sample = entry.sample {
                 if entry.isStale {
                     Text("stale \(age(of: sample.at))")
@@ -157,24 +166,44 @@ struct UsageDrilldownView: View {
     /// Global switch: make this account the default one every terminal
     /// uses (credential swap in the shared Keychain slot, like `/login`).
     /// Off the main thread — the Keychain write may pause for a prompt.
+    /// The write is instant, but running sessions re-read the token on
+    /// their next request, so the UI holds a visible "switching…" state
+    /// and then says so, rather than pretending the switch is immediate.
     private func switchTo(_ account: ClaudeAccount) {
         guard account.path != activeAccountPath else { return }
         switchingId = account.id
+        feedback = nil
+        switchNote = nil
+        let started = Date()
         DispatchQueue.global().async {
             let result = AccountSwitcher.switchDefault(to: account)
-            DispatchQueue.main.async {
+            // Keep the loading state visible for at least a beat even when
+            // the Keychain write returns in milliseconds.
+            let remaining = max(0, 0.7 - Date().timeIntervalSince(started))
+            DispatchQueue.main.asyncAfter(deadline: .now() + remaining) {
                 switchingId = nil
                 switch result {
                 case .ok:
                     usage.activeClaudeAccountPath =
                         ClaudeAccountRegistry.canonical(account.path)
                     usage.refresh()
-                    showFeedback("switched", for: account.id)
+                    setSwitchNote(
+                        "\(account.displayName) is now the default — open terminals update on their next request."
+                    )
                 case .noCredential:
                     showFeedback("log in first", for: account.id)
                 case .failed:
                     showFeedback("switch failed", for: account.id)
                 }
+            }
+        }
+    }
+
+    private func setSwitchNote(_ text: String) {
+        withAnimation(.easeInOut(duration: 0.2)) { switchNote = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
+            if switchNote == text {
+                withAnimation(.easeInOut(duration: 0.3)) { switchNote = nil }
             }
         }
     }
