@@ -700,6 +700,7 @@ private struct AboutSettingsPage: View {
 
 private struct AccountsSettingsPage: View {
     @State private var accounts = VedettaSetup.claudeAccounts
+    @State private var showingAdd = false
     @AppStorage(SettingsKey.claudeNetworkRefresh) private var networkRefresh = false
 
     var body: some View {
@@ -714,9 +715,9 @@ private struct AccountsSettingsPage: View {
             RowDivider()
             SettingsRow(
                 title: "Add account…",
-                subtitle: "Pick (or create) a config dir, e.g. ~/.claude-work, then log into it from your terminal — tap its row in the notch to copy the command."
+                subtitle: "Name it — Vedetta creates its config dir, installs the hooks, and opens a terminal to log in, then detects it automatically."
             ) {
-                Button("Add…") { addAccount() }
+                Button("Add…") { showingAdd = true }
             }
         }
         SettingsSection(
@@ -735,23 +736,138 @@ private struct AccountsSettingsPage: View {
         .onReceive(NotificationCenter.default.publisher(
             for: .vedettaClaudeAccountsChanged
         )) { _ in reload() }
+        .sheet(isPresented: $showingAdd) {
+            AddAccountSheet { showingAdd = false; reload() }
+        }
     }
 
     private func reload() {
         accounts = VedettaSetup.claudeAccounts
     }
+}
 
-    private func addAccount() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-        panel.prompt = "Use as account dir"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let account = VedettaSetup.registerClaudeAccount(url.path)
-        try? VedettaSetup.installClaudeHooks(at: account)
-        reload()
+/// The assisted add-account wizard: name → create + hook + open login →
+/// auto-detect completion.
+private struct AddAccountSheet: View {
+    var onClose: () -> Void
+    @StateObject private var flow = AccountOnboarding()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Add Claude account")
+                .font(.system(size: 16, weight: .bold))
+
+            switch flow.phase {
+            case .naming:
+                naming
+            case .awaitingLogin:
+                awaitingLogin
+            case .done(let email, let plan):
+                done(email: email, plan: plan)
+            case .failed(let message):
+                failed(message)
+            }
+        }
+        .padding(22)
+        .frame(width: 420)
+        .onDisappear { flow.cancel() }
+    }
+
+    private var naming: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Account name")
+                    .font(.system(size: 12, weight: .semibold))
+                TextField("Work", text: $flow.name)
+                    .textFieldStyle(.roundedBorder)
+                if !flow.resolvedPath.isEmpty {
+                    Text("Config dir: \(flow.resolvedPath)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text("Vedetta creates this folder, installs its hooks, and opens Terminal to log in.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Cancel", action: onClose)
+                Button("Create & log in") { flow.start() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!flow.canStart)
+            }
+        }
+    }
+
+    private var awaitingLogin: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("A terminal opened — approve the login in your browser.")
+                    .font(.system(size: 12.5))
+            }
+            Text("Waiting for the login to complete…")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Close") { flow.cancel(); onClose() }
+            }
+        }
+    }
+
+    private func done(email: String?, plan: String?) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(loggedInLabel(email: email, plan: plan))
+                    .font(.system(size: 12.5, weight: .semibold))
+            }
+            Text("Start a session with this account and it'll show up in the notch.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Done", action: onClose)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private func failed(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(message)
+                .font(.system(size: 12))
+                .foregroundStyle(.red)
+            if !flow.resolvedPath.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Run this yourself:")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text(flow.manualCommand)
+                            .font(.system(size: 11, design: .monospaced))
+                            .textSelection(.enabled)
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(flow.manualCommand, forType: .string)
+                        }
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Close", action: onClose)
+            }
+        }
+    }
+
+    private func loggedInLabel(email: String?, plan: String?) -> String {
+        var label = "Logged in"
+        if let email { label += " as \(email)" }
+        if let plan { label += " · \(plan)" }
+        return label
     }
 }
 
