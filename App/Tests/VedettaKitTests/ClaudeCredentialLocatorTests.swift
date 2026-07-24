@@ -18,11 +18,16 @@ struct ClaudeCredentialLocatorTests {
             == AccountDigest.hash8("/Users/x/cafe\u{0301}"))
     }
 
-    @Test func defaultAccountUsesLegacyServiceThenFile() {
+    @Test func defaultAccountReadsItsNamespacedBackupFirst() {
+        // After a global switch, the default account's own token lives in
+        // its namespaced backup, while the shared slot may hold another
+        // account — so the backup must be tried first.
+        let hash = AccountDigest.hash8("/Users/x/.claude")
         let candidates = ClaudeCredentialLocator.candidates(
             configDir: "/Users/x/.claude", isDefault: true
         )
         #expect(candidates == [
+            .keychainService("Claude Code-credentials-\(hash)"),
             .keychainService("Claude Code-credentials"),
             .credentialsFile("/Users/x/.claude/.credentials.json"),
         ])

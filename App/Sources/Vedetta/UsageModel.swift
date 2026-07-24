@@ -135,7 +135,16 @@ final class UsageModel: ObservableObject {
         claudeUsages = accounts.map { account in
             let path = VedettaSetup.statusLineCachePath(for: account)
             var push: AccountQuota.Sample?
-            if let attrs = try? fm.attributesOfItem(atPath: path),
+            // The default account's cache (rl.json) is written by plain
+            // `claude`, which a global switch may have pointed at another
+            // account. When a switch is in effect, that cache is the active
+            // account's data, not the default's — so ignore it and rely on
+            // the (backup-token) pull instead.
+            let switchInEffect = account.isDefault
+                && AccountSwitcher.activeDefaultPath
+                    != ClaudeAccountRegistry.canonical(account.path)
+            if !switchInEffect,
+               let attrs = try? fm.attributesOfItem(atPath: path),
                let modified = attrs[.modificationDate] as? Date,
                let data = fm.contents(atPath: path) {
                 let parsed = RateLimitHarvest.parse(from: data)
