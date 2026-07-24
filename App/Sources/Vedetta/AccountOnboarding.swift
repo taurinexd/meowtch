@@ -89,10 +89,15 @@ final class AccountOnboarding: ObservableObject {
 
     /// Opens Terminal.app in a new window already running the login for
     /// this config dir. Steals focus by design — the user is logging in.
+    /// `export` keeps CLAUDE_CONFIG_DIR set for the whole window, so any
+    /// `claude` the user runs there afterward stays on this account and
+    /// never touches the default login (unlike a plain terminal, where a
+    /// bare `claude ... /login` rewrites the shared default credential).
     private func openLoginTerminal(configDir: String) {
-        let shellCommand = "CLAUDE_CONFIG_DIR='"
+        let quotedDir = "'"
             + configDir.replacingOccurrences(of: "'", with: "'\\''")
-            + "' claude auth login"
+            + "'"
+        let shellCommand = "export CLAUDE_CONFIG_DIR=\(quotedDir); claude auth login"
         let literal = shellCommand
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
