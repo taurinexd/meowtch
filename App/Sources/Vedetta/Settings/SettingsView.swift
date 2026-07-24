@@ -700,37 +700,25 @@ private struct AboutSettingsPage: View {
 
 private struct AccountsSettingsPage: View {
     @State private var accounts = VedettaSetup.claudeAccounts
+    @State private var selectedId: String?
     @State private var showingAdd = false
     @AppStorage(SettingsKey.claudeNetworkRefresh) private var networkRefresh = false
 
+    private var selectedAccount: ClaudeAccount? {
+        selectedId.flatMap { id in accounts.first { $0.id == id } }
+    }
+
     var body: some View {
-        SettingsSection(
-            title: "Claude accounts",
-            footer: "One account per config dir (CLAUDE_CONFIG_DIR). Hooks and the usage statusline install per account; sessions started with that dir show up in the notch tagged with it."
-        ) {
-            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                if index > 0 { RowDivider() }
-                AccountRow(account: account, onChange: reload)
-            }
-            RowDivider()
-            SettingsRow(
-                title: "Add account…",
-                subtitle: "Name it — Vedetta creates its config dir, installs the hooks, and opens a terminal to log in, then detects it automatically."
-            ) {
-                Button("Add…") { showingAdd = true }
-            }
-        }
-        SettingsSection(
-            title: "Network refresh",
-            footer: "Reads each account's quota via Claude's own usage endpoint with the credentials already on this Mac. Read-only, undocumented endpoint, ~5 min cadence with backoff. Off = Vedetta stays fully offline."
-        ) {
-            SettingsRow(
-                title: "Refresh quota over the network",
-                subtitle: "Keeps idle accounts' usage fresh without an active session."
-            ) {
-                Toggle("", isOn: $networkRefresh)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+        Group {
+            if let account = selectedAccount {
+                AccountDetailView(
+                    account: account,
+                    onBack: { selectedId = nil },
+                    onChange: reload
+                )
+                .id(account.id)
+            } else {
+                accountList
             }
         }
         .onReceive(NotificationCenter.default.publisher(
@@ -741,8 +729,73 @@ private struct AccountsSettingsPage: View {
         }
     }
 
+    private var accountList: some View {
+        Group {
+            SettingsSection(
+                title: "Claude accounts",
+                footer: "One account per config dir (CLAUDE_CONFIG_DIR). Tap an account to manage it. Sessions started with that dir show up in the notch tagged with it."
+            ) {
+                ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                    if index > 0 { RowDivider() }
+                    accountRow(account)
+                }
+                RowDivider()
+                SettingsRow(
+                    title: "Add account…",
+                    subtitle: "Name it — Vedetta creates its config dir, installs the hooks, and opens a terminal to log in, then detects it automatically."
+                ) {
+                    Button("Add…") { showingAdd = true }
+                }
+            }
+            SettingsSection(
+                title: "Network refresh",
+                footer: "Reads each account's quota via Claude's own usage endpoint with the credentials already on this Mac. Read-only, undocumented endpoint, ~5 min cadence with backoff. Off = Vedetta stays fully offline."
+            ) {
+                SettingsRow(
+                    title: "Refresh quota over the network",
+                    subtitle: "Keeps idle accounts' usage fresh without an active session."
+                ) {
+                    Toggle("", isOn: $networkRefresh)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+            }
+        }
+    }
+
+    private func accountRow(_ account: ClaudeAccount) -> some View {
+        Button { selectedId = account.id } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(account.displayName).font(.system(size: 13))
+                    Text(rowSubtitle(account))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func rowSubtitle(_ account: ClaudeAccount) -> String {
+        var parts: [String] = []
+        if account.isDefault { parts.append("Default") }
+        parts.append(account.email ?? (account.path as NSString).lastPathComponent)
+        if let plan = account.subscriptionType { parts.append(plan) }
+        return parts.joined(separator: " · ")
+    }
+
     private func reload() {
         accounts = VedettaSetup.claudeAccounts
+        if let selectedId, !accounts.contains(where: { $0.id == selectedId }) {
+            self.selectedId = nil
+        }
     }
 }
 
@@ -871,57 +924,182 @@ private struct AddAccountSheet: View {
     }
 }
 
-private struct AccountRow: View {
+/// Everything about one account, reached by tapping its row: rename,
+/// identity check, login (or resume an interrupted one), hooks/statusline,
+/// and removal.
+private struct AccountDetailView: View {
     let account: ClaudeAccount
+    var onBack: () -> Void
     var onChange: () -> Void
+
     @State private var alias: String = ""
     @State private var hooksInstalled = false
     @State private var owner = VedettaSetup.StatusLineOwner.none
     @State private var identityError: String?
-
-    private var subtitle: String {
-        var parts: [String] = [account.path]
-        if let email = account.email { parts.append(email) }
-        if let plan = account.subscriptionType { parts.append(plan) }
-        if case .foreign = owner { parts.append("foreign statusline") }
-        if !hooksInstalled { parts.append("hooks not installed") }
-        if let identityError { parts.append(identityError) }
-        return parts.joined(separator: " · ")
-    }
+    @State private var confirmingRemove = false
+    @StateObject private var login = AccountOnboarding()
 
     var body: some View {
-        SettingsRow(title: account.displayName, subtitle: subtitle) {
-            HStack(spacing: 8) {
-                TextField("Name", text: $alias)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
-                    .onSubmit { saveAlias() }
-                Button("Identify") { refreshIdentity() }
-                if !hooksInstalled {
-                    Button("Hook") {
-                        try? VedettaSetup.installClaudeHooks(at: account)
-                        refreshState()
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onBack) {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left")
+                    Text("Accounts")
                 }
-                if case .foreign = owner {
-                    Button("Claim statusline") {
-                        try? VedettaSetup.claimStatusLine(at: account)
-                        refreshState()
-                    }
-                }
-                if !account.isDefault {
-                    Button("Remove") {
-                        VedettaSetup.removeClaudeAccount(path: account.path)
-                        onChange()
-                    }
-                }
+                .font(.system(size: 12.5))
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 16)
+
+            Text(account.displayName)
+                .font(.system(size: 18, weight: .bold))
+                .padding(.bottom, 16)
+
+            identitySection
+            loginSection
+            setupSection
+            if !account.isDefault { removeSection }
         }
         .onAppear {
             alias = account.alias ?? ""
             refreshState()
         }
     }
+
+    // MARK: Sections
+
+    private var identitySection: some View {
+        SettingsSection(title: "Identity") {
+            SettingsRow(
+                title: "Name",
+                subtitle: account.isDefault
+                    ? "The account Vedetta uses when no config dir is set."
+                    : account.path
+            ) {
+                TextField("Name", text: $alias)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+                    .onSubmit { saveAlias() }
+            }
+            RowDivider()
+            SettingsRow(title: "Signed in as", subtitle: signedInSubtitle) {
+                Button("Identify") { refreshIdentity() }
+            }
+        }
+    }
+
+    private var loginSection: some View {
+        SettingsSection(
+            title: "Login",
+            footer: "Opens a terminal that logs into this account, isolated to its config dir — it never rewrites your other accounts' logins."
+        ) {
+            SettingsRow(title: loginTitle, subtitle: loginSubtitle) {
+                Button(loginButtonLabel) { login.relogin(account: account) }
+                    .disabled(login.phase == .awaitingLogin)
+            }
+        }
+    }
+
+    private var setupSection: some View {
+        SettingsSection(title: "Setup") {
+            SettingsRow(
+                title: "Hooks",
+                subtitle: hooksInstalled
+                    ? "Installed — sessions from this account appear in the notch."
+                    : "Not installed — sessions from this account won't show up."
+            ) {
+                if hooksInstalled {
+                    Text("Installed").foregroundStyle(.secondary)
+                } else {
+                    Button("Install") {
+                        try? VedettaSetup.installClaudeHooks(at: account)
+                        refreshState()
+                    }
+                }
+            }
+            RowDivider()
+            SettingsRow(title: "Usage statusline", subtitle: statuslineSubtitle) {
+                switch owner {
+                case .vedetta:
+                    Text("Active").foregroundStyle(.secondary)
+                case .foreign:
+                    Button("Claim") {
+                        try? VedettaSetup.claimStatusLine(at: account)
+                        refreshState()
+                    }
+                case .none:
+                    Text("None").foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var removeSection: some View {
+        SettingsSection(
+            title: "Remove",
+            footer: "Removes Vedetta's hooks from this account and drops it from the list. The folder and its login stay — you can add it back later."
+        ) {
+            SettingsRow(
+                title: "Remove account",
+                subtitle: confirmingRemove ? "Tap again to confirm." : nil
+            ) {
+                Button(confirmingRemove ? "Confirm" : "Remove", role: .destructive) {
+                    if confirmingRemove { remove() } else { confirmingRemove = true }
+                }
+            }
+        }
+    }
+
+    // MARK: Derived text
+
+    private var signedInSubtitle: String {
+        if let error = identityError { return error }
+        if let email = account.email {
+            return [email, account.subscriptionType].compactMap { $0 }.joined(separator: " · ")
+        }
+        return "Unknown — tap Identify to check."
+    }
+
+    private var loginTitle: String {
+        switch login.phase {
+        case .awaitingLogin: "Waiting for login…"
+        case .done: "Logged in"
+        case .failed: "Login didn't finish"
+        case .naming: account.email == nil ? "Not logged in" : "Log in again"
+        }
+    }
+
+    private var loginSubtitle: String {
+        switch login.phase {
+        case .awaitingLogin:
+            "Approve it in the browser; Vedetta detects it automatically."
+        case .done:
+            "This account is ready."
+        case .failed(let message):
+            message
+        case .naming:
+            account.email == nil
+                ? "Finish (or resume) signing into this account."
+                : "Re-authenticate if the session expired."
+        }
+    }
+
+    private var loginButtonLabel: String {
+        if case .awaitingLogin = login.phase { return "Waiting…" }
+        return account.email == nil ? "Log in" : "Re-login"
+    }
+
+    private var statuslineSubtitle: String {
+        switch owner {
+        case .vedetta: "Vedetta harvests this account's rate limits."
+        case .foreign: "Another statusline occupies the slot; claim it to read usage."
+        case .none: "No statusline installed for this account."
+        }
+    }
+
+    // MARK: Actions
 
     private func refreshState() {
         hooksInstalled = VedettaSetup.claudeHooksInstalled(at: account)
@@ -933,6 +1111,13 @@ private struct AccountRow: View {
             $0.alias = alias.isEmpty ? nil : alias
         }
         onChange()
+    }
+
+    private func remove() {
+        try? VedettaSetup.removeClaudeHooks(at: account)
+        VedettaSetup.removeClaudeAccount(path: account.path)
+        onChange()
+        onBack()
     }
 
     /// `claude auth status --json` for this config dir: email + plan.
@@ -980,6 +1165,7 @@ private struct AccountRow: View {
                     $0.email = email
                     $0.subscriptionType = plan
                 }
+                identityError = nil
                 onChange()
             }
         }
