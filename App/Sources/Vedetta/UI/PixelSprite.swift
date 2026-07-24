@@ -13,16 +13,6 @@ struct PixelSprite: View {
     var gapRatio: CGFloat = 0.14
     var glow: Bool = true
 
-    static let lookout: [String] = [
-        ".#....#.",
-        "..####..",
-        ".######.",
-        "##.##.##",
-        "########",
-        "..#..#..",
-        ".#....#.",
-    ]
-
     var body: some View {
         Canvas { context, _ in
             let inset = pixelSize * gapRatio / 2

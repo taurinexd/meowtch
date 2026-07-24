@@ -152,8 +152,13 @@ struct NotchView: View {
     /// Content flanks the physical notch: nothing may sit under the camera.
     private var collapsedContent: some View {
         HStack(spacing: 6) {
-            PixelSprite(pattern: PixelSprite.lookout, color: statusColor, pixelSize: 2)
-                .padding(.leading, collapsedFlare + 8)
+            MascotSprite(
+                state: collapsedTopState ?? .completed,
+                stateChangedAt: collapsedTopSession?.stateChangedAt ?? .distantPast,
+                color: statusColor,
+                pixelSize: 2
+            )
+            .padding(.leading, collapsedFlare + 8)
             if let topState = collapsedTopState {
                 StateIndicator(state: topState, scale: 0.75)
             }
@@ -205,6 +210,14 @@ struct NotchView: View {
     /// state across visible sessions (approval > working > waiting).
     private var collapsedTopState: SessionState? {
         visibleSessions.map(\.state).min()
+    }
+
+    /// The session that owns the collapsed sprite's expression: the most
+    /// recently-changed one among those in the top state.
+    private var collapsedTopSession: AgentSession? {
+        guard let top = collapsedTopState else { return nil }
+        return visibleSessions.filter { $0.state == top }
+            .max { $0.stateChangedAt < $1.stateChangedAt }
     }
 
     /// Color of the sprite: the most urgent state across sessions.
