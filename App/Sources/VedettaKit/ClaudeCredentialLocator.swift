@@ -21,23 +21,23 @@ public enum ClaudeCredentialLocator {
 
     public static let legacyService = "Claude Code-credentials"
 
-    public static func candidates(configDir: String, isDefault: Bool) -> [Candidate] {
+    /// The shared `Claude Code-credentials` slot belongs to exactly one
+    /// account at a time — whichever one plain `claude` resolves to (the
+    /// default, or the account a global switch put there). That owner reads
+    /// the slot FIRST: live sessions keep it fresh. Every other account
+    /// reads ONLY its namespaced item — falling back to the slot would
+    /// return someone else's credential and misattribute their usage.
+    public static func candidates(configDir: String, ownsSharedSlot: Bool) -> [Candidate] {
         let namespaced = "\(legacyService)-\(AccountDigest.hash8(configDir))"
-        if isDefault {
-            // A global account switch copies another account's token into the
-            // shared `Claude Code-credentials` slot and backs the default
-            // account's own token up in its namespaced item. So the default
-            // account must read that backup FIRST; the shared slot (which may
-            // now hold a different account) is only the pre-switch fallback.
+        if ownsSharedSlot {
             return [
-                .keychainService(namespaced),
                 .keychainService(legacyService),
+                .keychainService(namespaced),
                 .credentialsFile(configDir + "/.credentials.json"),
             ]
         }
         return [
             .keychainService(namespaced),
-            .keychainService(legacyService),
             .credentialsFile(configDir + "/.credentials.json"),
         ]
     }

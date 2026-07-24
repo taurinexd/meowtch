@@ -228,6 +228,52 @@ giorno in cui OpenAI espone un evento per lo user input. Nota colta di passaggio
 il manifest VI non installa; possibile estensione futura del nostro manifest
 (es. contextLimit sound anche per Codex).
 
+## Pass 8 — Multi-account Claude: refresh OAuth e "follow the slot" (2026-07-24)
+
+Territorio oltre VI (che è single-account). Problema partito da un bug visto
+live da Matteo: dopo uno switch globale Tools→Tech, la card di Tools prima
+mostrava i numeri di Tech (misattribuzione, fixata in `c0f4a27`) e poi si
+sarebbe comunque congelata: **nessuno rinnova il token dell'account non
+attivo** (access token TTL ~8h) e la probe dichiarava "never refreshes".
+Un primo tentativo (`e337041`, enforcer che ri-pinnava lo slot) è stato
+scartato: riscrivere un token vecchio sopra uno appena ruotato slogga i
+terminali. Design definitivo — lo slot si SEGUE, mai combattuto (semantica
+/login):
+
+- **Refresh grant verificato live**: `POST https://api.anthropic.com/v1/oauth/token`
+  con `{grant_type:"refresh_token", refresh_token, client_id}` →
+  `access_token, refresh_token, expires_in (28800), refresh_token_expires_in,
+  account, organization`. Endpoint e client id (`9d1c250a-e61b-44d9-88ed-5944d1962f5e`)
+  estratti dal binario CLI 2.1.218 (la base è **api**.anthropic.com — la
+  letteratura community su console.anthropic.com è datata).
+- **`ClaudeTokenRefresher`**: rinnova SOLO account che non possiedono lo slot
+  (Vedetta è l'unica proprietaria di quelle catene) e SOLO a token scaduto
+  (mai ruotare una catena viva); write-back con guardia se l'item è cambiato
+  durante la chiamata. Merge puro in `ClaudeCredentialRefresh` (VedettaKit,
+  testato): aggiorna i 4 campi token e preserva tutto il resto del blob.
+- **`AccountSwitcher.reconcileSlot()`** (ogni tick da 60s): se lo slot
+  diverge dal mirror dell'account attivo, identifica il proprietario via
+  `/oauth/profile` e ADOTTA — cattura la credenziale nel suo item namespaced
+  (uno switch futuro non ripristina mai un refresh token ruotato) e, se il
+  proprietario è un altro account registrato, sposta il puntatore attivo
+  come fosse uno switch (un `/login` manuale viene quindi seguito, non
+  annullato). Slot non identificabile (`claude.slotUnidentified`): mai
+  toccato, mai catturato.
+- **Attribuzione**: il locator ora ragiona per possesso — il proprietario
+  dello slot lo legge per primo; chi non lo possiede legge SOLO il suo item
+  namespaced (via il fallback che misattribuiva). `rl.json` (statusline del
+  config dir default) è attribuito al proprietario dello slot, con guardia
+  `claude.defaultSlotSwitchedAt` sui push precedenti all'handover — le
+  sessioni post-switch alimentano il push dell'account switchato in tempo reale.
+
+Verificato live (2026-07-24, switch Tools→Tech attivo): token Tools
+forzato a scaduto → l'app lo ruota da sola in <60s e la card torna viva
+(`origin: pull`, 7d 100% suo reale); Tech `origin: push` dall'rl.json delle
+sessioni correnti; slot riserializzato (stessi token, byte diversi) →
+reconcile identifica tech@ e rispecchia. Non ancora esercitato con utente:
+l'adozione di un `/login` manuale verso un ALTRO account (ramo
+`recordHandover`, stesso codice dello switch).
+
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
 Tutto su `main` locale (nessun push). Commit principali:

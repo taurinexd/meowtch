@@ -7,15 +7,19 @@ import VedettaKit
 /// CLAUDE_CONFIG_DIR reads that slot, so they all follow — live, like a
 /// manual re-login. Terminals pinned with CLAUDE_CONFIG_DIR stay isolated.
 ///
-/// The default account keeps its token ONLY in the shared slot, so before
-/// the first switch we mirror it into its own namespaced item; otherwise
-/// overwriting the slot would erase it. After that one-time backup every
-/// account has a durable copy and every switch is reversible.
+/// After the switch the slot is the single source of truth, exactly as it
+/// is for /login — Vedetta FOLLOWS it, never fights it. `reconcileSlot()`
+/// watches for the slot changing under us (a live session refreshing its
+/// token, or the user running /login by hand), identifies the credential's
+/// owner and adopts: mirrors it into the owner's namespaced item and moves
+/// the active-account pointer when the owner is a different account.
 enum AccountSwitcher {
     enum Result { case ok, noCredential, failed }
 
     private static let defaultSlotKey = "claude.defaultSlotAccount"
-    private static let legacyService = "Claude Code-credentials"
+    private static let switchedAtKey = "claude.defaultSlotSwitchedAt"
+    private static let slotUnidentifiedKey = "claude.slotUnidentified"
+    static let legacyService = "Claude Code-credentials"
 
     static var defaultConfigDir: String {
         ClaudeAccountRegistry.canonical(NSHomeDirectory() + "/.claude")
@@ -27,7 +31,30 @@ enum AccountSwitcher {
         UserDefaults.standard.string(forKey: defaultSlotKey) ?? defaultConfigDir
     }
 
-    private static func namespacedService(for configDir: String) -> String {
+    /// When the slot last changed hands (notch switch or adopted /login).
+    /// Statusline pushes older than this belong to the previous owner.
+    static var lastHandoverAt: Date? {
+        let stamp = UserDefaults.standard.double(forKey: switchedAtKey)
+        return stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+    }
+
+    /// True when the slot holds a credential of no registered account (the
+    /// user ran /login into an account Vedetta doesn't know). While set,
+    /// nobody claims the slot: usage attribution falls back to the
+    /// namespaced items and the slot is never captured or overwritten
+    /// implicitly.
+    static var slotIsUnidentified: Bool {
+        UserDefaults.standard.bool(forKey: slotUnidentifiedKey)
+    }
+
+    /// Whether this account is the one plain `claude` resolves to — the
+    /// owner of the shared slot's credential chain.
+    static func ownsSharedSlot(_ account: ClaudeAccount) -> Bool {
+        !slotIsUnidentified
+            && ClaudeAccountRegistry.canonical(account.path) == activeDefaultPath
+    }
+
+    static func namespacedService(for configDir: String) -> String {
         "\(legacyService)-\(AccountDigest.hash8(ClaudeAccountRegistry.canonical(configDir)))"
     }
 
@@ -40,48 +67,52 @@ enum AccountSwitcher {
         let source = namespacedService(for: account.path)
         guard let token = keychainReadRaw(service: source) else { return .noCredential }
         guard keychainWrite(service: legacyService, value: token) else { return .failed }
-        UserDefaults.standard.set(
-            ClaudeAccountRegistry.canonical(account.path), forKey: defaultSlotKey
-        )
+        recordHandover(to: account.path)
         return .ok
     }
 
-    /// Keeps the switched account pinned in the shared slot. A running
-    /// session of a DIFFERENT account that refreshes its OAuth token writes
-    /// the new token to the shared slot — silently undoing the switch. This
-    /// broker step catches that: it identifies whose token now sits in the
-    /// slot (via /oauth/profile), captures it into that account's namespaced
-    /// item so the account stays fresh, and re-pins the active account.
-    /// Gated on the network opt-in (identification needs one call) and only
-    /// acts while a switch is in effect. Call off the main thread.
-    static func enforceSlot() async {
+    private static func recordHandover(to path: String) {
+        UserDefaults.standard.set(
+            ClaudeAccountRegistry.canonical(path), forKey: defaultSlotKey
+        )
+        UserDefaults.standard.set(
+            Date().timeIntervalSince1970, forKey: switchedAtKey
+        )
+        UserDefaults.standard.set(false, forKey: slotUnidentifiedKey)
+    }
+
+    /// Follows the shared slot. When its content diverges from the active
+    /// account's namespaced mirror, some session refreshed the token or the
+    /// user re-logged in: identify the credential's owner (one profile
+    /// call) and adopt — capture the fresh credential into the owner's
+    /// namespaced item (so a later switch never restores a rotated, dead
+    /// refresh token) and, if the owner is a different registered account,
+    /// move the active pointer to it, exactly as if the user had switched.
+    /// An unidentifiable slot is left completely alone. Gated on the
+    /// network opt-in; call off the main thread.
+    static func reconcileSlot() async {
         guard UserDefaults.standard.bool(forKey: SettingsKey.claudeNetworkRefresh) else { return }
-        let activePath = activeDefaultPath
-        let defaultPath = ClaudeAccountRegistry.canonical(defaultConfigDir)
-        guard activePath != defaultPath else { return }   // no switch in effect
-
-        let accounts = VedettaSetup.claudeAccounts
-        guard accounts.contains(where: { $0.path == activePath }) else { return }
-        let activeToken = keychainReadRaw(service: namespacedService(for: activePath))
         guard let slotRaw = keychainReadRaw(service: legacyService) else { return }
-        if slotRaw == activeToken { return }   // slot already holds the active token
-
-        // The slot changed: some session refreshed it. Identify the owner.
+        let activePath = activeDefaultPath
+        if slotRaw == keychainReadRaw(service: namespacedService(for: activePath)) {
+            return   // mirror in sync — nothing changed
+        }
         guard let credentials = ClaudeCredentials.parse(Data(slotRaw.utf8)),
-              let email = await profileEmail(accessToken: credentials.accessToken) else {
-            // Can't identify — conservatively re-pin the active account.
-            if let activeToken { _ = keychainWrite(service: legacyService, value: activeToken) }
+              !credentials.isExpired(now: Date()),
+              let email = await profileEmail(accessToken: credentials.accessToken)
+        else { return }   // expired or offline: try again next tick
+        let accounts = VedettaSetup.claudeAccounts
+        guard let owner = accounts.first(where: {
+            $0.email?.caseInsensitiveCompare(email) == .orderedSame
+        }) else {
+            UserDefaults.standard.set(true, forKey: slotUnidentifiedKey)
             return
         }
-        guard let owner = accounts.first(where: {
-            $0.email?.lowercased() == email.lowercased()
-        }) else { return }   // unknown account — never clobber someone's login
-
-        // Capture the refreshed token so the owner's usage stays live.
         _ = keychainWrite(service: namespacedService(for: owner.path), value: slotRaw)
-        if owner.path != activePath, let activeToken {
-            // A non-active account clobbered the slot → re-pin the active one.
-            _ = keychainWrite(service: legacyService, value: activeToken)
+        if ClaudeAccountRegistry.canonical(owner.path) == activePath {
+            UserDefaults.standard.set(false, forKey: slotUnidentifiedKey)
+        } else {
+            recordHandover(to: owner.path)
         }
     }
 
@@ -92,7 +123,7 @@ enum AccountSwitcher {
         )
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("claude-code/2.1.218", forHTTPHeaderField: "User-Agent")
+        request.setValue(OAuthUsageProbe.userAgent, forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 15
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
@@ -102,20 +133,23 @@ enum AccountSwitcher {
         return email
     }
 
-    /// Ensures the account CURRENTLY in the default slot has a namespaced
-    /// copy of its token. Custom accounts already do (from login); only the
-    /// original default lacks one — mirror the slot into it, once. Returns
-    /// false only if that backup write fails, so the caller can abort.
+    /// Mirrors the slot into the active account's namespaced item before a
+    /// switch overwrites it. The slot is that account's LIVE chain (its
+    /// sessions may have rotated the refresh token since the last mirror),
+    /// so an existing-but-stale copy must be overwritten, not kept. Skipped
+    /// when the slot is a stranger's credential: the switch then clobbers
+    /// it exactly like /login would, but we never capture it as ours.
     private static func ensureCurrentSlotBacked() -> Bool {
-        let backup = namespacedService(for: activeDefaultPath)
-        if keychainReadRaw(service: backup) != nil { return true }
+        guard !slotIsUnidentified else { return true }
         guard let current = keychainReadRaw(service: legacyService) else { return true }
-        return keychainWrite(service: backup, value: current)
+        return keychainWrite(
+            service: namespacedService(for: activeDefaultPath), value: current
+        )
     }
 
     // MARK: - Keychain via the `security` CLI
 
-    private static func keychainReadRaw(service: String) -> String? {
+    static func keychainReadRaw(service: String) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = [
@@ -134,7 +168,7 @@ enum AccountSwitcher {
         return (text?.isEmpty == false) ? text : nil
     }
 
-    private static func keychainWrite(service: String, value: String) -> Bool {
+    static func keychainWrite(service: String, value: String) -> Bool {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         // -U updates the item if it already exists. The value is passed as
