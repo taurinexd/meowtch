@@ -40,6 +40,63 @@ enum VedettaSetup {
             ?? CodexHome(path: canonical, isDefault: false, isAvailable: true)
     }
 
+    // MARK: - Claude accounts (one CLAUDE_CONFIG_DIR each)
+
+    private static let claudeAccountsKey = "claude.customAccounts"
+
+    static var storedClaudeAccounts: [StoredClaudeAccount] {
+        guard let data = UserDefaults.standard.data(forKey: claudeAccountsKey),
+              let stored = try? JSONDecoder().decode([StoredClaudeAccount].self, from: data)
+        else { return [] }
+        return stored
+    }
+
+    static var claudeAccounts: [ClaudeAccount] {
+        ClaudeAccountRegistry.resolve(
+            defaultPath: home + "/.claude",
+            stored: storedClaudeAccounts,
+            directoryExists: { FileManager.default.fileExists(atPath: $0) }
+        )
+    }
+
+    private static func saveStoredClaudeAccounts(_ accounts: [StoredClaudeAccount]) {
+        UserDefaults.standard.set(try? JSONEncoder().encode(accounts), forKey: claudeAccountsKey)
+        NotificationCenter.default.post(name: .vedettaClaudeAccountsChanged, object: nil)
+    }
+
+    @discardableResult
+    static func registerClaudeAccount(_ path: String) -> ClaudeAccount {
+        let canonical = ClaudeAccountRegistry.canonical(path)
+        var stored = storedClaudeAccounts
+        if canonical != ClaudeAccountRegistry.canonical(home + "/.claude"),
+           !stored.contains(where: { ClaudeAccountRegistry.canonical($0.path) == canonical }) {
+            stored.append(StoredClaudeAccount(path: canonical))
+            saveStoredClaudeAccounts(stored)
+        }
+        return claudeAccounts.first { $0.path == canonical }
+            ?? ClaudeAccount(path: canonical, alias: nil, email: nil,
+                             subscriptionType: nil, isDefault: false, isAvailable: true)
+    }
+
+    static func updateStoredClaudeAccount(
+        path: String, mutate: (inout StoredClaudeAccount) -> Void
+    ) {
+        let canonical = ClaudeAccountRegistry.canonical(path)
+        var stored = storedClaudeAccounts
+        guard let index = stored.firstIndex(
+            where: { ClaudeAccountRegistry.canonical($0.path) == canonical }
+        ) else { return }
+        mutate(&stored[index])
+        saveStoredClaudeAccounts(stored)
+    }
+
+    static func removeClaudeAccount(path: String) {
+        let canonical = ClaudeAccountRegistry.canonical(path)
+        saveStoredClaudeAccounts(storedClaudeAccounts.filter {
+            ClaudeAccountRegistry.canonical($0.path) != canonical
+        })
+    }
+
     // MARK: - Runtime layout
 
     static var cacheDir: String { rootDir + "/cache" }
@@ -54,12 +111,31 @@ enum VedettaSetup {
         // absence never counts toward the self-cleanup grace period.
         try? fm.removeItem(atPath: orphanedPath)
         try writeLauncher()
-        try writeStatusLineScript()
+        for account in claudeAccounts {
+            try writeStatusLineScript(for: account)
+        }
     }
 
-    /// Harvests `rate_limits` from the statusline JSON into the cache;
-    /// prints nothing (empty statusline) and leaves room for user code.
-    private static func writeStatusLineScript() throws {
+    /// The per-account statusline drop: rl.json for the default account
+    /// (compatibility with existing installs), rl-<hash8>.json otherwise.
+    static func statusLineCachePath(for account: ClaudeAccount) -> String {
+        account.isDefault
+            ? cacheDir + "/rl.json"
+            : cacheDir + "/rl-\(AccountDigest.hash8(account.path)).json"
+    }
+
+    static func statusLinePath(for account: ClaudeAccount) -> String {
+        account.isDefault
+            ? statusLinePath
+            : binDir + "/vedetta-statusline-\(AccountDigest.hash8(account.path))"
+    }
+
+    /// Harvests `rate_limits` from the statusline JSON into the account's
+    /// cache file; prints nothing (empty statusline) and leaves room for
+    /// user code.
+    private static func writeStatusLineScript(for account: ClaudeAccount) throws {
+        let cacheFile = statusLineCachePath(for: account)
+            .replacingOccurrences(of: home, with: "$HOME")
         let script = """
         #!/bin/bash
         # Vedetta statusline (auto-generated): captures rate_limits for the
@@ -67,11 +143,12 @@ enum VedettaSetup {
         # rewritten if you delete it.
         input=$(cat)
         _rl=$(printf '%s' "$input" | /usr/bin/jq -c '.rate_limits // empty' 2>/dev/null)
-        [ -n "$_rl" ] && printf '%s\\n' "$_rl" > "$HOME/.vedetta/cache/rl.json"
+        [ -n "$_rl" ] && printf '%s\\n' "$_rl" > "\(cacheFile)"
         """
-        guard !FileManager.default.fileExists(atPath: statusLinePath) else { return }
-        try script.write(toFile: statusLinePath, atomically: true, encoding: .utf8)
-        chmod(statusLinePath, 0o755)
+        let path = statusLinePath(for: account)
+        guard !FileManager.default.fileExists(atPath: path) else { return }
+        try script.write(toFile: path, atomically: true, encoding: .utf8)
+        chmod(path, 0o755)
     }
 
     /// The launcher resolves the real helper inside the app bundle, so the
@@ -130,8 +207,28 @@ enum VedettaSetup {
 
     // MARK: - Coding-agent hooks
 
+    private static var defaultClaudeAccount: ClaudeAccount {
+        claudeAccounts[0]
+    }
+
+    private static func removalKey(for account: ClaudeAccount) -> String {
+        account.isDefault ? claudeRemovalKey : "\(claudeRemovalKey).\(account.path)"
+    }
+
+    private static func settingsBackupName(for account: ClaudeAccount) -> String {
+        account.isDefault
+            ? "settings.json"
+            : "settings-\(AccountDigest.hash8(account.path)).json"
+    }
+
     static func claudeHooksInstalled() -> Bool {
-        guard let settings = try? configStore.read(at: URL(fileURLWithPath: claudeSettingsPath)) else { return false }
+        claudeHooksInstalled(at: defaultClaudeAccount)
+    }
+
+    static func claudeHooksInstalled(at account: ClaudeAccount) -> Bool {
+        guard let settings = try? configStore.read(
+            at: URL(fileURLWithPath: account.settingsPath)
+        ) else { return false }
         return HookConfigurator.isInstalled(in: settings)
     }
 
@@ -161,11 +258,17 @@ enum VedettaSetup {
     /// so a deliberate uninstall isn't undone.
     @discardableResult
     static func healClaudeHooks() throws -> Bool {
-        guard !UserDefaults.standard.bool(forKey: claudeRemovalKey),
-              let settings = try? configStore.read(at: URL(fileURLWithPath: claudeSettingsPath)),
-              HookConfigurator.hasAnyHook(in: settings),
-              !HookConfigurator.isInstalled(in: settings) else { return false }
-        return try installClaudeHooks()
+        var changed = false
+        for account in claudeAccounts where account.isAvailable {
+            guard !UserDefaults.standard.bool(forKey: removalKey(for: account)),
+                  let settings = try? configStore.read(
+                    at: URL(fileURLWithPath: account.settingsPath)
+                  ),
+                  HookConfigurator.hasAnyHook(in: settings),
+                  !HookConfigurator.isInstalled(in: settings) else { continue }
+            changed = try installClaudeHooks(at: account) || changed
+        }
+        return changed
     }
 
     @discardableResult
@@ -186,20 +289,30 @@ enum VedettaSetup {
 
     @discardableResult
     static func installClaudeHooks() throws -> Bool {
+        var changed = false
+        for account in claudeAccounts where account.isAvailable {
+            changed = try installClaudeHooks(at: account) || changed
+        }
+        return changed
+    }
+
+    @discardableResult
+    static func installClaudeHooks(at account: ClaudeAccount) throws -> Bool {
+        try writeStatusLineScript(for: account)
         let result = try configStore.mutate(
-            at: URL(fileURLWithPath: claudeSettingsPath),
+            at: URL(fileURLWithPath: account.settingsPath),
             backupDirectory: URL(fileURLWithPath: backupsDir),
-            backupName: "settings.json"
+            backupName: settingsBackupName(for: account)
         ) { settings in
             let (merged, hooksChanged) = HookConfigurator.mergingHooks(into: settings)
             let (final, statusChanged) = HookConfigurator.installingStatusLine(
                 into: merged,
-                command: statusLinePath,
+                command: statusLinePath(for: account),
                 canReplace: statusLineIsOrphan
             )
             return (final, hooksChanged || statusChanged)
         }
-        UserDefaults.standard.set(false, forKey: claudeRemovalKey)
+        UserDefaults.standard.set(false, forKey: removalKey(for: account))
         return result.changed
     }
 
@@ -241,12 +354,21 @@ enum VedettaSetup {
 
     @discardableResult
     static func removeClaudeHooks() throws -> Bool {
-        defer { UserDefaults.standard.set(true, forKey: claudeRemovalKey) }
-        guard FileManager.default.fileExists(atPath: claudeSettingsPath) else { return false }
+        var changed = false
+        for account in claudeAccounts where account.isAvailable {
+            changed = try removeClaudeHooks(at: account) || changed
+        }
+        return changed
+    }
+
+    @discardableResult
+    static func removeClaudeHooks(at account: ClaudeAccount) throws -> Bool {
+        defer { UserDefaults.standard.set(true, forKey: removalKey(for: account)) }
+        guard FileManager.default.fileExists(atPath: account.settingsPath) else { return false }
         return try configStore.mutate(
-            at: URL(fileURLWithPath: claudeSettingsPath),
+            at: URL(fileURLWithPath: account.settingsPath),
             backupDirectory: URL(fileURLWithPath: backupsDir),
-            backupName: "settings.json",
+            backupName: settingsBackupName(for: account),
             transform: HookConfigurator.removingHooks
         ).changed
     }
@@ -292,8 +414,12 @@ enum VedettaSetup {
     }
 
     static func claudeStatusLineOwner() -> StatusLineOwner {
+        claudeStatusLineOwner(at: defaultClaudeAccount)
+    }
+
+    static func claudeStatusLineOwner(at account: ClaudeAccount) -> StatusLineOwner {
         guard let settings = try? configStore.read(
-            at: URL(fileURLWithPath: claudeSettingsPath)
+            at: URL(fileURLWithPath: account.settingsPath)
         ), let statusLine = settings["statusLine"] as? [String: Any],
            let command = statusLine["command"] as? String, !command.isEmpty
         else { return .none }
@@ -306,15 +432,20 @@ enum VedettaSetup {
     /// statusLine may be the user's own.
     @discardableResult
     static func claimStatusLine() throws -> Bool {
+        try claimStatusLine(at: defaultClaudeAccount)
+    }
+
+    @discardableResult
+    static func claimStatusLine(at account: ClaudeAccount) throws -> Bool {
         try ensureRuntimeLayout()
         return try configStore.mutate(
-            at: URL(fileURLWithPath: claudeSettingsPath),
+            at: URL(fileURLWithPath: account.settingsPath),
             backupDirectory: URL(fileURLWithPath: backupsDir),
-            backupName: "settings.json"
+            backupName: settingsBackupName(for: account)
         ) { settings in
             HookConfigurator.installingStatusLine(
                 into: settings,
-                command: statusLinePath,
+                command: statusLinePath(for: account),
                 canReplace: { _ in true }
             )
         }.changed
@@ -336,7 +467,12 @@ enum VedettaSetup {
     }
 
     private static func removalKey(for codexHome: CodexHome) -> String {
-        codexHome.isDefault ? codexRemovalKey : "(codexRemovalKey).(codexHome.path)"
+        codexHome.isDefault ? codexRemovalKey : "\(codexRemovalKey).\(codexHome.path)"
     }
 
+}
+
+extension Notification.Name {
+    /// Posted when the Claude account registry changes.
+    static let vedettaClaudeAccountsChanged = Notification.Name("vedettaClaudeAccountsChanged")
 }
