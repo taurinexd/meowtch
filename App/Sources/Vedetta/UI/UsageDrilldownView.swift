@@ -6,16 +6,21 @@ import VedettaKit
 /// the user taps the usage strip. Every Claude account gets a row with
 /// its 5h/7d windows; stale data shows its age, never a bare percentage.
 /// Tapping a row copies a ready login/switch command to the clipboard.
+/// Rows share the session cards' metrics: content at leading 18 /
+/// trailing 15, hover highlight instead of a permanent backdrop.
 struct UsageDrilldownView: View {
     @ObservedObject var usage: UsageModel
     @ObservedObject var store: SessionStore
     @State private var copiedAccountId: String?
+    @State private var hoveredAccountId: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             sectionHeader("CLAUDE")
-            ForEach(usage.claudeUsages) { entry in
-                accountRow(entry)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(usage.claudeUsages) { entry in
+                    accountRow(entry)
+                }
             }
             let codexWindows = usage.windows(for: .codex)
             if !codexWindows.isEmpty {
@@ -26,7 +31,8 @@ struct UsageDrilldownView: View {
                     }
                     Spacer()
                 }
-                .padding(.leading, 10)
+                .padding(.leading, 18)
+                .padding(.trailing, 15)
             }
         }
         .padding(.top, 2)
@@ -47,6 +53,7 @@ struct UsageDrilldownView: View {
             .font(.system(size: 10, weight: .black, design: .monospaced))
             .kerning(2)
             .foregroundStyle(Theme.secondaryText)
+            .padding(.leading, 18)
     }
 
     private func accountRow(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
@@ -56,7 +63,7 @@ struct UsageDrilldownView: View {
                 .fill(isActive ? Theme.color(for: .waitingForInput) : .clear)
                 .frame(width: 5, height: 5)
             Text(entry.account.displayName)
-                .font(.system(size: 11.5, weight: isActive ? .bold : .regular))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Theme.primaryText)
                 .lineLimit(1)
             Spacer(minLength: 8)
@@ -70,11 +77,13 @@ struct UsageDrilldownView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(Theme.secondaryText.opacity(0.7))
                 } else {
-                    if let fiveHour = entry.fiveHour {
-                        windowCell(label: "5h", window: fiveHour)
-                    }
-                    if let sevenDay = entry.sevenDay {
-                        windowCell(label: "7d", window: sevenDay)
+                    HStack(spacing: 10) {
+                        if let fiveHour = entry.fiveHour {
+                            windowCell(label: "5h", window: fiveHour)
+                        }
+                        if let sevenDay = entry.sevenDay {
+                            windowCell(label: "7d", window: sevenDay)
+                        }
                     }
                 }
             } else {
@@ -83,10 +92,22 @@ struct UsageDrilldownView: View {
                     .foregroundStyle(Theme.secondaryText.opacity(0.5))
             }
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 10)
-        .background(Theme.cardBackground, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.leading, 18)
+        .padding(.trailing, 15)
+        .padding(.vertical, 8)
+        // The cards' hover idiom: a soft rounded backdrop under the row
+        // the cursor is on (identical geometry to SessionRowView's).
+        .background(
+            RoundedRectangle(cornerRadius: 13)
+                .fill(Color.white.opacity(0.07))
+                .padding(.horizontal, 8)
+                .opacity(hoveredAccountId == entry.id ? 1 : 0)
+        )
+        .animation(.easeInOut(duration: 0.18), value: hoveredAccountId)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            hoveredAccountId = hovering ? entry.id : nil
+        }
         .onTapGesture { copyLoginCommand(entry.account) }
     }
 

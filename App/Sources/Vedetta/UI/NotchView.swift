@@ -124,6 +124,9 @@ struct NotchView: View {
                 model.isExpanded ? NotchAnimation.expand : NotchAnimation.collapse,
                 value: model.isExpanded
             )
+            // The drill-down swap resizes the panel: same expand curve, so
+            // the shape and its shadow glide instead of snapping.
+            .animation(NotchAnimation.expand, value: model.usageDrilldown)
             .animation(.easeOut(duration: 0.12), value: model.isPrimed)
 
             Spacer(minLength: 0)
@@ -255,14 +258,18 @@ struct NotchView: View {
                 peekContent(session)
             } else if model.usageDrilldown {
                 UsageDrilldownView(usage: usage, store: store)
+                    .transition(.opacity)
             } else {
                 sessionList
+                    .transition(.opacity)
             }
         }
         // +4: the reference crop sits 4pt inside the real flat edges.
         .padding(.horizontal, expandedFlare + 4)
         .padding(.bottom, 18)
         .frame(width: expandedWidth, alignment: .top)
+        // Cross-fade between the session list and the usage drill-down.
+        .animation(.easeInOut(duration: 0.18), value: model.usageDrilldown)
     }
 
     // MARK: - Finished-session peek
