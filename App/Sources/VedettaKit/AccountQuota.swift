@@ -9,12 +9,17 @@ public enum AccountQuota {
     public struct Sample: Equatable, Sendable {
         public var fiveHour: QuotaWindow?
         public var sevenDay: QuotaWindow?
+        public var meters: [UsageMeter]
         public var at: Date
         public var origin: Origin
 
-        public init(fiveHour: QuotaWindow?, sevenDay: QuotaWindow?, at: Date, origin: Origin) {
+        public init(
+            fiveHour: QuotaWindow?, sevenDay: QuotaWindow?,
+            meters: [UsageMeter] = [], at: Date, origin: Origin
+        ) {
             self.fiveHour = fiveHour
             self.sevenDay = sevenDay
+            self.meters = meters
             self.at = at
             self.origin = origin
         }

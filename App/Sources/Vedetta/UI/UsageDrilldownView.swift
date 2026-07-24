@@ -70,56 +70,45 @@ struct UsageDrilldownView: View {
 
     private func accountRow(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
         let isActive = entry.account.path == activeAccountPath
-        return HStack(spacing: 8) {
-            Circle()
-                .fill(isActive ? Theme.color(for: .waitingForInput) : .clear)
-                .frame(width: 5, height: 5)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.account.displayName)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
-                if let detail = accountDetail(entry.account) {
-                    Text(detail)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.secondaryText.opacity(0.8))
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(isActive ? Theme.color(for: .waitingForInput) : .clear)
+                    .frame(width: 5, height: 5)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(entry.account.displayName)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.primaryText)
                         .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 8)
-            if switchingId == entry.id {
-                Text("switching…")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Theme.color(for: .running))
-            } else if feedback?.id == entry.id {
-                Text(feedback?.text ?? "")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Theme.color(for: .needsApproval))
-            } else if let sample = entry.sample {
-                if entry.isStale {
-                    Text("stale \(age(of: sample.at))")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.secondaryText.opacity(0.7))
-                } else {
-                    HStack(spacing: 10) {
-                        if let fiveHour = entry.fiveHour {
-                            windowCell(label: "5h", window: fiveHour)
-                        }
-                        if let sevenDay = entry.sevenDay {
-                            windowCell(label: "7d", window: sevenDay)
-                        }
+                    if let detail = accountDetail(entry.account) {
+                        Text(detail)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.secondaryText.opacity(0.8))
+                            .lineLimit(1)
                     }
                 }
-            } else {
-                Text("run a session or turn on network refresh")
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(Theme.secondaryText.opacity(0.5))
-                    .multilineTextAlignment(.trailing)
+                Spacer(minLength: 8)
+                if switchingId == entry.id {
+                    Text("switching…")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Theme.color(for: .running))
+                } else if feedback?.id == entry.id {
+                    Text(feedback?.text ?? "")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.color(for: .needsApproval))
+                } else if isActive {
+                    Text("active")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.secondaryText.opacity(0.6))
+                }
+            }
+            if switchingId != entry.id {
+                accountBody(entry)
             }
         }
         .padding(.leading, 18)
         .padding(.trailing, 15)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         // The cards' hover idiom: a soft rounded backdrop under the row
         // the cursor is on (identical geometry to SessionRowView's).
         .background(
@@ -134,6 +123,82 @@ struct UsageDrilldownView: View {
             hoveredAccountId = hovering ? entry.id : nil
         }
         .onTapGesture { switchTo(entry.account) }
+    }
+
+    /// The meters (or a hint) below the account header.
+    @ViewBuilder
+    private func accountBody(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
+        if !entry.meters.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                if entry.isStale, let sample = entry.sample {
+                    Text("Last updated \(age(of: sample.at)) ago")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(Theme.secondaryText.opacity(0.7))
+                }
+                ForEach(Array(entry.meters.enumerated()), id: \.offset) { _, meter in
+                    meterView(meter)
+                }
+            }
+            .padding(.leading, 13)
+        } else {
+            Text("run a session or turn on network refresh")
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.secondaryText.opacity(0.5))
+                .padding(.leading, 13)
+        }
+    }
+
+    /// One `/usage`-style meter: label, a severity-colored bar with the
+    /// percentage, and the reset line.
+    private func meterView(_ meter: UsageMeter) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(meter.label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.primaryText)
+            HStack(spacing: 8) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.10))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(meterColor(meter.severity))
+                            .frame(width: max(2, geo.size.width * CGFloat(min(meter.percent, 100)) / 100))
+                    }
+                }
+                .frame(height: 8)
+                Text("\(meter.percent)% used")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Theme.secondaryText)
+                    .fixedSize()
+            }
+            if let reset = meter.resetsAt {
+                Text(resetText(reset))
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(Theme.secondaryText.opacity(0.7))
+            }
+        }
+    }
+
+    private func meterColor(_ severity: UsageMeter.Severity) -> Color {
+        switch severity {
+        case .normal: Color(red: 0.42, green: 0.78, blue: 0.48)
+        case .warning: Theme.claudeOrange
+        case .critical: Color(red: 0.92, green: 0.34, blue: 0.34)
+        }
+    }
+
+    /// "Resets 5:50pm (Europe/Rome)" today, "Resets Jul 25 at 12:59am
+    /// (Europe/Rome)" otherwise — mirroring /usage.
+    private func resetText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = Calendar.current.isDateInToday(date)
+            ? "h:mma"
+            : "MMM d 'at' h:mma"
+        let time = formatter.string(from: date)
+            .replacingOccurrences(of: "AM", with: "am")
+            .replacingOccurrences(of: "PM", with: "pm")
+        return "Resets \(time) (\(TimeZone.current.identifier))"
     }
 
     private func windowCell(label: String, window: UsageModel.Window) -> some View {

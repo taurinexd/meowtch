@@ -52,11 +52,11 @@ enum OAuthUsageProbe {
             return .rateLimited(retryAfter: retryAfter)
         }
         guard http.statusCode == 200 else { return .unavailable }
-        let parsed = RateLimitHarvest.windows(from: data)
+        let parsed = RateLimitHarvest.parse(from: data)
         guard parsed.fiveHour != nil || parsed.sevenDay != nil else { return .unavailable }
         return .success(AccountQuota.Sample(
             fiveHour: parsed.fiveHour, sevenDay: parsed.sevenDay,
-            at: Date(), origin: .pull
+            meters: parsed.meters, at: Date(), origin: .pull
         ))
     }
 
