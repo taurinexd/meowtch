@@ -129,31 +129,29 @@ final class UsageModel: ObservableObject {
 
     func refresh(forceCodex: Bool = false) {
         if forceCodex { lastCodexProbe = nil }
-        let fm = FileManager.default
         let now = Date()
         let accounts = VedettaSetup.claudeAccounts
+        // Follow the shared slot (session refreshes, manual /login) so the
+        // active-account pointer and the namespaced mirrors stay true.
+        Task.detached { await AccountSwitcher.reconcileSlot() }
+        // rl.json — the default config dir's statusline drop — is written
+        // by plain `claude`, i.e. by whichever account owns the shared
+        // slot right now, NOT necessarily the default account. Attribute
+        // it to the owner; pushes older than the last slot handover belong
+        // to the previous owner and are dropped.
+        let slotCachePath = accounts.first.map(VedettaSetup.statusLineCachePath(for:))
+        let handoverAt = AccountSwitcher.lastHandoverAt
         claudeUsages = accounts.map { account in
-            let path = VedettaSetup.statusLineCachePath(for: account)
             var push: AccountQuota.Sample?
-            // The default account's cache (rl.json) is written by plain
-            // `claude`, which a global switch may have pointed at another
-            // account. When a switch is in effect, that cache is the active
-            // account's data, not the default's — so ignore it and rely on
-            // the (backup-token) pull instead.
-            let switchInEffect = account.isDefault
-                && AccountSwitcher.activeDefaultPath
-                    != ClaudeAccountRegistry.canonical(account.path)
-            if !switchInEffect,
-               let attrs = try? fm.attributesOfItem(atPath: path),
-               let modified = attrs[.modificationDate] as? Date,
-               let data = fm.contents(atPath: path) {
-                let parsed = RateLimitHarvest.parse(from: data)
-                if parsed.fiveHour != nil || parsed.sevenDay != nil {
-                    push = AccountQuota.Sample(
-                        fiveHour: parsed.fiveHour, sevenDay: parsed.sevenDay,
-                        meters: parsed.meters, at: modified, origin: .push
-                    )
-                }
+            if !account.isDefault {
+                push = pushSample(
+                    at: VedettaSetup.statusLineCachePath(for: account), notBefore: nil
+                )
+            }
+            if AccountSwitcher.ownsSharedSlot(account), let slotCachePath,
+               let slotPush = pushSample(at: slotCachePath, notBefore: handoverAt),
+               slotPush.at >= (push?.at ?? .distantPast) {
+                push = slotPush
             }
             let merged = AccountQuota.merge(push: push, pull: pullSamples[account.id])
             return ClaudeAccountUsage(
@@ -163,6 +161,20 @@ final class UsageModel: ObservableObject {
         }
         refreshPull(accounts: accounts, now: now)
         Task { await refreshCodex() }
+    }
+
+    private func pushSample(at path: String, notBefore: Date?) -> AccountQuota.Sample? {
+        let fm = FileManager.default
+        guard let attrs = try? fm.attributesOfItem(atPath: path),
+              let modified = attrs[.modificationDate] as? Date,
+              notBefore.map({ modified > $0 }) ?? true,
+              let data = fm.contents(atPath: path) else { return nil }
+        let parsed = RateLimitHarvest.parse(from: data)
+        guard parsed.fiveHour != nil || parsed.sevenDay != nil else { return nil }
+        return AccountQuota.Sample(
+            fiveHour: parsed.fiveHour, sevenDay: parsed.sevenDay,
+            meters: parsed.meters, at: modified, origin: .push
+        )
     }
 
     /// The opt-in network probe: one account at a time as the scheduler

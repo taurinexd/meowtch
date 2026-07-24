@@ -3,10 +3,11 @@ import VedettaKit
 
 /// Opt-in quota probe: reads the account's OAuth access token from the
 /// Claude Code Keychain item (or .credentials.json) and asks the same
-/// endpoint /usage uses. Read-only: never refreshes tokens — an expired
-/// token just means the account shows as stale until one of its sessions
-/// runs. Undocumented endpoint; the User-Agent must look like the CLI or
-/// the request lands in a throttled bucket.
+/// endpoint /usage uses. The slot owner's token is kept fresh by its live
+/// sessions; a non-owner's expired token is refreshed via
+/// ClaudeTokenRefresher so every account stays live independently.
+/// Undocumented endpoint; the User-Agent must look like the CLI or the
+/// request lands in a throttled bucket.
 enum OAuthUsageProbe {
     enum ProbeResult {
         case success(AccountQuota.Sample)
@@ -18,7 +19,7 @@ enum OAuthUsageProbe {
 
     /// Version for the User-Agent: the real CLI's if discoverable, else a
     /// recent known-good pinned one.
-    private static let userAgent: String = {
+    static let userAgent: String = {
         let pinned = "2.1.218"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -37,7 +38,12 @@ enum OAuthUsageProbe {
     }()
 
     static func fetch(account: ClaudeAccount) async -> ProbeResult {
-        guard let credentials = readCredentials(for: account),
+        var credentials = readCredentials(for: account)
+        if credentials?.isExpired(now: Date()) ?? true,
+           await ClaudeTokenRefresher.refreshExpiredCredential(for: account) {
+            credentials = readCredentials(for: account)
+        }
+        guard let credentials,
               !credentials.isExpired(now: Date()) else { return .unavailable }
         var request = URLRequest(url: endpoint)
         request.setValue("Bearer \(credentials.accessToken)", forHTTPHeaderField: "Authorization")
@@ -65,7 +71,8 @@ enum OAuthUsageProbe {
     /// user can choose Always Allow), then the credentials file.
     private static func readCredentials(for account: ClaudeAccount) -> ClaudeCredentials? {
         for candidate in ClaudeCredentialLocator.candidates(
-            configDir: account.path, isDefault: account.isDefault
+            configDir: account.path,
+            ownsSharedSlot: AccountSwitcher.ownsSharedSlot(account)
         ) {
             switch candidate {
             case .keychainService(let service):

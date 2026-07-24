@@ -18,30 +18,32 @@ struct ClaudeCredentialLocatorTests {
             == AccountDigest.hash8("/Users/x/cafe\u{0301}"))
     }
 
-    @Test func defaultAccountReadsItsNamespacedBackupFirst() {
-        // After a global switch, the default account's own token lives in
-        // its namespaced backup, while the shared slot may hold another
-        // account — so the backup must be tried first.
-        let hash = AccountDigest.hash8("/Users/x/.claude")
+    @Test func slotOwnerReadsTheSharedSlotFirst() {
+        // The account plain `claude` resolves to right now: its sessions
+        // keep the shared slot fresh, so the slot is its canonical source;
+        // the namespaced mirror is the fallback.
+        let hash = AccountDigest.hash8("/Users/x/.claude-work")
         let candidates = ClaudeCredentialLocator.candidates(
-            configDir: "/Users/x/.claude", isDefault: true
+            configDir: "/Users/x/.claude-work", ownsSharedSlot: true
         )
         #expect(candidates == [
-            .keychainService("Claude Code-credentials-\(hash)"),
             .keychainService("Claude Code-credentials"),
-            .credentialsFile("/Users/x/.claude/.credentials.json"),
+            .keychainService("Claude Code-credentials-\(hash)"),
+            .credentialsFile("/Users/x/.claude-work/.credentials.json"),
         ])
     }
 
-    @Test func customAccountUsesNamespacedServiceFirst() {
-        let hash = AccountDigest.hash8("/Users/x/.claude-work")
+    @Test func nonOwnerNeverReadsTheSharedSlot() {
+        // The shared slot holds someone ELSE's credential: reading it
+        // would attribute that account's usage to this one (the bug the
+        // user hit live on 2026-07-24).
+        let hash = AccountDigest.hash8("/Users/x/.claude")
         let candidates = ClaudeCredentialLocator.candidates(
-            configDir: "/Users/x/.claude-work", isDefault: false
+            configDir: "/Users/x/.claude", ownsSharedSlot: false
         )
         #expect(candidates == [
             .keychainService("Claude Code-credentials-\(hash)"),
-            .keychainService("Claude Code-credentials"),   // fallback CLI vecchie
-            .credentialsFile("/Users/x/.claude-work/.credentials.json"),
+            .credentialsFile("/Users/x/.claude/.credentials.json"),
         ])
     }
 
