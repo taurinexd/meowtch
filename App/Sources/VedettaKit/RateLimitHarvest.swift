@@ -21,13 +21,23 @@ public enum RateLimitHarvest {
               let root = object as? [String: Any] else { return (nil, nil) }
         var found: [(key: String, window: QuotaWindow)] = []
         collect(from: root, keyPath: "", into: &found)
-        let fiveHour = found.first {
-            $0.key.contains("5h") || $0.key.contains("five_hour") || $0.key.contains("primary")
-        }?.window
-        let sevenDay = found.first {
-            $0.key.contains("7d") || $0.key.contains("seven_day") || $0.key.contains("secondary")
-        }?.window
+        // An exact key component wins over a substring hit, so
+        // "seven_day_opus" never shadows "seven_day".
+        let fiveHour = pick(found, names: ["5h", "five_hour", "primary"])
+        let sevenDay = pick(found, names: ["7d", "seven_day", "secondary"])
         return (fiveHour, sevenDay)
+    }
+
+    private static func pick(
+        _ found: [(key: String, window: QuotaWindow)], names: [String]
+    ) -> QuotaWindow? {
+        let exact = found.first {
+            guard let component = $0.key.split(separator: "/").last else { return false }
+            return names.contains(String(component))
+        }
+        return (exact ?? found.first { entry in
+            names.contains { entry.key.contains($0) }
+        })?.window
     }
 
     private static func collect(
