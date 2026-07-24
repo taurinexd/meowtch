@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 import VedettaKit
 
 /// Sidebar + pages, mirroring the original's Settings anatomy (General,
@@ -454,6 +455,7 @@ private struct NotificationsSettingsPage: View {
 private struct DisplaySettingsPage: View {
     @State private var externalDisplay = NotchPanelController.preferExternalDisplay
     @AppStorage(SessionMetadataPresentation.defaultsKey) private var showMetadata = false
+    @AppStorage(CustomSpriteLibrary.enabledKey) private var customSprites = false
 
     var body: some View {
         SettingsSection(
@@ -480,6 +482,62 @@ private struct DisplaySettingsPage: View {
                 Toggle("", isOn: $showMetadata).toggleStyle(.switch).labelsHidden()
             }
         }
+
+        SettingsSection(
+            title: "Sprite",
+            footer: "GIFs live in ~/.vedetta/custom-sprites, one per state; the cat fills the gaps. Scaled to the sprite height, never blown up."
+        ) {
+            SettingsRow(
+                title: "Custom sprites",
+                subtitle: "Replace the cat with your own GIFs, per state."
+            ) {
+                Toggle("", isOn: $customSprites).toggleStyle(.switch).labelsHidden()
+            }
+            if customSprites {
+                ForEach(SessionState.allCases, id: \.self) { state in
+                    RowDivider()
+                    SpriteFileRow(state: state)
+                }
+            }
+        }
+    }
+}
+
+private struct SpriteFileRow: View {
+    let state: SessionState
+    @State private var installed = false
+
+    var body: some View {
+        SettingsRow(
+            title: Theme.label(for: state).capitalized,
+            subtitle: installed
+                ? CustomSpriteLibrary.fileName(for: state)
+                : "Built-in cat"
+        ) {
+            HStack(spacing: 8) {
+                Button("Choose…") { choose() }
+                if installed {
+                    Button("Reset") {
+                        try? CustomSpriteLibrary.standard.remove(for: state)
+                        refresh()
+                    }
+                }
+            }
+        }
+        .onAppear(perform: refresh)
+    }
+
+    private func refresh() {
+        installed = CustomSpriteLibrary.standard.url(for: state) != nil
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.gif]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? CustomSpriteLibrary.standard.install(url, for: state)
+        refresh()
     }
 }
 

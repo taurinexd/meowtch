@@ -152,7 +152,7 @@ struct NotchView: View {
     /// Content flanks the physical notch: nothing may sit under the camera.
     private var collapsedContent: some View {
         HStack(spacing: 6) {
-            MascotSprite(
+            SessionSpriteView(
                 state: collapsedTopState ?? .completed,
                 stateChangedAt: collapsedTopSession?.stateChangedAt ?? .distantPast,
                 color: statusColor,
