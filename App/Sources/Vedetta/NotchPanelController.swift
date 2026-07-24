@@ -114,6 +114,21 @@ final class NotchPanelController {
             }
         }
 
+        // Dev aid: open the usage drill-down from the socket, so its
+        // rendering can be captured without a strip tap.
+        NotificationCenter.default.addObserver(
+            forName: .vedettaDebugSetDrilldown,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            let on = note.userInfo?["on"] as? Bool ?? false
+            Task { @MainActor in
+                self?.panel.orderFrontRegardless()
+                self?.uiModel.usageDrilldown = on
+                self?.setExpanded(true)
+            }
+        }
+
         // A card jump raises the target window: collapse right away so the
         // panel gets out of the way, like the original.
         NotificationCenter.default.addObserver(
@@ -647,6 +662,8 @@ extension Notification.Name {
     static let vedettaPanelDisplayChanged = Notification.Name("vedettaPanelDisplayChanged")
     /// Debug: drive the expand/collapse animation from the socket.
     static let vedettaDebugSetExpanded = Notification.Name("vedettaDebugSetExpanded")
+    /// Debug: open/close the usage drill-down from the socket.
+    static let vedettaDebugSetDrilldown = Notification.Name("vedettaDebugSetDrilldown")
     /// Posted by a session card when the user jumps to its terminal.
     static let vedettaDidJump = Notification.Name("vedettaDidJump")
     /// Posted when a session's turn ends (Stop), for the finished peek.

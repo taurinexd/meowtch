@@ -409,6 +409,14 @@ enum EventDispatcher {
             )
             return Data(#"{"ok":true}"#.utf8)
 
+        case "setDrilldown":
+            NotificationCenter.default.post(
+                name: .vedettaDebugSetDrilldown,
+                object: nil,
+                userInfo: ["on": envelope["value"] as? Bool ?? false]
+            )
+            return Data(#"{"ok":true}"#.utf8)
+
         case "decide":
             guard let id = envelope["id"] as? Int else { return nil }
             let allow = envelope["allow"] as? Bool ?? false
