@@ -91,7 +91,7 @@ Pipeline `make-icon.sh`/iconutil invariata. Gate: leggibilità verificata a 32 p
 
 Come i custom sounds, ma per lo sprite:
 
-- Directory `~/.vedetta/custom-sprites/`, un file per stato col raw value dello stato:
+- Directory `~/.vedetta/custom-sprites/`, un file per stato col **nome del case** (`SessionState` è Int-backed):
   `running.gif`, `waitingForInput.gif`, `needsApproval.gif`, `compacting.gif`, `completed.gif`.
 - **Fallback**: stato senza GIF → mascotte con l'espressione di quello stato.
 - Rendering: `NSImageView` con `animates = true` (via `NSViewRepresentable`); altezza
