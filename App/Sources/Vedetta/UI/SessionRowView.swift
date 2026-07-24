@@ -87,7 +87,7 @@ struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 0) {
                 HStack(alignment: .center, spacing: 6) {
-                    MascotSprite(
+                    SessionSpriteView(
                         state: session.state,
                         stateChangedAt: session.stateChangedAt,
                         color: Theme.color(for: session.state),
