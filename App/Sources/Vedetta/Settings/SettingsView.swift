@@ -8,13 +8,14 @@ import VedettaKit
 /// control here is wired to behavior that actually exists.
 struct SettingsView: View {
     enum Page: String, CaseIterable, Identifiable {
-        case general, integrations, notifications, display, sound, usage, about
+        case general, integrations, accounts, notifications, display, sound, usage, about
         var id: String { rawValue }
 
         var title: String {
             switch self {
             case .general: "General"
             case .integrations: "Integrations"
+            case .accounts: "Accounts"
             case .notifications: "Notifications"
             case .display: "Display"
             case .sound: "Sound"
@@ -27,6 +28,7 @@ struct SettingsView: View {
             switch self {
             case .general: "gearshape.fill"
             case .integrations: "puzzlepiece.extension.fill"
+            case .accounts: "person.2.badge.key.fill"
             case .notifications: "bell.badge.fill"
             case .display: "textformat.size"
             case .sound: "speaker.wave.2.fill"
@@ -39,6 +41,7 @@ struct SettingsView: View {
             switch self {
             case .general: Color(nsColor: .systemGray)
             case .integrations: .blue
+            case .accounts: .orange
             case .notifications: .red
             case .display: .purple
             case .sound: .green
@@ -76,6 +79,7 @@ struct SettingsView: View {
                     switch selection {
                     case .general: GeneralSettingsPage()
                     case .integrations: IntegrationsSettingsPage()
+                    case .accounts: AccountsSettingsPage()
                     case .notifications: NotificationsSettingsPage()
                     case .display: DisplaySettingsPage()
                     case .sound: SoundSettingsPage()
@@ -687,6 +691,173 @@ private struct AboutSettingsPage: View {
             SettingsRow(title: "MIT License",
                         subtitle: "Free and open source.") {
                 EmptyView()
+            }
+        }
+    }
+}
+
+// MARK: - Accounts
+
+private struct AccountsSettingsPage: View {
+    @State private var accounts = VedettaSetup.claudeAccounts
+    @AppStorage(SettingsKey.claudeNetworkRefresh) private var networkRefresh = false
+
+    var body: some View {
+        SettingsSection(
+            title: "Claude accounts",
+            footer: "One account per config dir (CLAUDE_CONFIG_DIR). Hooks and the usage statusline install per account; sessions started with that dir show up in the notch tagged with it."
+        ) {
+            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                if index > 0 { RowDivider() }
+                AccountRow(account: account, onChange: reload)
+            }
+            RowDivider()
+            SettingsRow(
+                title: "Add account…",
+                subtitle: "Pick (or create) a config dir, e.g. ~/.claude-work, then log into it from your terminal — tap its row in the notch to copy the command."
+            ) {
+                Button("Add…") { addAccount() }
+            }
+        }
+        SettingsSection(
+            title: "Network refresh",
+            footer: "Reads each account's quota via Claude's own usage endpoint with the credentials already on this Mac. Read-only, undocumented endpoint, ~5 min cadence with backoff. Off = Vedetta stays fully offline."
+        ) {
+            SettingsRow(
+                title: "Refresh quota over the network",
+                subtitle: "Keeps idle accounts' usage fresh without an active session."
+            ) {
+                Toggle("", isOn: $networkRefresh)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: .vedettaClaudeAccountsChanged
+        )) { _ in reload() }
+    }
+
+    private func reload() {
+        accounts = VedettaSetup.claudeAccounts
+    }
+
+    private func addAccount() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+        panel.prompt = "Use as account dir"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let account = VedettaSetup.registerClaudeAccount(url.path)
+        try? VedettaSetup.installClaudeHooks(at: account)
+        reload()
+    }
+}
+
+private struct AccountRow: View {
+    let account: ClaudeAccount
+    var onChange: () -> Void
+    @State private var alias: String = ""
+    @State private var hooksInstalled = false
+    @State private var owner = VedettaSetup.StatusLineOwner.none
+    @State private var identityError: String?
+
+    private var subtitle: String {
+        var parts: [String] = [account.path]
+        if let email = account.email { parts.append(email) }
+        if let plan = account.subscriptionType { parts.append(plan) }
+        if case .foreign = owner { parts.append("foreign statusline") }
+        if !hooksInstalled { parts.append("hooks not installed") }
+        if let identityError { parts.append(identityError) }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        SettingsRow(title: account.displayName, subtitle: subtitle) {
+            HStack(spacing: 8) {
+                if !account.isDefault {
+                    TextField("Alias", text: $alias)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 90)
+                        .onSubmit { saveAlias() }
+                }
+                Button("Identify") { refreshIdentity() }
+                if !hooksInstalled {
+                    Button("Hook") {
+                        try? VedettaSetup.installClaudeHooks(at: account)
+                        refreshState()
+                    }
+                }
+                if case .foreign = owner {
+                    Button("Claim statusline") {
+                        try? VedettaSetup.claimStatusLine(at: account)
+                        refreshState()
+                    }
+                }
+                if !account.isDefault {
+                    Button("Remove") {
+                        VedettaSetup.removeClaudeAccount(path: account.path)
+                        onChange()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            alias = account.alias ?? ""
+            refreshState()
+        }
+    }
+
+    private func refreshState() {
+        hooksInstalled = VedettaSetup.claudeHooksInstalled(at: account)
+        owner = VedettaSetup.claudeStatusLineOwner(at: account)
+    }
+
+    private func saveAlias() {
+        VedettaSetup.updateStoredClaudeAccount(path: account.path) {
+            $0.alias = alias.isEmpty ? nil : alias
+        }
+        onChange()
+    }
+
+    /// `claude auth status --json` for this config dir: email + plan.
+    private func refreshIdentity() {
+        identityError = nil
+        let path = account.path
+        DispatchQueue.global().async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-lc", "claude auth status --json 2>/dev/null"]
+            var environment = ProcessInfo.processInfo.environment
+            environment["CLAUDE_CONFIG_DIR"] = path
+            process.environment = environment
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
+            guard (try? process.run()) != nil else { return }
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            DispatchQueue.main.async {
+                guard let object = try? JSONSerialization.jsonObject(with: data),
+                      let root = object as? [String: Any] else {
+                    identityError = "identity check failed"
+                    return
+                }
+                let loggedIn = (root["loggedIn"] as? Bool) ?? false
+                guard loggedIn else {
+                    identityError = "not logged in"
+                    return
+                }
+                let email = root["email"] as? String
+                    ?? (root["account"] as? [String: Any])?["email"] as? String
+                let plan = root["subscriptionType"] as? String
+                    ?? (root["account"] as? [String: Any])?["subscriptionType"] as? String
+                VedettaSetup.updateStoredClaudeAccount(path: path) {
+                    $0.email = email
+                    $0.subscriptionType = plan
+                }
+                onChange()
             }
         }
     }
