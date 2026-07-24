@@ -374,6 +374,19 @@ enum EventDispatcher {
                 "codexSecondary": describe(usage.codexSecondary),
                 "selected": String(describing: usage.selectedProvider),
                 "display": String(describing: usage.displayProvider),
+                "activeAccount": usage.activeClaudeAccountPath ?? "-",
+                "claudeAccounts": usage.claudeUsages.map { entry -> [String: Any] in
+                    [
+                        "path": entry.account.path,
+                        "name": entry.account.displayName,
+                        "fiveHour": describe(entry.fiveHour),
+                        "sevenDay": describe(entry.sevenDay),
+                        "stale": entry.isStale,
+                        "origin": entry.sample.map {
+                            $0.origin == .pull ? "pull" : "push"
+                        } ?? "-",
+                    ]
+                },
             ])
 
         case "openOnboarding":
