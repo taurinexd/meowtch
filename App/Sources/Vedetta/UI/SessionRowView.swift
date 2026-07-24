@@ -87,14 +87,16 @@ struct SessionRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 0) {
                 HStack(alignment: .center, spacing: 6) {
-                    PixelSprite(
-                        pattern: PixelSprite.lookout,
+                    MascotSprite(
+                        state: session.state,
+                        stateChangedAt: session.stateChangedAt,
                         color: Theme.color(for: session.state),
                         pixelSize: 2.2
                     )
                     if session.subagentCount > 0 {
-                        PixelSprite(
-                            pattern: PixelSprite.lookout,
+                        MascotSprite(
+                            state: session.state,
+                            stateChangedAt: session.stateChangedAt,
                             color: Theme.color(for: session.state).opacity(0.8),
                             pixelSize: 1.4
                         )

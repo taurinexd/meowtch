@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import VedettaKit
 
 /// First-launch wizard in the retro-terminal style: welcome, permissions,
 /// agents, the shareable sighting card, all-set. Shown once (UserDefaults),
@@ -110,7 +111,7 @@ private struct OnboardingView: View {
     private var welcome: some View {
         VStack(spacing: 22) {
             PixelSprite(
-                pattern: PixelSprite.lookout,
+                pattern: MascotFrame.base,
                 color: step.accent,
                 pixelSize: 9
             )
@@ -234,7 +235,7 @@ private struct OnboardingView: View {
     private var allSet: some View {
         VStack(spacing: 18) {
             PixelSprite(
-                pattern: PixelSprite.lookout,
+                pattern: MascotFrame.base,
                 color: step.accent,
                 pixelSize: 7
             )
