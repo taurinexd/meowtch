@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import VedettaKit
 
 /// Real quota data for the usage strip, harvested from the statusline
 /// hook's rate_limits dump (`~/.vedetta/cache/rl.json`). Tolerant parser:
@@ -110,19 +111,11 @@ final class UsageModel: ObservableObject {
             }
             .max { $0.modified < $1.modified }
         guard let freshest,
-              let data = fm.contents(atPath: freshest.path),
-              let object = try? JSONSerialization.jsonObject(with: data),
-              let root = object as? [String: Any] else { return }
+              let data = fm.contents(atPath: freshest.path) else { return }
 
-        var windows: [(key: String, window: Window)] = []
-        collectWindows(from: root, keyPath: "", into: &windows)
-
-        fiveHour = windows.first {
-            $0.key.contains("5h") || $0.key.contains("five_hour") || $0.key.contains("primary")
-        }?.window
-        sevenDay = windows.first {
-            $0.key.contains("7d") || $0.key.contains("seven_day") || $0.key.contains("secondary")
-        }?.window
+        let parsed = RateLimitHarvest.windows(from: data)
+        fiveHour = parsed.fiveHour.map(Window.init(quota:))
+        sevenDay = parsed.sevenDay.map(Window.init(quota:))
 
         Task { await refreshCodex() }
     }
@@ -149,28 +142,14 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    private func collectWindows(
-        from object: [String: Any],
-        keyPath: String,
-        into result: inout [(key: String, window: Window)]
-    ) {
-        let percent = (object["used_percentage"] as? NSNumber)?.intValue
-            ?? (object["utilization"] as? NSNumber)?.intValue
-            ?? (object["used_percent"] as? NSNumber)?.intValue
-        if let percent {
-            var resetsAt: Date?
-            if let reset = object["resets_at"] as? String {
-                resetsAt = ISO8601DateFormatter().date(from: reset)
-            } else if let epoch = object["resets_at"] as? NSNumber {
-                resetsAt = Date(timeIntervalSince1970: epoch.doubleValue)
-            }
-            result.append((keyPath.lowercased(), Window(percent: percent, resetsAt: resetsAt)))
-        }
-        for (key, value) in object {
-            if let nested = value as? [String: Any] {
-                collectWindows(from: nested, keyPath: keyPath + "/" + key, into: &result)
-            }
-        }
+}
+
+extension UsageModel.Window {
+    init(quota: QuotaWindow) {
+        self.init(
+            percent: quota.percent, resetsAt: quota.resetsAt,
+            windowMinutes: quota.windowMinutes
+        )
     }
 }
 
