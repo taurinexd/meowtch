@@ -105,7 +105,7 @@ public enum SessionEventReducer {
                 agent: AgentKind(rawValue: source) ?? .claude,
                 title: "",
                 directory: cwd ?? "",
-                state: .running,
+                state: impliesLiveTurn(name) ? .running : .waitingForInput,
                 startedAt: eventDate,
                 lastActivityAt: eventDate
             )
@@ -221,12 +221,13 @@ public enum SessionEventReducer {
 
         // Ephemeral ids with nothing to show — Claude's resume/new-
         // conversation picker fires SessionStart/End for sessions that
-        // never get a transcript — must not become empty gray ghost cards.
-        // Their terminal identity is recorded above; the card materializes
-        // with the first real content (prompt, reply, or an interrupt).
+        // never get a transcript, and bookkeeping events can be the first
+        // we hear of one — must not become empty gray ghost cards. Their
+        // terminal identity is recorded above; the card materializes with
+        // the first real content (prompt, reply, or an interrupt).
         if existing == nil,
            source == "claude",
-           name == "SessionStart" || name == "SessionEnd",
+           name == "SessionStart" || name == "SessionEnd" || !impliesLiveTurn(name),
            session.title.isEmpty,
            session.lastMessage == nil,
            session.lastAssistantMessage == nil {
@@ -271,6 +272,18 @@ public enum SessionEventReducer {
 
     /// Fills title and message lines from the transcript the hook points at.
     /// A name the user gave the session always wins over the prompt fallback.
+    /// Whether hearing this event FIRST (lazy adoption of a session the
+    /// app never saw) implies a live turn. Lifecycle and tool events do;
+    /// bookkeeping ones don't: the away-summary sidechain fires Subagent
+    /// hooks minutes AFTER Stop, and notifications arrive while idle — a
+    /// session first seen through them is waiting, not working.
+    private static func impliesLiveTurn(_ event: String) -> Bool {
+        switch event {
+        case "SubagentStart", "SubagentStop", "Notification": return false
+        default: return true
+        }
+    }
+
     private static func enrich(from event: [String: Any], into session: inout AgentSession) {
         guard let path = event["transcript_path"] as? String else { return }
         let peek = TranscriptPeek.read(path: path)
