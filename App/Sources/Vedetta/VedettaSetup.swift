@@ -78,15 +78,22 @@ enum VedettaSetup {
                              subscriptionType: nil, isDefault: false, isAvailable: true)
     }
 
+    /// Upserts the record for `path`: creates one if missing, so even the
+    /// default account (not otherwise stored) can carry an alias/identity.
     static func updateStoredClaudeAccount(
         path: String, mutate: (inout StoredClaudeAccount) -> Void
     ) {
         let canonical = ClaudeAccountRegistry.canonical(path)
         var stored = storedClaudeAccounts
-        guard let index = stored.firstIndex(
+        if let index = stored.firstIndex(
             where: { ClaudeAccountRegistry.canonical($0.path) == canonical }
-        ) else { return }
-        mutate(&stored[index])
+        ) {
+            mutate(&stored[index])
+        } else {
+            var record = StoredClaudeAccount(path: canonical)
+            mutate(&record)
+            stored.append(record)
+        }
         saveStoredClaudeAccounts(stored)
     }
 

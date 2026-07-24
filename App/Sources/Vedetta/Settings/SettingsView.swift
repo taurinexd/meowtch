@@ -892,12 +892,10 @@ private struct AccountRow: View {
     var body: some View {
         SettingsRow(title: account.displayName, subtitle: subtitle) {
             HStack(spacing: 8) {
-                if !account.isDefault {
-                    TextField("Alias", text: $alias)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 90)
-                        .onSubmit { saveAlias() }
-                }
+                TextField("Name", text: $alias)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                    .onSubmit { saveAlias() }
                 Button("Identify") { refreshIdentity() }
                 if !hooksInstalled {
                     Button("Hook") {

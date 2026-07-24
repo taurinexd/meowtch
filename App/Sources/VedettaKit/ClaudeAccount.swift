@@ -60,9 +60,13 @@ public enum ClaudeAccountRegistry {
     ) -> [ClaudeAccount] {
         let canonicalDefault = canonical(defaultPath)
         var seen: Set<String> = [canonicalDefault]
+        // The default account may carry stored metadata (alias/email) too,
+        // even though it is never removable.
+        let defaultRecord = stored.first { canonical($0.path) == canonicalDefault }
         var accounts = [ClaudeAccount(
-            path: canonicalDefault, alias: nil, email: nil,
-            subscriptionType: nil, isDefault: true,
+            path: canonicalDefault, alias: defaultRecord?.alias,
+            email: defaultRecord?.email,
+            subscriptionType: defaultRecord?.subscriptionType, isDefault: true,
             isAvailable: directoryExists(canonicalDefault)
         )]
         for record in stored {

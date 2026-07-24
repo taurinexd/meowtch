@@ -43,6 +43,24 @@ struct ClaudeAccountTests {
         #expect(!accounts[0].isAvailable)   // la dir default qui non esiste
     }
 
+    @Test func defaultAccountPicksUpStoredMetadata() {
+        // A stored record for the default path carries its alias/email onto
+        // the synthesized default account (and must not duplicate it).
+        let accounts = ClaudeAccountRegistry.resolve(
+            defaultPath: "/Users/x/.claude",
+            stored: [StoredClaudeAccount(
+                path: "/Users/x/.claude/", alias: "Tools",
+                email: "t@x.com", subscriptionType: "max"
+            )],
+            directoryExists: { _ in true }
+        )
+        #expect(accounts.count == 1)
+        #expect(accounts[0].isDefault)
+        #expect(accounts[0].alias == "Tools")
+        #expect(accounts[0].email == "t@x.com")
+        #expect(accounts[0].displayName == "Tools")
+    }
+
     @Test func settingsPathAndDisplayName() {
         let account = ClaudeAccount(
             path: "/Users/x/.claude-b", alias: nil, email: "w@x.com",
