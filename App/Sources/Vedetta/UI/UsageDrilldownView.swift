@@ -48,6 +48,12 @@ struct UsageDrilldownView: View {
             .map { $0.claudeConfigDir ?? defaultPath ?? "" }
     }
 
+    /// email · plan under the account name, when known.
+    private func accountDetail(_ account: ClaudeAccount) -> String? {
+        let parts = [account.email, account.subscriptionType].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .black, design: .monospaced))
@@ -62,10 +68,18 @@ struct UsageDrilldownView: View {
             Circle()
                 .fill(isActive ? Theme.color(for: .waitingForInput) : .clear)
                 .frame(width: 5, height: 5)
-            Text(entry.account.displayName)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Theme.primaryText)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.account.displayName)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                if let detail = accountDetail(entry.account) {
+                    Text(detail)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.secondaryText.opacity(0.8))
+                        .lineLimit(1)
+                }
+            }
             Spacer(minLength: 8)
             if copiedAccountId == entry.id {
                 Text("command copied")
@@ -87,9 +101,10 @@ struct UsageDrilldownView: View {
                     }
                 }
             } else {
-                Text("no data")
-                    .font(.system(size: 10))
+                Text("run a session or turn on network refresh")
+                    .font(.system(size: 9.5))
                     .foregroundStyle(Theme.secondaryText.opacity(0.5))
+                    .multilineTextAlignment(.trailing)
             }
         }
         .padding(.leading, 18)
