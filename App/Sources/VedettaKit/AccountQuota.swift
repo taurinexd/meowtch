@@ -30,8 +30,44 @@ public enum AccountQuota {
         case (nil, nil): return nil
         case (let sample?, nil): return sample
         case (nil, let sample?): return sample
-        case (let push?, let pull?): return push.at >= pull.at ? push : pull
+        case (let push?, let pull?):
+            // Freshest source drives the strip windows and staleness, but
+            // the meters are UNIONED: the statusline (push) lacks the
+            // per-model week that only the endpoint (pull) reports, so a
+            // fresh push must not drop pull's richer meters.
+            let fresher = push.at >= pull.at ? push : pull
+            return Sample(
+                fiveHour: fresher.fiveHour,
+                sevenDay: fresher.sevenDay,
+                meters: unionMeters(push, pull),
+                at: fresher.at,
+                origin: fresher.origin
+            )
         }
+    }
+
+    /// Union of both samples' meters keyed by label: a shared meter takes
+    /// the fresher sample's value; a meter only one source has (the
+    /// per-model week) is kept. Ordered session → weekly-all → per-model.
+    private static func unionMeters(_ a: Sample, _ b: Sample) -> [UsageMeter] {
+        var chosen: [String: (meter: UsageMeter, at: Date)] = [:]
+        for sample in [a, b] {
+            for meter in sample.meters {
+                if let existing = chosen[meter.label], existing.at >= sample.at { continue }
+                chosen[meter.label] = (meter, sample.at)
+            }
+        }
+        return chosen.values.map(\.meter).sorted { lhs, rhs in
+            let (rankLHS, rankRHS) = (meterRank(lhs.label), meterRank(rhs.label))
+            return rankLHS != rankRHS ? rankLHS < rankRHS : lhs.label < rhs.label
+        }
+    }
+
+    private static func meterRank(_ label: String) -> Int {
+        if label == "Current session" { return 0 }
+        if label == "Current week (all models)" { return 1 }
+        if label.hasPrefix("Current week") { return 2 }
+        return 3
     }
 
     public static func isStale(
