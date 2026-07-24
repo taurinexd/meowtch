@@ -87,28 +87,42 @@ final class AccountOnboarding: ObservableObject {
         return process.terminationStatus == 0
     }
 
-    /// Opens Terminal.app in a new window already running the login for
-    /// this config dir. Steals focus by design — the user is logging in.
-    /// `export` keeps CLAUDE_CONFIG_DIR set for the whole window, so any
-    /// `claude` the user runs there afterward stays on this account and
-    /// never touches the default login (unlike a plain terminal, where a
-    /// bare `claude ... /login` rewrites the shared default credential).
+    /// Opens Terminal on the login for this config dir. Uses a `.command`
+    /// script opened via `open` — no Automation permission needed (unlike
+    /// AppleScript `do script`, which fails silently without it). The
+    /// `export` and trailing interactive shell keep CLAUDE_CONFIG_DIR set
+    /// for the whole window, so any `claude` the user runs there afterward
+    /// stays on this account and never rewrites the shared default login.
     private func openLoginTerminal(configDir: String) {
         let quotedDir = "'"
             + configDir.replacingOccurrences(of: "'", with: "'\\''")
             + "'"
-        let shellCommand = "export CLAUDE_CONFIG_DIR=\(quotedDir); claude auth login"
-        let literal = shellCommand
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        let source = """
-        tell application "Terminal"
-            activate
-            do script "\(literal)"
-        end tell
+        // `-l`: a login shell so ~/.local/bin (where `claude` lives) is on
+        // PATH; the final exec leaves an interactive shell with the env set.
+        let script = """
+        #!/bin/zsh -l
+        export CLAUDE_CONFIG_DIR=\(quotedDir)
+        echo "-> Logging into this Vedetta account, isolated to $CLAUDE_CONFIG_DIR"
+        echo "   Complete the login below; this window stays on this account."
+        echo ""
+        claude auth login
+        exec zsh -il
         """
-        var error: NSDictionary?
-        NSAppleScript(source: source)?.executeAndReturnError(&error)
+        let path = VedettaSetup.runDir + "/account-login.command"
+        do {
+            try FileManager.default.createDirectory(
+                atPath: VedettaSetup.runDir, withIntermediateDirectories: true
+            )
+            try script.write(toFile: path, atomically: true, encoding: .utf8)
+            chmod(path, 0o755)
+        } catch {
+            phase = .failed("Couldn't prepare the login: \(error.localizedDescription)")
+            return
+        }
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        open.arguments = [path]
+        try? open.run()
     }
 
     private func startPolling(configDir: String) {
