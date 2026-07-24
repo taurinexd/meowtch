@@ -16,8 +16,39 @@ final class UsageModel: ObservableObject {
         var windowMinutes: Int?
     }
 
-    @Published private(set) var fiveHour: Window?
-    @Published private(set) var sevenDay: Window?
+    /// One Claude account's merged quota (statusline push vs opt-in pull).
+    struct ClaudeAccountUsage: Identifiable {
+        let account: ClaudeAccount
+        var sample: AccountQuota.Sample?
+        var isStale: Bool
+        var id: String { account.id }
+
+        var fiveHour: Window? { sample?.fiveHour.map(Window.init(quota:)) }
+        var sevenDay: Window? { sample?.sevenDay.map(Window.init(quota:)) }
+    }
+
+    @Published private(set) var claudeUsages: [ClaudeAccountUsage] = []
+    /// Account whose windows the strip shows (set by the UI from the live
+    /// sessions' tags); nil = default account.
+    @Published var activeClaudeAccountPath: String?
+
+    private var pullSamples: [String: AccountQuota.Sample] = [:]
+    private var pollScheduler = UsagePollScheduler()
+
+    /// The account the strip represents: the active one, else the default,
+    /// else whichever has data.
+    private var activeClaudeUsage: ClaudeAccountUsage? {
+        if let path = activeClaudeAccountPath,
+           let match = claudeUsages.first(where: { $0.id == path }) {
+            return match
+        }
+        return claudeUsages.first { $0.account.isDefault && $0.sample != nil }
+            ?? claudeUsages.first { $0.sample != nil }
+    }
+
+    var fiveHour: Window? { activeClaudeUsage?.fiveHour }
+    var sevenDay: Window? { activeClaudeUsage?.sevenDay }
+
     /// Codex quota (from `codex app-server`), shown alongside Claude's.
     @Published private(set) var codexPrimary: Window?
     @Published private(set) var codexSecondary: Window?
@@ -85,11 +116,6 @@ final class UsageModel: ObservableObject {
     }
 
     private var timer: Timer?
-    /// The statusline harvester's drop. If another statusline owns the
-    /// Claude Code slot, Settings → Usage offers to take it over.
-    private static var cachePaths: [String] {
-        [NSHomeDirectory() + "/.vedetta/cache/rl.json"]
-    }
 
     func start() {
         refresh()
@@ -103,21 +129,57 @@ final class UsageModel: ObservableObject {
     func refresh(forceCodex: Bool = false) {
         if forceCodex { lastCodexProbe = nil }
         let fm = FileManager.default
-        let freshest = Self.cachePaths
-            .compactMap { path -> (path: String, modified: Date)? in
-                guard let attrs = try? fm.attributesOfItem(atPath: path),
-                      let modified = attrs[.modificationDate] as? Date else { return nil }
-                return (path, modified)
+        let now = Date()
+        let accounts = VedettaSetup.claudeAccounts
+        claudeUsages = accounts.map { account in
+            let path = VedettaSetup.statusLineCachePath(for: account)
+            var push: AccountQuota.Sample?
+            if let attrs = try? fm.attributesOfItem(atPath: path),
+               let modified = attrs[.modificationDate] as? Date,
+               let data = fm.contents(atPath: path) {
+                let parsed = RateLimitHarvest.windows(from: data)
+                if parsed.fiveHour != nil || parsed.sevenDay != nil {
+                    push = AccountQuota.Sample(
+                        fiveHour: parsed.fiveHour, sevenDay: parsed.sevenDay,
+                        at: modified, origin: .push
+                    )
+                }
             }
-            .max { $0.modified < $1.modified }
-        guard let freshest,
-              let data = fm.contents(atPath: freshest.path) else { return }
-
-        let parsed = RateLimitHarvest.windows(from: data)
-        fiveHour = parsed.fiveHour.map(Window.init(quota:))
-        sevenDay = parsed.sevenDay.map(Window.init(quota:))
-
+            let merged = AccountQuota.merge(push: push, pull: pullSamples[account.id])
+            return ClaudeAccountUsage(
+                account: account, sample: merged,
+                isStale: AccountQuota.isStale(merged, now: now)
+            )
+        }
+        refreshPull(accounts: accounts, now: now)
         Task { await refreshCodex() }
+    }
+
+    /// The opt-in network probe: one account at a time as the scheduler
+    /// allows, honoring backoff. No-op with the toggle off (zero network).
+    private func refreshPull(accounts: [ClaudeAccount], now: Date) {
+        guard UserDefaults.standard.bool(forKey: SettingsKey.claudeNetworkRefresh) else { return }
+        for (index, account) in accounts.enumerated()
+        where pollScheduler.shouldPoll(account: account.id, index: index, now: now) {
+            // Provisional slot: prevents re-entry while the fetch runs.
+            pollScheduler.recordFailure(account: account.id, now: now)
+            Task { [weak self] in
+                let result = await OAuthUsageProbe.fetch(account: account)
+                guard let self else { return }
+                switch result {
+                case .success(let sample):
+                    self.pullSamples[account.id] = sample
+                    self.pollScheduler.recordSuccess(account: account.id, now: Date())
+                    self.refresh()
+                case .rateLimited(let retryAfter):
+                    self.pollScheduler.record429(
+                        account: account.id, retryAfter: retryAfter, now: Date()
+                    )
+                case .unavailable:
+                    self.pollScheduler.recordFailure(account: account.id, now: Date())
+                }
+            }
+        }
     }
 
     /// Codex quota via the shared warm `codex app-server` connection. Keeps
