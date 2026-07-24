@@ -25,6 +25,7 @@ final class UsageModel: ObservableObject {
 
         var fiveHour: Window? { sample?.fiveHour.map(Window.init(quota:)) }
         var sevenDay: Window? { sample?.sevenDay.map(Window.init(quota:)) }
+        var meters: [UsageMeter] { sample?.meters ?? [] }
     }
 
     @Published private(set) var claudeUsages: [ClaudeAccountUsage] = []
@@ -137,11 +138,11 @@ final class UsageModel: ObservableObject {
             if let attrs = try? fm.attributesOfItem(atPath: path),
                let modified = attrs[.modificationDate] as? Date,
                let data = fm.contents(atPath: path) {
-                let parsed = RateLimitHarvest.windows(from: data)
+                let parsed = RateLimitHarvest.parse(from: data)
                 if parsed.fiveHour != nil || parsed.sevenDay != nil {
                     push = AccountQuota.Sample(
                         fiveHour: parsed.fiveHour, sevenDay: parsed.sevenDay,
-                        at: modified, origin: .push
+                        meters: parsed.meters, at: modified, origin: .push
                     )
                 }
             }
