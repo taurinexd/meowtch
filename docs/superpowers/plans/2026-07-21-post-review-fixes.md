@@ -166,3 +166,7 @@ end-to-end in coda. Suite finale: **141 test / 21 suite, verdi**.
   sessione (bounded dal numero di turni; irrilevante in pratica).
 - La sessione Codex adottata da rollout senza writer vivo non ha binding →
   mai rimossa dalla sweep (comportamento conservativo voluto).
+
+## Coda post multi-account (2026-07-24)
+
+- [ ] Doppio sprite nella prima card (screenshot 2026-07-24): probabile `subagentCount` stale — il subagent ucciso dal limite di sessione non emette `SubagentStop`, il mini-sprite resta. Verificare decremento/sweep dei subagent morti.
