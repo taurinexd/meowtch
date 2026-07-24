@@ -92,7 +92,7 @@ let inputData = FileHandle.standardInput.readDataToEndOfFile()
 let payload = (try? JSONSerialization.jsonObject(with: inputData)) as? [String: Any] ?? [:]
 
 // 2. Build the envelope.
-let envelope: [String: Any] = [
+var envelope: [String: Any] = [
     "v": 1,
     "source": argument(after: "--source") ?? "claude",
     // Hook commands from one CLI lifecycle may reach the socket out of
@@ -102,6 +102,11 @@ let envelope: [String: Any] = [
     "terminal": terminalIdentity(),
     "event": payload,
 ]
+// The account tag: which CLAUDE_CONFIG_DIR this session runs under.
+if let configDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"],
+   !configDir.isEmpty {
+    envelope["configDir"] = configDir
+}
 guard var data = try? JSONSerialization.data(withJSONObject: envelope) else { exit(0) }
 data.append(0x0A)
 

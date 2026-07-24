@@ -43,6 +43,8 @@ public struct AgentSession: Identifiable, Equatable, Sendable {
     public var currentTurnID: String?
     public var currentToolUseID: String?
     public var permissionMode: String?
+    /// CLAUDE_CONFIG_DIR of the session's account (canonical); nil = default.
+    public var claudeConfigDir: String?
     public var parentSessionID: String?
     public var subagentKind: String?
     public var subagentRole: String?

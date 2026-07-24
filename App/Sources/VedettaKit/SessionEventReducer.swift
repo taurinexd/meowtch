@@ -117,6 +117,11 @@ public enum SessionEventReducer {
         if let model = event["model"] as? String, !model.isEmpty {
             session.model = model
         }
+        // The account tag (CLAUDE_CONFIG_DIR at hook time). An event without
+        // the env var never erases a tag already known.
+        if let configDir = envelope["configDir"] as? String, !configDir.isEmpty {
+            session.claudeConfigDir = (configDir as NSString).standardizingPath
+        }
         if source == "codex" {
             session.codexThreadID = event["codex_thread_id"] as? String
             session.currentTurnID = (event["codex_turn_id"] as? String)
