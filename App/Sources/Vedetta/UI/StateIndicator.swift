@@ -28,9 +28,9 @@ final class PixelClock: ObservableObject {
         return phase < 0.72
     }
 
-    /// Spinner step, advancing every 0.12s.
-    var spinTick: Int {
-        Int(now.timeIntervalSinceReferenceDate / 0.12)
+    /// Frame counter for step-driven animations (spinner 0.12s, squash 0.15s).
+    func tick(_ step: TimeInterval) -> Int {
+        Int(now.timeIntervalSinceReferenceDate / step)
     }
 }
 
@@ -48,9 +48,9 @@ struct StateIndicator: View {
     var body: some View {
         switch state {
         case .running:
-            PixelSpinner(cell: 3 * scale)
+            DualChaseSpinner(cell: 3 * scale)
         case .compacting:
-            PixelSpinner(color: Theme.color(for: .compacting), cell: 3 * scale)
+            CompactingSquash(cell: 3 * scale)
         case .waitingForInput:
             BlinkingBar(color: Theme.color(for: .waitingForInput), scale: scale)
         case .needsApproval:
@@ -61,27 +61,23 @@ struct StateIndicator: View {
     }
 }
 
-/// 8-bit spinner: a lit block chasing around the perimeter of a square.
-struct PixelSpinner: View {
+/// 8-bit spinner: two opposite blocks chasing each other around the
+/// perimeter of a square, each cell fading with distance from a head.
+struct DualChaseSpinner: View {
     @ObservedObject private var clock = PixelClock.shared
     var color: Color = Theme.toolBlue
     var cell: CGFloat = 3
 
-    /// Perimeter of a 3×3 grid, clockwise from the top-left corner.
-    private static let ring: [(Int, Int)] = [
-        (0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (1, 2), (0, 2), (0, 1),
-    ]
-
     var body: some View {
-        let tick = clock.spinTick
+        let tick = clock.tick(0.12)
         Canvas { gc, _ in
             let inset = cell * 0.07
-            for (i, (cx, cy)) in Self.ring.enumerated() {
-                let distance = (i - tick % 8 + 8) % 8
-                let alpha = 1.0 - Double(distance) * 0.13
+            for (i, p) in IndicatorFrames.ring.enumerated() {
+                let alpha = IndicatorFrames.dualChaseAlpha(index: i, tick: tick)
+                guard alpha > 0 else { continue }
                 let rect = CGRect(
-                    x: CGFloat(cx) * cell + inset,
-                    y: CGFloat(cy) * cell + inset,
+                    x: CGFloat(p.x) * cell + inset,
+                    y: CGFloat(p.y) * cell + inset,
                     width: cell - inset * 2,
                     height: cell - inset * 2
                 )
@@ -89,6 +85,34 @@ struct PixelSpinner: View {
             }
         }
         .frame(width: cell * 3, height: cell * 3)
+        .shadow(color: color.opacity(0.8), radius: cell * 1.4)
+    }
+}
+
+/// Compacting: a two-cell-wide column that squashes down to one row and
+/// re-expands in steps — the context being compressed.
+struct CompactingSquash: View {
+    @ObservedObject private var clock = PixelClock.shared
+    var color: Color = Theme.color(for: .compacting)
+    var cell: CGFloat = 3
+
+    var body: some View {
+        let rows = IndicatorFrames.squashRowCount(tick: clock.tick(0.15))
+        let maxRows = IndicatorFrames.squashHeights.max() ?? 4
+        Canvas { gc, _ in
+            let inset = cell * 0.07
+            let top = CGFloat(maxRows - rows) * cell / 2
+            for r in 0..<rows {
+                let rect = CGRect(
+                    x: inset,
+                    y: top + CGFloat(r) * cell + inset,
+                    width: cell * 2 - inset * 2,
+                    height: cell - inset * 2
+                )
+                gc.fill(Path(rect), with: .color(color))
+            }
+        }
+        .frame(width: cell * 2, height: cell * CGFloat(maxRows))
         .shadow(color: color.opacity(0.8), radius: cell * 1.4)
     }
 }
