@@ -274,6 +274,33 @@ reconcile identifica tech@ e rispecchia. Non ancora esercitato con utente:
 l'adozione di un `/login` manuale verso un ALTRO account (ramo
 `recordHandover`, stesso codice dello switch).
 
+## Pass 9 — Card risorta blu dopo un restart (2026-07-24)
+
+Bug visto live da Matteo: card `flow-issue` sparita dal notch dopo un
+riavvio dell'app, poi ricomparsa BLU a sessione ferma. Ricostruzione
+empirica (transcript da 19.4MB + snapshot byte-exact delle finestre di
+TranscriptPeek):
+
+- **Sparizione**: il guard di `adoptRecentSessions` accettava solo
+  `firstUserPrompt || sessionName`. Su transcript enormi la head (128KB)
+  non arriva al primo prompt e il marker `/rename` sta oltre (qui a byte
+  473k); l'`aiTitle`/`agentName` nel tail c'era ma non veniva considerato
+  → sessione scartata al bootstrap. Fix: basta un titolo qualsiasi
+  (`|| aiTitle != nil`).
+- **Ricomparsa blu**: la CLI genera l'`away_summary` MINUTI dopo lo Stop
+  (qui alle 17:25:51, Stop alle 17:20:21) via sidechain, che emette hook
+  Subagent. La creazione lazy del reducer nasceva `state: .running` per
+  QUALSIASI evento; l'evento marca la sessione in `liveEventIds`, che
+  disattiva l'euristica correttiva mtime → blu bloccato fino al prossimo
+  evento di lifecycle. Fix: la creazione lazy da eventi di bookkeeping
+  (SubagentStart/Stop, Notification) nasce `waitingForInput`, e il
+  ghost-guard li copre (senza contenuto niente card).
+
+Nota strutturale colta di passaggio: gli hook della CLI restano attivi
+anche a sessione idle (recap sidechain, notification) — ogni evento bumpa
+`lastActivityAt`, quindi il badge età può ringiovanire senza attività
+visibile dell'utente.
+
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
 Tutto su `main` locale (nessun push). Commit principali:

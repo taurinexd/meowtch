@@ -50,7 +50,12 @@ enum SessionBootstrap {
         for candidate in candidates.sorted(by: { $0.modified > $1.modified }).prefix(maxSessions) {
             guard !store.sessions.contains(where: { $0.id == candidate.id }) else { continue }
             let peek = TranscriptPeek.read(path: candidate.path)
-            guard peek.firstUserPrompt != nil || peek.sessionName != nil else { continue }
+            // Any displayable title qualifies. On very large transcripts
+            // the head window can miss the first prompt and the /rename
+            // marker while the tail still carries the AI title — skipping
+            // those sessions made real cards vanish on restart (2026-07-24).
+            guard peek.firstUserPrompt != nil || peek.sessionName != nil
+                || peek.aiTitle != nil else { continue }
             scannedPaths[candidate.id] = candidate.path
             FullScanScheduler.schedule(path: candidate.path, sessionId: candidate.id)
             // Real activity is the last message timestamp, not the file

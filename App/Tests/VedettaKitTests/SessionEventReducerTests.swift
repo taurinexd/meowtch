@@ -259,6 +259,47 @@ struct SessionEventReducerTests {
         #expect(store.sessions.first?.state == .waitingForInput)
     }
 
+    @Test func recapSubagentHookNeverMintsARunningCard() throws {
+        // Il sidechain dell'away-summary emette SubagentStart/Stop MINUTI
+        // dopo lo Stop, a sessione ferma: se è il primo evento che vediamo
+        // (app riavviata nel frattempo), la card non deve nascere "running"
+        // (bug live 2026-07-24: card flow-issue blu a sessione in attesa).
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vedetta-reducer-tests")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transcript = directory.appendingPathComponent("session.jsonl")
+        try Data(("""
+        {"type":"user","agentName":"flow-issue","message":{"role":"user","content":"lancia il deploy"}}
+        """ + "\n").utf8).write(to: transcript)
+
+        let store = SessionStore()
+        SessionEventReducer.apply(
+            envelope("SubagentStart", extra: ["transcript_path": transcript.path]),
+            to: store
+        )
+        SessionEventReducer.apply(
+            envelope("SubagentStop", extra: ["transcript_path": transcript.path]),
+            to: store
+        )
+        #expect(store.sessions.count == 1)
+        #expect(store.sessions.first?.state == .waitingForInput)
+        #expect(store.sessions.first?.subagentCount == 0)
+    }
+
+    @Test func contentlessBookkeepingEventsStayGhosts() {
+        // SubagentStop/Notification per una sessione sconosciuta senza
+        // transcript leggibile: niente da mostrare → nessuna card grigia.
+        let store = SessionStore()
+        SessionEventReducer.apply(envelope("SubagentStop"), to: store)
+        SessionEventReducer.apply(
+            envelope("Notification", extra: ["message": "Background task done"]),
+            to: store
+        )
+        #expect(store.sessions.isEmpty)
+    }
+
     @Test func terminalInfoIsCaptured() {
         let store = SessionStore()
         SessionEventReducer.apply(envelope("SessionStart"), to: store)
