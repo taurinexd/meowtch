@@ -941,12 +941,21 @@ private struct AccountRow: View {
     private func refreshIdentity() {
         identityError = nil
         let path = account.path
+        let isDefault = account.isDefault
         DispatchQueue.global().async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
             process.arguments = ["-lc", "claude auth status --json 2>/dev/null"]
             var environment = ProcessInfo.processInfo.environment
-            environment["CLAUDE_CONFIG_DIR"] = path
+            // Setting CLAUDE_CONFIG_DIR — even to the default path — makes
+            // Claude Code look up a namespaced Keychain item, which the
+            // default account (credential stored un-suffixed) doesn't have.
+            // So the default account must run with the var unset.
+            if isDefault {
+                environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+            } else {
+                environment["CLAUDE_CONFIG_DIR"] = path
+            }
             process.environment = environment
             let pipe = Pipe()
             process.standardOutput = pipe
