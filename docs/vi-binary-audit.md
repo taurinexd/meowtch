@@ -301,6 +301,20 @@ anche a sessione idle (recap sidechain, notification) — ogni evento bumpa
 `lastActivityAt`, quindi il badge età può ringiovanire senza attività
 visibile dell'utente.
 
+## Stato verifiche e packaging (2026-07-24, fine giornata)
+
+- **Multi-account**: verificato e confermato; resta solo l'adozione di un
+  `/login` esterno, che Matteo eserciterà quando gli servirà davvero.
+- **Branding task 9**: confermato da Matteo tranne la GIF custom (da provare).
+- **DMG**: buildato con `scripts/make-dmg.sh` e verificato visivamente
+  (starfield, gatto, freccia pixel, "> drag to install _", posizioni ok
+  dopo la conversione UDZO). `dist/` resta fuori da git.
+- **Parse-check script generati**: template estratti in
+  `RuntimeScripts` (VedettaKit) e coperti da test `zsh -n`/`bash -n` —
+  la guardia contro il destino del launcher rotto di VI 1.0.41.
+- **Pubblicazione**: la repo online sarà privata, su account GitHub
+  personale di Matteo; rimandata a data da destinarsi (M8 in attesa).
+
 ## Stato lavori — progress (sessione 2026-07-20/21)
 
 Tutto su `main` locale (nessun push). Commit principali:
