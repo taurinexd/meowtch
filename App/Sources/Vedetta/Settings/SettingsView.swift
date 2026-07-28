@@ -340,7 +340,7 @@ private struct IntegrationsSettingsPage: View {
 
         SettingsSection(
             title: "Permissions",
-            footer: "Accessibility lets Vedetta read terminal window titles and raise the exact window during jumps."
+            footer: "Accessibility lets Meowtch read terminal window titles and raise the exact window during jumps."
         ) {
             SettingsRow(title: "Accessibility",
                         subtitle: axTrusted ? "Granted" : "Not granted") {
@@ -651,11 +651,11 @@ private struct UsageSettingsPage: View {
     private var claudeSourceSubtitle: String {
         switch statusLineOwner {
         case .vedetta:
-            "Active: Vedetta's statusline harvests the rate limits."
+            "Active: Meowtch's statusline harvests the rate limits."
         case .foreign:
             claimError ?? "Another statusline occupies the Claude Code slot, so Claude usage can't be harvested. Replacing backs the current one up first."
         case .none:
-            claimError ?? "No statusline installed: Claude usage needs Vedetta's harvester."
+            claimError ?? "No statusline installed: Claude usage needs Meowtch's harvester."
         }
     }
 
@@ -686,7 +686,7 @@ private struct UsageSettingsPage: View {
                 SettingsRow(title: "Claude usage source",
                             subtitle: claudeSourceSubtitle) {
                     if statusLineOwner != .vedetta {
-                        Button("Use Vedetta's…") {
+                        Button("Use Meowtch's…") {
                             do {
                                 try VedettaSetup.claimStatusLine()
                                 claimError = nil
@@ -717,7 +717,7 @@ private struct AboutSettingsPage: View {
                     .resizable()
                     .frame(width: 84, height: 84)
             }
-            Text("Vedetta")
+            Text("Meowtch")
                 .font(.system(size: 22, weight: .bold))
             Text("v\(version)")
                 .font(.system(size: 12))
@@ -800,14 +800,14 @@ private struct AccountsSettingsPage: View {
                 RowDivider()
                 SettingsRow(
                     title: "Add account…",
-                    subtitle: "Name it — Vedetta creates its config dir, installs the hooks, and opens a terminal to log in, then detects it automatically."
+                    subtitle: "Name it — Meowtch creates its config dir, installs the hooks, and opens a terminal to log in, then detects it automatically."
                 ) {
                     Button("Add…") { showingAdd = true }
                 }
             }
             SettingsSection(
                 title: "Network refresh",
-                footer: "Reads each account's quota via Claude's own usage endpoint with the credentials already on this Mac. Read-only, undocumented endpoint, ~5 min cadence with backoff. Off = Vedetta stays fully offline."
+                footer: "Reads each account's quota via Claude's own usage endpoint with the credentials already on this Mac. Read-only, undocumented endpoint, ~5 min cadence with backoff. Off = Meowtch stays fully offline."
             ) {
                 SettingsRow(
                     title: "Refresh quota over the network",
@@ -897,7 +897,7 @@ private struct AddAccountSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("Vedetta creates this folder, installs its hooks, and opens Terminal to log in.")
+            Text("Meowtch creates this folder, installs its hooks, and opens Terminal to log in.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
             HStack {
@@ -1033,7 +1033,7 @@ private struct AccountDetailView: View {
             SettingsRow(
                 title: "Name",
                 subtitle: account.isDefault
-                    ? "The account Vedetta uses when no config dir is set."
+                    ? "The account Meowtch uses when no config dir is set."
                     : account.path
             ) {
                 TextField("Name", text: $alias)
@@ -1097,7 +1097,7 @@ private struct AccountDetailView: View {
     private var removeSection: some View {
         SettingsSection(
             title: "Remove",
-            footer: "Removes Vedetta's hooks from this account and drops it from the list. The folder and its login stay — you can add it back later."
+            footer: "Removes Meowtch's hooks from this account and drops it from the list. The folder and its login stay — you can add it back later."
         ) {
             SettingsRow(
                 title: "Remove account",
@@ -1132,7 +1132,7 @@ private struct AccountDetailView: View {
     private var loginSubtitle: String {
         switch login.phase {
         case .awaitingLogin:
-            "Approve it in the browser; Vedetta detects it automatically."
+            "Approve it in the browser; Meowtch detects it automatically."
         case .done:
             "This account is ready."
         case .failed(let message):
@@ -1151,7 +1151,7 @@ private struct AccountDetailView: View {
 
     private var statuslineSubtitle: String {
         switch owner {
-        case .vedetta: "Vedetta harvests this account's rate limits."
+        case .vedetta: "Meowtch harvests this account's rate limits."
         case .foreign: "Another statusline occupies the slot; claim it to read usage."
         case .none: "No statusline installed for this account."
         }

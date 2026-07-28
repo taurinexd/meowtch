@@ -1,10 +1,10 @@
 #!/bin/sh
-# Packages dist/Vedetta.app into dist/Vedetta.dmg with the 8-bit background.
+# Packages dist/Meowtch.app into dist/Meowtch.dmg with the 8-bit background.
 set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/dist/Vedetta.app"
-DMG="$ROOT/dist/Vedetta.dmg"
-RW="$ROOT/dist/Vedetta-rw.dmg"
+APP="$ROOT/dist/Meowtch.app"
+DMG="$ROOT/dist/Meowtch.dmg"
+RW="$ROOT/dist/Meowtch-rw.dmg"
 STAGE="$ROOT/dist/dmg-stage"
 BG="$ROOT/dist/dmg-bg.png"
 
@@ -17,13 +17,13 @@ cp -R "$APP" "$STAGE/"
 cp "$BG" "$STAGE/.background/bg.png"
 ln -s /Applications "$STAGE/Applications"
 
-hdiutil create -volname "Vedetta" -srcfolder "$STAGE" -ov -format UDRW "$RW" >/dev/null
+hdiutil create -volname "Meowtch" -srcfolder "$STAGE" -ov -format UDRW "$RW" >/dev/null
 MOUNT_OUT="$(hdiutil attach -readwrite -noverify -noautoopen "$RW")"
 MOUNT="$(printf '%s\n' "$MOUNT_OUT" | awk -F'\t' '/\/Volumes\//{print $3}')"
 
 osascript <<'EOF'
 tell application "Finder"
-    tell disk "Vedetta"
+    tell disk "Meowtch"
         open
         set current view of container window to icon view
         set toolbar visible of container window to false
@@ -33,7 +33,7 @@ tell application "Finder"
         set arrangement of viewOptions to not arranged
         set icon size of viewOptions to 128
         set background picture of viewOptions to file ".background:bg.png"
-        set position of item "Vedetta.app" of container window to {150, 185}
+        set position of item "Meowtch.app" of container window to {150, 185}
         set position of item "Applications" of container window to {450, 185}
         update without registering applications
         delay 1

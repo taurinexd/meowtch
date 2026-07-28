@@ -16,7 +16,7 @@ final class StatusItemController {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "binoculars.fill",
-                accessibilityDescription: "Vedetta"
+                accessibilityDescription: "Meowtch"
             )
         }
 
@@ -40,7 +40,7 @@ final class StatusItemController {
 
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
-            title: "Quit Vedetta",
+            title: "Quit Meowtch",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )

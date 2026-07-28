@@ -25,7 +25,7 @@ final class SettingsWindowController {
         if window == nil {
             let hosting = NSHostingController(rootView: SettingsView())
             let window = NSWindow(contentViewController: hosting)
-            window.title = "Vedetta Settings"
+            window.title = "Meowtch Settings"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable,
                                 .fullSizeContentView]
             window.titlebarAppearsTransparent = true

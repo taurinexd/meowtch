@@ -26,7 +26,7 @@ app:
 	Scripts/make-app.sh
 
 run: app
-	open dist/Vedetta.app
+	open dist/Meowtch.app
 
 clean:
 	rm -rf App/.build dist

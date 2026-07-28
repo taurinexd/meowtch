@@ -1,15 +1,17 @@
-# Vedetta
+# Meowtch
 
-**Your AI coding agents, watched from the notch.**
+**Your AI coding agents, watched from the notch — by a pixel cat.**
 
-Vedetta is a native macOS menu bar app that turns the MacBook notch into a
-control surface for AI coding agents. See every running session at a
-glance, approve permission requests without switching windows, answer the
-agent's questions, review plans, and jump back to the exact terminal that
-asked.
+Meowtch (*meow* + *notch*) is a native macOS menu bar app that turns the
+MacBook notch into a control surface for AI coding agents. See every
+running session at a glance, approve permission requests without
+switching windows, answer the agent's questions, review plans, and jump
+back to the exact terminal that asked.
 
-> *Vedetta* is Italian for "lookout" — the sentinel posted up high who
-> spots what's coming and sounds the alert.
+> The project codename is *Vedetta* — Italian for "lookout", the sentinel
+> posted up high who spots what's coming and sounds the alert. You'll see
+> that name in the code, the internal paths (`~/.vedetta`) and the bundle
+> id; the cat on duty is Meowtch.
 
 ![Collapsed bar](docs/images/collapsed.png)
 
@@ -49,22 +51,22 @@ asked.
 One command, no security dialogs:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/taurinexd/vedetta/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/taurinexd/meowtch/main/install.sh | sh
 ```
 
 Requires an Apple Silicon Mac. The script downloads the latest release,
 installs it into `/Applications` and launches it — `curl` doesn't apply
 macOS quarantine, so Gatekeeper never gets in the way.
 
-**Manual alternative**: download `Vedetta.dmg` from
-[Releases](https://github.com/taurinexd/vedetta/releases) and drag to
-Applications. Vedetta isn't notarized (it's a free project with no Apple
+**Manual alternative**: download `Meowtch.dmg` from
+[Releases](https://github.com/taurinexd/meowtch/releases) and drag to
+Applications. Meowtch isn't notarized (it's a free project with no Apple
 Developer subscription), so a browser-downloaded copy is quarantined:
 either approve it under System Settings → Privacy & Security → "Open
 Anyway", or clear the flag yourself:
 
 ```sh
-xattr -rd com.apple.quarantine /Applications/Vedetta.app
+xattr -rd com.apple.quarantine /Applications/Meowtch.app
 ```
 
 ## How it works
@@ -94,16 +96,16 @@ cache, config backups) and `~/Library/Application Support/Vedetta/`.
 ```sh
 make build   # swift build
 make test    # swift test (200+ tests)
-make app     # assembles dist/Vedetta.app (bridge + VS Code extension + icon)
+make app     # assembles dist/Meowtch.app (bridge + VS Code extension + icon)
 make run     # build and launch
-Scripts/make-dmg.sh  # dist/Vedetta.dmg
+Scripts/make-dmg.sh  # dist/Meowtch.dmg
 ```
 
 ## Acknowledgements
 
-Vedetta is an independent open-source reimplementation inspired by the
+Meowtch is an independent open-source reimplementation inspired by the
 feature set of [Vibe Island](https://vibeisland.app), a commercial app by
-its respective authors. Vedetta shares no code or assets with it and is
+its respective authors. Meowtch shares no code or assets with it and is
 not affiliated with or endorsed by the Vibe Island team. If you want a
 polished, supported product with a much broader integration matrix (26
 agents, 20+ terminals, SSH remotes), go buy it — it's excellent.
