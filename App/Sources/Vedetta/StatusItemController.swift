@@ -38,6 +38,14 @@ final class StatusItemController {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let updateItem = NSMenuItem(
+            title: "Check for Updates…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        menu.addItem(updateItem)
+
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: "Quit Meowtch",
@@ -54,5 +62,12 @@ final class StatusItemController {
 
     @objc private func openSettings() {
         SettingsWindowController.shared.show()
+    }
+
+    /// Runs the check and shows its outcome where the user can act on it:
+    /// the Updates group in Settings → General.
+    @objc private func checkForUpdates() {
+        SettingsWindowController.shared.show(page: .general)
+        Task { await UpdateChecker.shared.check(userInitiated: true) }
     }
 }

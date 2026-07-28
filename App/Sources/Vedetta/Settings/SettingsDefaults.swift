@@ -18,6 +18,11 @@ enum SettingsKey {
     /// Opt-in network probe of the per-account Claude quota (the only
     /// network Vedetta ever touches; off = fully offline).
     static let claudeNetworkRefresh = "claudeNetworkRefresh"
+    /// Consent for the daily GitHub Releases check (asked in onboarding).
+    static let updateAutoCheck = "updateAutoCheck"
+    /// Whether that consent has ever been asked — existing installs get
+    /// the question once, at the first launch after updating.
+    static let updateConsentAsked = "updateConsentAsked"
     static let soundVolume = "soundVolume"
     // Pre-existing keys, listed for the single source of truth:
     // "showSessionMetadata" (SessionMetadataPresentation.defaultsKey),
@@ -37,6 +42,10 @@ enum SettingsDefaults {
             SettingsKey.showUsageLimits: true,
             SettingsKey.preferredUsageProvider: "auto",
             SettingsKey.claudeNetworkRefresh: false,
+            // Proposed on, but nothing happens until the user confirms in
+            // onboarding (updateConsentAsked gates the first check).
+            SettingsKey.updateAutoCheck: true,
+            SettingsKey.updateConsentAsked: false,
             SettingsKey.soundVolume: 0.5,
         ])
     }

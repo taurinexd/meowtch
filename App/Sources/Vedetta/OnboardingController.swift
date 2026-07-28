@@ -76,6 +76,7 @@ private struct OnboardingView: View {
     @State private var extensionInstalled = JumpService.vsCodeExtensionInstalled()
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var setupError: String?
+    @AppStorage(SettingsKey.updateAutoCheck) private var autoUpdate = true
 
     var body: some View {
         ZStack {
@@ -244,6 +245,23 @@ private struct OnboardingView: View {
                 .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
+            VStack(spacing: 6) {
+                HStack {
+                    Text("Check for updates automatically")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(Theme.primaryText)
+                    Spacer()
+                    Toggle("", isOn: $autoUpdate)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                }
+                .frame(maxWidth: 400)
+                Text("Asks GitHub once a day whether a newer release exists.\nNo account, no telemetry — turn it off and Meowtch never calls home.")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Theme.secondaryText.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, 6)
         }
     }
 

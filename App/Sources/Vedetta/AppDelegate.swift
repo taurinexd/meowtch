@@ -109,7 +109,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !ProcessInfo.processInfo.arguments.contains("--mock") {
             OnboardingController.shared.showIfNeeded()
+            askUpdateConsentIfNeeded()
+            UpdateChecker.shared.start()
         }
+    }
+
+    /// The update check never runs unsolicited. New users answer in
+    /// onboarding; installs that predate the feature get the question
+    /// once, here, before the first check happens.
+    private func askUpdateConsentIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: SettingsKey.updateConsentAsked) else { return }
+        defer { defaults.set(true, forKey: SettingsKey.updateConsentAsked) }
+        // A first-run install answers inside the onboarding wizard.
+        guard !OnboardingController.shared.shouldShow else { return }
+
+        let alert = NSAlert()
+        alert.messageText = "Check for updates automatically?"
+        alert.informativeText = """
+        Meowtch can ask GitHub once a day whether a newer release exists, \
+        and install it after verifying its signature.
+
+        No account, no telemetry. You can change this any time in \
+        Settings → General.
+        """
+        alert.addButton(withTitle: "Yes, check daily")
+        alert.addButton(withTitle: "No, I'll check myself")
+        NSApp.activate(ignoringOtherApps: true)
+        let allowed = alert.runModal() == .alertFirstButtonReturn
+        defaults.set(allowed, forKey: SettingsKey.updateAutoCheck)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
