@@ -14,6 +14,9 @@ final class EventServer: @unchecked Sendable {
     private var socketFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
     private let queue = DispatchQueue(label: "app.vedetta.eventserver")
+    /// Filesystem identity of the socket file this instance created, so
+    /// teardown can tell it apart from a successor's.
+    private var boundFile: (dev: dev_t, ino: ino_t)?
 
     init(socketPath: String, handler: @escaping Handler) {
         self.socketPath = socketPath
@@ -48,6 +51,10 @@ final class EventServer: @unchecked Sendable {
             throw POSIXError(.init(rawValue: errno) ?? .EIO)
         }
         chmod(socketPath, 0o600)
+        var created = stat()
+        boundFile = stat(socketPath, &created) == 0
+            ? (created.st_dev, created.st_ino)
+            : nil
         guard listen(fd, 16) == 0 else {
             close(fd)
             throw POSIXError(.init(rawValue: errno) ?? .EIO)
@@ -69,7 +76,35 @@ final class EventServer: @unchecked Sendable {
         acceptSource?.cancel()
         acceptSource = nil
         if socketFD >= 0 { close(socketFD) }
+        socketFD = -1
+        // Remove the socket file only while it is still OURS. During an
+        // auto-update relaunch both instances are briefly alive: the
+        // successor rebinds the path, and unlinking it here would leave it
+        // listening on an inode no client can reach — every hook would
+        // silently fail to connect until the next manual restart.
+        guard let boundFile else { return }
+        var current = stat()
+        guard stat(socketPath, &current) == 0,
+              current.st_dev == boundFile.dev, current.st_ino == boundFile.ino
+        else { return }
         unlink(socketPath)
+    }
+
+    /// Re-creates the socket file when it has vanished under us — an older
+    /// instance tearing down after an auto-update relaunch used to remove
+    /// it, leaving this process listening where nothing can reach it. Only
+    /// acts when the path is ABSENT: a foreign socket there belongs to
+    /// another live instance and is left alone.
+    func ensureListening() {
+        guard boundFile != nil else { return }
+        var current = stat()
+        guard stat(socketPath, &current) != 0 else { return }
+        acceptSource?.cancel()
+        acceptSource = nil
+        if socketFD >= 0 { close(socketFD) }
+        socketFD = -1
+        boundFile = nil
+        try? start()
     }
 
     // MARK: - Connection
