@@ -244,6 +244,75 @@ private struct GeneralSettingsPage: View {
                 Toggle("", isOn: $disableJump).toggleStyle(.switch).labelsHidden()
             }
         }
+
+        UpdatesSection()
+    }
+}
+
+/// Updates: consent toggle, manual check, and the install button when a
+/// newer release is waiting.
+private struct UpdatesSection: View {
+    @AppStorage(SettingsKey.updateAutoCheck) private var autoCheck = true
+    @ObservedObject private var updates = UpdateChecker.shared
+
+    var body: some View {
+        SettingsSection(
+            title: "Updates",
+            footer: "Checks this project's GitHub releases once a day. No account, no telemetry — only the version number is fetched."
+        ) {
+            SettingsRow(
+                title: "Version \(updates.currentVersion)",
+                subtitle: updates.installBlockedReason ?? statusText
+            ) {
+                Button(isBusy ? "Checking…" : "Check Now") {
+                    Task { await updates.check(userInitiated: true) }
+                }
+                .disabled(isBusy)
+            }
+            RowDivider()
+            SettingsRow(title: "Check for updates automatically") {
+                Toggle("", isOn: $autoCheck)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: autoCheck) { _, _ in updates.start() }
+            }
+            if case .available(let release) = updates.phase {
+                RowDivider()
+                SettingsRow(
+                    title: "Version \(release.version) is available",
+                    subtitle: release.notes
+                ) {
+                    if updates.installBlockedReason == nil {
+                        Button("Install & Relaunch") {
+                            Task { await updates.install(release) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Open Releases…") {
+                            NSWorkspace.shared.open(UpdateChecker.releasesPage)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var isBusy: Bool {
+        switch updates.phase {
+        case .checking, .installing: return true
+        default: return false
+        }
+    }
+
+    private var statusText: String? {
+        switch updates.phase {
+        case .idle: return nil
+        case .checking: return "Checking for updates…"
+        case .upToDate: return "You're on the latest version."
+        case .available(let release): return "Version \(release.version) is available."
+        case .installing(let step): return step
+        case .failed(let reason): return reason
+        }
     }
 }
 

@@ -5,7 +5,7 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONF="${1:-release}"
-VERSION="0.1.0"
+VERSION="$(cat "$ROOT/VERSION" 2>/dev/null || echo 0.0.0)"
 
 cd "$ROOT/App"
 swift build -c "$CONF"
