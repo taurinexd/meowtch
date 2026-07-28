@@ -270,7 +270,7 @@ Verificato live (2026-07-24, switch Tools→Tech attivo): token Tools
 forzato a scaduto → l'app lo ruota da sola in <60s e la card torna viva
 (`origin: pull`, 7d 100% suo reale); Tech `origin: push` dall'rl.json delle
 sessioni correnti; slot riserializzato (stessi token, byte diversi) →
-reconcile identifica tech@ e rispecchia. Non ancora esercitato con utente:
+reconcile identifica l'account secondario e rispecchia. Non ancora esercitato con utente:
 l'adozione di un `/login` manuale verso un ALTRO account (ramo
 `recordHandover`, stesso codice dello switch).
 

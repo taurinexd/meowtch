@@ -38,7 +38,34 @@ asked.
 - **Zero config** — detected CLIs are set up automatically with config
   backups; hooks are additive, idempotent, and self-neutralizing (if the
   app is gone they exit silently and never slow Claude Code down)
-- **Fully local** — no cloud, no accounts, no telemetry
+- **Auto-update** — checks GitHub Releases (only with your consent),
+  verifies an EdDSA signature, swaps the app and relaunches
+- **Private by default** — no cloud, no accounts, no telemetry. The only
+  network traffic is the update check and the optional usage refresh,
+  both off until you say yes
+
+## Install
+
+One command, no security dialogs:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/taurinexd/vedetta/main/install.sh | sh
+```
+
+Requires an Apple Silicon Mac. The script downloads the latest release,
+installs it into `/Applications` and launches it — `curl` doesn't apply
+macOS quarantine, so Gatekeeper never gets in the way.
+
+**Manual alternative**: download `Vedetta.dmg` from
+[Releases](https://github.com/taurinexd/vedetta/releases) and drag to
+Applications. Vedetta isn't notarized (it's a free project with no Apple
+Developer subscription), so a browser-downloaded copy is quarantined:
+either approve it under System Settings → Privacy & Security → "Open
+Anyway", or clear the flag yourself:
+
+```sh
+xattr -rd com.apple.quarantine /Applications/Vedetta.app
+```
 
 ## How it works
 
@@ -66,7 +93,7 @@ cache, config backups) and `~/Library/Application Support/Vedetta/`.
 
 ```sh
 make build   # swift build
-make test    # swift test (39 tests)
+make test    # swift test (200+ tests)
 make app     # assembles dist/Vedetta.app (bridge + VS Code extension + icon)
 make run     # build and launch
 Scripts/make-dmg.sh  # dist/Vedetta.dmg

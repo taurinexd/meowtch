@@ -179,10 +179,10 @@ struct SessionEventReducerTests {
         #expect(store.sessions.first?.directory == "/Users/x/Code/5om")
         // A genuine switch to an unrelated project does update it.
         SessionEventReducer.apply(
-            envelope("UserPromptSubmit", cwd: "/Users/x/Code/uptonica", extra: ["prompt": "vai"]),
+            envelope("UserPromptSubmit", cwd: "/Users/x/Code/starforge", extra: ["prompt": "vai"]),
             to: store
         )
-        #expect(store.sessions.first?.directoryName == "uptonica")
+        #expect(store.sessions.first?.directoryName == "starforge")
     }
 
     @Test func stopMeansWaitingForInput() {

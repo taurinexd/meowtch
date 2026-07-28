@@ -84,9 +84,9 @@ struct TranscriptPeekTests {
 
     @Test func agentNameCountsAsAiTitle() {
         let withAgent = """
-        {"type":"agent-name","agentName":"kamal-crm-upgrade","sessionId":"s1"}
+        {"type":"agent-name","agentName":"orbit-crm-upgrade","sessionId":"s1"}
         """ + "\n" + fixture
-        #expect(TranscriptPeek.parse(Data(withAgent.utf8)).aiTitle == "kamal-crm-upgrade")
+        #expect(TranscriptPeek.parse(Data(withAgent.utf8)).aiTitle == "orbit-crm-upgrade")
     }
 
     @Test func latestMainSessionEffortWins() {
