@@ -16,3 +16,5 @@ jobs:
         run: swift test --package-path App
       - name: Bundle app
         run: Scripts/make-app.sh
+      - name: Installer syntax check
+        run: sh -n install.sh
