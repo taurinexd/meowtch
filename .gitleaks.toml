@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "localStorage key names in the branding preview ballots — UI state, not credentials"
+paths = ['''docs/superpowers/specs/.*-branding-previews-.*\.html''']
