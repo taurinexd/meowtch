@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in
                 Task { @MainActor in
+                    self.eventServer?.ensureListening()
                     SessionBootstrap.refreshScannedSessions(
                         in: store,
                         coordinator: self.codexIngress
