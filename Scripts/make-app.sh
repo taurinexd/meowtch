@@ -1,5 +1,5 @@
 #!/bin/sh
-# Assembles dist/Vedetta.app from the SwiftPM build.
+# Assembles dist/Meowtch.app from the SwiftPM build.
 # Usage: Scripts/make-app.sh [debug|release]  (default: release)
 set -eu
 
@@ -11,7 +11,7 @@ cd "$ROOT/App"
 swift build -c "$CONF"
 BINDIR="$(swift build -c "$CONF" --show-bin-path)"
 
-APP="$ROOT/dist/Vedetta.app"
+APP="$ROOT/dist/Meowtch.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 
@@ -29,9 +29,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Vedetta</string>
+	<string>Meowtch</string>
 	<key>CFBundleDisplayName</key>
-	<string>Vedetta</string>
+	<string>Meowtch</string>
 	<key>CFBundleIdentifier</key>
 	<string>app.vedetta.macos</string>
 	<key>CFBundleExecutable</key>

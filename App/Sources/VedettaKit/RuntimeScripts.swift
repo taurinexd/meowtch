@@ -16,7 +16,7 @@ public enum RuntimeScripts {
         H=/Contents/Helpers/vedetta-bridge
         O="$HOME/.vedetta/.orphaned"
         C="$HOME/.vedetta/bin/.bridge-cache"
-        for P in "\(bundlePath)" "/Applications/Vedetta.app" "$HOME/Applications/Vedetta.app"; do
+        for P in "\(bundlePath)" "/Applications/Meowtch.app" "$HOME/Applications/Meowtch.app" "/Applications/Vedetta.app" "$HOME/Applications/Vedetta.app"; do
           B="${P}${H}"
           if [ -x "$B" ]; then /bin/rm -f "$O"; exec "$B" "$@"; fi
         done

@@ -135,7 +135,7 @@ private struct OnboardingView: View {
                 "PERMISSIONS",
                 prompt: "> the lookout needs to raise the right window"
             )
-            Text("Accessibility lets Vedetta bring the exact terminal window\nto the front when you jump to a session.")
+            Text("Accessibility lets Meowtch bring the exact terminal window\nto the front when you jump to a session.")
                 .font(.system(size: 11.5, design: .monospaced))
                 .foregroundStyle(Theme.secondaryText)
                 .multilineTextAlignment(.center)
