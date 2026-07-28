@@ -301,6 +301,44 @@ anche a sessione idle (recap sidechain, notification) — ogni evento bumpa
 `lastActivityAt`, quindi il badge età può ringiovanire senza attività
 visibile dell'utente.
 
+## Pass 10 — Pubblicazione, rebrand Meowtch, auto-update (2026-07-28)
+
+- **Brand**: l'app è **Meowtch** per l'utente; *Vedetta* resta il nome in
+  codice (target, bundle id `app.vedetta.macos`, eseguibile, `~/.vedetta`,
+  identità di firma). Regola in AGENTS.md: mai convertire i riferimenti
+  interni — portano i grant TCC e gli hook già installati.
+- **Repo pubblica**: `github.com/taurinexd/meowtch`, storia completa
+  (gitleaks pulito; allowlist per i STORE_KEY dei ballot di branding).
+  CI verde su macos-15. **Minuti Actions**: verificato sul report per-run
+  (`/actions/runs/<id>/timing`) che una repo pubblica riporta
+  `billable.MACOS.total_ms: 0` — i runner standard non consumano quota.
+- **Credenziali git**: il helper globale `osxkeychain` restituiva
+  `matteo-webgas` e il push del tag falliva con 403. Risolto **solo a
+  livello di repo** (`credential.https://github.com.helper` = `!gh auth
+  git-credential`), senza toccare la config globale usata dalle repo
+  Webgas. Il token `taurinexd` ha richiesto lo scope `workflow` per
+  poter pushare `.github/workflows/`.
+- **Installazione senza attrito**: `install.sh` via `curl | sh`. Verificato
+  end-to-end da zero: nessun attributo `com.apple.quarantine` sul bundle
+  installato ⇒ **nessun dialogo Gatekeeper**, nessuna notarizzazione.
+- **Auto-update**: check giornaliero su GitHub Releases (consenso
+  esplicito), firma EdDSA verificata PRIMA di scompattare, validazione
+  bundle id/versione/codesign, swap con ripristino del bundle precedente
+  su qualunque errore, relaunch. Chiave privata nel Keychain ("Vedetta
+  Update Signing"), pubblica compilata in `UpdateChecker.publicKey`:
+  **non rotabile** senza spiaggiare le app distribuite.
+- **Bug trovato dalla verifica e2e (v0.1.0 → fix in v0.1.1)**: dopo lo
+  swap il successore bindava il socket, poi la teardown dell'istanza
+  uscente ne faceva `unlink` → nuova app in ascolto su un inode
+  irraggiungibile, **ogni hook falliva in silenzio** fino a un riavvio
+  manuale. Fix doppio: `stop()` rimuove il file solo se è ancora quello
+  creato da quell'istanza (dev+ino registrati al bind), e il server
+  ri-binda al tick periodico se il suo file è sparito (guarisce anche gli
+  update che partono da build col bug, entro 15s).
+- Verificato dal vivo: 0.0.9 → 0.1.1 in-app, socket sopravvissuto
+  (client reale connesso, 12 sessioni), TCC Accessibility ancora
+  concessa, launcher ripuntato su `/Applications/Meowtch.app`.
+
 ## Stato verifiche e packaging (2026-07-24, fine giornata)
 
 - **Multi-account**: verificato e confermato; resta solo l'adozione di un
