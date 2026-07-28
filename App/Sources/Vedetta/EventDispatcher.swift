@@ -389,6 +389,23 @@ enum EventDispatcher {
                 },
             ])
 
+        case "update":
+            let checker = UpdateChecker.shared
+            let install = envelope["install"] as? Bool ?? false
+            if envelope["check"] as? Bool ?? true {
+                Task { @MainActor in
+                    await checker.check(userInitiated: true)
+                    if install, case .available(let release) = checker.phase {
+                        await checker.install(release)
+                    }
+                }
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "current": checker.currentVersion,
+                "phase": String(describing: checker.phase),
+                "blocked": checker.installBlockedReason ?? "",
+            ])
+
         case "openOnboarding":
             Task { @MainActor in OnboardingController.shared.show() }
             return Data(#"{"ok":true}"#.utf8)
