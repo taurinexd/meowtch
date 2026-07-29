@@ -390,6 +390,23 @@ resta sul suo prompt); col fix il CLI stampa `Allowed by PermissionRequest
 hook` → `User approved Claude's plan` e la sessione passa
 all'implementazione.
 
+**Formattazione del piano** (stessa sessione). La card mostrava `#`, `##`,
+`>` e i trattini come testo grezzo: `AttributedString` con
+`.inlineOnlyPreservingWhitespace` interpreta **solo la sintassi inline**,
+mai i blocchi. Aggiunto `PlanMarkdown` (parser puro, testato) +
+`PlanMarkdownView`: titoli, citazioni, elenchi puntati e numerati (i numeri
+originali si conservano — in un piano sono contenuto), blocchi di codice
+recintati, righe orizzontali; il testo di ogni blocco continua a passare
+per `AttributedString`, quindi grassetto/corsivo/codice inline reggono
+anche dentro un titolo o una voce di elenco. La `ScrollView` ha ora
+`.defaultScrollAnchor(.top)`: senza, un piano lungo si apriva a metà
+nascondendo il proprio titolo. Verificato a schermo.
+
+⚠️ **Nota operativa dolorosa**: durante la verifica ho pulito le sessioni
+di prova con `pkill -x claude` e ho ucciso **tutte** le sessioni Claude
+Code di Matteo. L'harness pty va terminato per PID (`pgrep -P <harness>`),
+mai per nome di processo: `claude` è anche ciò con cui l'utente lavora.
+
 ## Stato verifiche e packaging (2026-07-24, fine giornata)
 
 - **Multi-account**: verificato e confermato; resta solo l'adozione di un
