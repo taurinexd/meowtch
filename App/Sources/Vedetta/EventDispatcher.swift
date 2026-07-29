@@ -267,16 +267,12 @@ enum EventDispatcher {
             return Data("{}".utf8)
         }
 
-        var decisionObject: [String: Any] = ["behavior": allow ? "allow" : "deny"]
-        if let message, !allow {
-            decisionObject["message"] = message
-        }
-        let reply: [String: Any] = [
-            "hookSpecificOutput": [
-                "hookEventName": "PermissionRequest",
-                "decision": decisionObject,
-            ]
-        ]
+        let reply = PermissionDecision.claudeReply(
+            allow: allow,
+            message: message,
+            toolName: toolName,
+            toolInput: toolInput
+        )
         return (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
     }
 
