@@ -395,15 +395,12 @@ struct SessionRowView: View {
                 Text("Plan")
                     .font(.system(size: 11.5, weight: .bold))
                     .foregroundStyle(Theme.secondaryText)
+                // A plan is read from the top: without the anchor a long one
+                // opens part-way down and hides its own title.
                 ScrollView {
-                    Text((try? AttributedString(
-                        markdown: markdown,
-                        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-                    )) ?? AttributedString(markdown))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Theme.primaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    PlanMarkdownView(markdown: markdown)
                 }
+                .defaultScrollAnchor(.top)
                 .frame(maxHeight: 240)
                 HStack(spacing: 8) {
                     Spacer()
