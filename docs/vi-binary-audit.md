@@ -339,6 +339,57 @@ visibile dell'utente.
   (client reale connesso, 12 sessioni), TCC Accessibility ancora
   concessa, launcher ripuntato su `/Applications/Meowtch.app`.
 
+## Pass 11 — Approvare un piano dal notch non arrivava (2026-07-29)
+
+Sintomo (Matteo): «in plan mode la detection delle scelte non è rilevata
+correttamente». La card `ExitPlanMode` compariva, ma premere **Approve**
+non produceva nulla: il terminale continuava a chiedere.
+
+**Causa** — estratta dal binario del CLI 2.1.220 e confermata dal vivo.
+Alcuni tool dichiarano `requiresUserInteraction()`; per quelli il gestore
+degli hook fa:
+
+```js
+if (!_.updatedInput && e.requiresUserInteraction?.()) return null
+```
+
+cioè **scarta un `allow` privo di `updatedInput`** e ricade sul prompt
+nativo. `ExitPlanMode.requiresUserInteraction()` → `true` (falso solo in
+modalità team, `o_()`); `AskUserQuestion` idem. Il `deny` invece passa
+sempre — ecco perché *Reject* funzionava e *Approve* no.
+
+Non era una regressione nostra: la risposta "allow nudo" è sempre stata
+così, e la strada che già funzionava (le Question) rispondeva con
+`updatedInput.answers` senza che il legame fosse capito. Fix: quando il
+tool è nella lista di quelli interattivi, l'`allow` **rimanda indietro il
+`tool_input` ricevuto** (`PermissionDecision.claudeReply`, testata). La
+lista resta corta e verificata di proposito: allegare un `updatedInput`
+fa rivalutare le regole di permesso sull'input, quindi una deny rule
+dell'utente potrebbe scavalcare un allow appena dato dal notch.
+
+Altre cose apprese, da non riscoprire:
+
+- Il **piano non è più nel prompt**: `ExitPlanMode` non ha più il campo
+  `plan` nello schema (il modello scrive su `~/.claude/plans/<slug>.md`).
+  Il CLI però **inietta** `plan` + `planFilePath` nel `tool_input` prima
+  della catena dei permessi (`Mid = Map([["ExitPlanMode", {"plan",
+  "planFilePath"}]])`), quindi la card `.plan` continua a ricevere il
+  markdown. Verificato sui transcript reali.
+- `answers` accetta **sia stringa sia array** (`E.preprocess(... e.join(", "))`):
+  il formato array che usiamo resta valido.
+- Il prompt nativo del terminale viene disegnato **in parallelo** all'hook
+  bloccato, non dopo: vederlo a schermo non significa che la nostra
+  decisione sia stata scartata. Il discriminante è cosa succede *dopo*
+  aver deciso dal notch.
+- `claude -p` non espone `ExitPlanMode`: per riprodurre serve una
+  sessione **interattiva** (harness pty in `scratchpad/planloop.py`).
+
+Verifica A/B dal vivo, stesso harness, cambia solo il build: con 0.1.1 la
+card arriva, si approva e non succede nulla (`calc.py` intatto, la TUI
+resta sul suo prompt); col fix il CLI stampa `Allowed by PermissionRequest
+hook` → `User approved Claude's plan` e la sessione passa
+all'implementazione.
+
 ## Stato verifiche e packaging (2026-07-24, fine giornata)
 
 - **Multi-account**: verificato e confermato; resta solo l'adozione di un
