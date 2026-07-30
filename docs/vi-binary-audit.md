@@ -407,6 +407,90 @@ di prova con `pkill -x claude` e ho ucciso **tutte** le sessioni Claude
 Code di Matteo. L'harness pty va terminato per PID (`pgrep -P <harness>`),
 mai per nome di processo: `claude` è anche ciò con cui l'utente lavora.
 
+## Pass 12 — Remote Bridge: review e messa in sicurezza (2026-07-30)
+
+Un altro agente ha aggiunto il **Remote Bridge** (commit `e94caef`): le
+domande e le approvazioni di piano vengono specchiate a un **comando
+locale** scelto dall'utente (JSON su stdin), e una risposta lasciata in
+`~/.vedetta/run/remote-answers/<id>.json` vale come un click nel notch.
+Vedetta resta l'arbitro unico: chi risponde per primo vince, all'altra
+superficie arriva un evento `resolved`. L'impianto era buono — logica pura
+in `RemoteBridgeLogic` con test, off di default, scrittura atomica lato
+notifier — ma la review ne ha trovati quattro difetti, tutti corretti qui.
+
+**1. Un notifier che muore abbatteva l'app.** La notify scriveva sullo
+stdin del figlio con `FileHandle.write(_:)`. Se il comando esce prima di
+leggere (shim rotto, interprete assente), la pipe è spezzata; SIGPIPE è
+ignorato da `main.swift` (commit `0b2a08c`), quindi non arriva il segnale
+ma Foundation solleva una `NSException` ObjC che Swift non può catturare →
+`abort()`. Riprodotto in isolato: exit 134 dentro
+`-[NSConcreteFileHandle writeData:]`. Fix: variante lanciante
+`write(contentsOf:)` e spawn su una coda dedicata, fuori dal main thread.
+Verificato dal vivo forzando la pipe rotta con un payload più grande del
+buffer (200 KB) e un notifier che chiude stdin: `notify failed`, app viva.
+**Regola generale**: con SIGPIPE ignorato, ogni `FileHandle.write(_:)` su
+una pipe è un crash in attesa — usare sempre la variante `throws`.
+
+**2. Il piano arrivava senza il piano.** Il payload usava
+`toolDetail ?? toolName`, ma per `ExitPlanMode` il `detail` è sempre `nil`
+(si ricava da `command`/`file_path`/`description`, e il `tool_input` di un
+piano contiene solo `plan` + `planFilePath`, cfr. Pass 11): da remoto si
+leggeva `ExitPlanMode` e basta, cioè si approvava alla cieca. Ora il
+payload porta `title` (prima intestazione utile, via `PlanMarkdown`) e
+`body` (markdown troncato a 3000 caratteri su confine di riga — Telegram
+taglia a 4096).
+
+**3. L'id di una domanda era il session id.** Una risposta remota passa da
+un umano e può tornare minuti dopo: se nel frattempo la sessione ha
+cambiato prompt, la scelta veniva applicata **alla domanda sbagliata**, in
+silenzio. Ora l'id è `<sessionId>.<digest>` dove il digest sono 4 byte di
+SHA-256 di prompt+opzioni; `apply` rifiuta ciò che non combacia e il diff
+emette `resolved`+`new` quando il contenuto cambia nella stessa sessione.
+Verificato: id alterato → `stale or invalid`, id giusto → applicata.
+
+**4. Configurazione solo al lancio.** Il bridge leggeva la chiave una
+volta sola. Ora la segue a caldo: `UserDefaults.didChangeNotification` per
+le modifiche dalla UI, **più un poll da 5s** perché quella notifica non
+viene postata per un `defaults write` fatto da un terminale (verificato:
+non arriva). E la feature ha una casa visibile — **Settings → Integrations
+→ Remote Bridge**, in fondo alla pagina, con campo comando, stato e
+avviso su cosa esce dalla macchina.
+
+**5. «notify sent» non significava consegnato.** Emerso durante la verifica
+live: il log diceva `notify sent: new plan-2` e su Telegram non arrivava
+nulla. La notify buttava via exit code e stderr del comando, quindi
+registrava un successo che era solo «la write su stdin è riuscita» — il
+gateway rispondeva `disabled` (il suo kill-switch `remote_questions` era a
+`false`) e nessuno poteva saperlo. Ora si attende l'uscita del processo e
+un exit ≠ 0 finisce nel log con i primi 400 caratteri di stderr; la coda
+di spawn è diventata concorrente perché ora si aspetta davvero.
+
+Contorno: il log ruota a 256 KB (una generazione), il payload non viene
+più ricostruito tre volte per riga di log, e il contratto del file di
+risposta (**scrittura atomica**: temp con punto + rename) è ora scritto
+nella docstring di `parseAnswer` — un `.json` che non parsa viene scartato,
+non ritentato.
+
+**Verifica live (2026-07-30)**: sessione Claude reale in plan mode via
+harness pty → card nel notch → messaggio Telegram con titolo e corpo del
+piano → **tap "Approva" dal telefono di Matteo** → `applied remote
+decision for plan-1: approve` → il CLI stampa `User approved Claude's
+plan` e prosegue → `resolved` → messaggio ritirato. È la prima volta che
+il ramo piano gira end-to-end. Verificati anche, con envelope sintetici:
+pipe rotta (app viva), impronta stale (rifiutata) e corretta (applicata),
+accensione/spegnimento a caldo.
+
+Controparte: `~/Code/matt-ai` (gateway OpenClaw/Telegram) si è già
+allineata al contratto v2 (commit `6239199`: id con impronta, `body` del
+piano, shim EPIPE-safe). Il contratto in una riga: `{event: new|resolved,
+id, kind: question|plan, title, options?, body?, session}`.
+
+⚠️ **Nota operativa**: per esercitare la pipe rotta ho iniettato una
+domanda con un'opzione da 200.000 caratteri — la card ha invaso il notch
+finché non è stata risolta. Gli envelope sintetici vanno tenuti di
+dimensioni plausibili: il notch non impone un tetto all'altezza delle
+opzioni.
+
 ## Stato verifiche e packaging (2026-07-24, fine giornata)
 
 - **Multi-account**: verificato e confermato; resta solo l'adozione di un

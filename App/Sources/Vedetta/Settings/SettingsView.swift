@@ -421,6 +421,8 @@ private struct IntegrationsSettingsPage: View {
                 .disabled(axTrusted)
             }
         }
+
+        RemoteBridgeSection()
     }
 
     private func hookRow(
@@ -499,6 +501,53 @@ private struct IntegrationsSettingsPage: View {
             }
             trustReport = lines.joined(separator: "\n")
         }
+    }
+}
+
+// MARK: - Remote Bridge
+
+/// Answering from somewhere other than this Mac. Off unless a command is set,
+/// and deliberately plain: the command is whatever you trust to carry the
+/// question — Meowtch itself never opens a connection.
+private struct RemoteBridgeSection: View {
+    @AppStorage(RemoteBridge.commandDefaultsKey) private var command = ""
+
+    var body: some View {
+        SettingsSection(
+            title: "Remote Bridge",
+            footer: "Optional. Pending questions and plan approvals are also handed to this command as JSON on stdin; an answer written back to ~/.vedetta/run/remote-answers/ counts exactly like a click in the notch, and whichever side answers first wins. The command runs locally with your privileges and receives the question text and the plan body, so point it only at something you trust — Meowtch opens no connection of its own."
+        ) {
+            SettingsRow(title: "Notifier command", subtitle: status) {
+                HStack(spacing: 8) {
+                    TextField("/path/to/notifier", text: $command)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 230)
+                    Button("Choose…") { choose() }
+                }
+            }
+        }
+    }
+
+    private var status: String {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Off — questions and plans stay in the notch" }
+        let executable = String(trimmed.split(separator: " ").first ?? "")
+        if executable.hasPrefix("/"), !FileManager.default.isExecutableFile(atPath: executable) {
+            return "Not executable: \(executable)"
+        }
+        return "Active — mirroring questions and plan approvals"
+    }
+
+    private func choose() {
+        let picker = NSOpenPanel()
+        picker.title = "Select the notifier command"
+        picker.prompt = "Use"
+        picker.canChooseFiles = true
+        picker.canChooseDirectories = false
+        picker.allowsMultipleSelection = false
+        picker.treatsFilePackagesAsDirectories = true
+        guard picker.runModal() == .OK, let url = picker.url else { return }
+        command = url.path
     }
 }
 
