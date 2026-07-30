@@ -64,11 +64,11 @@ public enum RemoteBridgeLogic {
     // MARK: - Which window is this?
 
     /// A remote prompt is useless if you cannot tell which of five open
-    /// sessions is asking. Project folder first, then the session's own name
-    /// — that is what tells two windows apart; the host app only earns its
-    /// place when the session has no name yet.
+    /// sessions is asking. Project folder, then the session's own name —
+    /// that pair is what tells two windows apart. The host app is left out
+    /// on purpose: knowing it is VS Code narrows nothing down.
     public static func sessionLabel(
-        directory: String?, terminalApp: String?, title: String?, sessionId: String
+        directory: String?, title: String?, sessionId: String
     ) -> String {
         var parts: [String] = []
         if let directory, !directory.isEmpty {
@@ -77,36 +77,8 @@ public enum RemoteBridgeLogic {
         }
         let name = title.map { condense($0, limit: 40) } ?? ""
         if !name.isEmpty, !parts.contains(name) { parts.append(name) }
-        if let terminalApp, !terminalApp.isEmpty { parts.append(terminalApp) }
         // Better a raw id than nothing to go on.
         return parts.isEmpty ? sessionId : parts.joined(separator: " · ")
-    }
-
-    /// Terminal identities arrive as bundle ids; these are the hosts we can
-    /// name. Anything else degrades to the last bundle-id component, which
-    /// still beats showing nothing.
-    public static func terminalName(bundleIdentifier: String?, termProgram: String?) -> String? {
-        let known = [
-            "com.apple.terminal": "Terminal",
-            "com.googlecode.iterm2": "iTerm2",
-            "dev.warp.warp-stable": "Warp",
-            "com.microsoft.vscode": "VS Code",
-            "com.microsoft.vscode-insiders": "VS Code Insiders",
-            "com.visualstudio.code.oss": "VS Code",
-            "com.todesktop.230313mzl4w4u92": "Cursor",
-            "com.exafunction.windsurf": "Windsurf",
-            "co.zeit.hyper": "Hyper",
-            "net.kovidgoyal.kitty": "kitty",
-            "com.github.wez.wezterm": "WezTerm",
-            "com.mitchellh.ghostty": "Ghostty",
-            "com.jetbrains.intellij": "IntelliJ",
-        ]
-        if let id = bundleIdentifier?.lowercased(), !id.isEmpty {
-            if let name = known[id] { return name }
-            if let tail = id.split(separator: ".").last { return String(tail) }
-        }
-        guard let termProgram, !termProgram.isEmpty else { return nil }
-        return termProgram == "vscode" ? "VS Code" : termProgram
     }
 
     // MARK: - Question identity

@@ -474,14 +474,12 @@ non ritentato.
 **6. «Quale finestra sta chiedendo?»** (chiesto da Matteo davanti al primo
 messaggio riuscito). Il payload passava il session id nudo, un UUID: dal
 telefono non si capiva quale delle sessioni aperte stesse parlando. Ora
-`session` è un'etichetta leggibile — `vedetta · Fix del bridge · VS Code`
-(cartella di progetto · nome della sessione · app host; l'app scala in
-coda perché è il nome sessione a distinguere due finestre, e compare da
-sola solo se la sessione non ha ancora un nome),
-costruita da `sessionLabel`/`terminalName` con una mappa dei bundle id
-noti (Terminal, iTerm2, Warp, VS Code/Insiders/OSS, Cursor, Windsurf,
-Hyper, kitty, WezTerm, Ghostty) e degradazione all'ultimo componente del
-bundle id. L'UUID resta disponibile come campo `sessionId`.
+`session` è un'etichetta leggibile — `vedetta · Fix del bridge`, cioè
+cartella di progetto · nome della sessione (`sessionLabel`). L'app che
+ospita il terminale è stata provata e poi **scartata su indicazione di
+Matteo**: sapere che è VS Code non restringe nulla, sono le due finestre
+sullo stesso progetto a doversi distinguere, e per quello serve il nome
+sessione. L'UUID resta disponibile come campo `sessionId`.
 
 **Verifica live (2026-07-30)**: sessione Claude reale in plan mode via
 harness pty → card nel notch → messaggio Telegram con titolo e corpo del

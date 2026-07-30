@@ -103,21 +103,12 @@ final class RemoteBridge {
 
     // MARK: - Outbound (notify)
 
-    /// "vedetta · VS Code · Fix del bridge" — enough to know which of five
-    /// open sessions is asking, from a phone.
+    /// "vedetta · Fix del bridge" — enough to know which of five open
+    /// sessions is asking, from a phone.
     private func label(for sessionId: String) -> String {
-        let store = EventDispatcher.store
-        let session = store?.sessions.first { $0.id == sessionId }
-        let terminal = store?.terminal(for: sessionId)
+        let session = EventDispatcher.store?.sessions.first { $0.id == sessionId }
         return RemoteBridgeLogic.sessionLabel(
-            directory: session?.directory,
-            terminalApp: RemoteBridgeLogic.terminalName(
-                bundleIdentifier: terminal?.bundleIdentifier,
-                termProgram: terminal?.termProgram
-            ),
-            title: session?.title,
-            sessionId: sessionId
-        )
+            directory: session?.directory, title: session?.title, sessionId: sessionId)
     }
 
     private func syncQuestions(_ live: [QuestionStore.Live]) {

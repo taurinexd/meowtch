@@ -39,33 +39,19 @@ struct RemoteBridgeLogicTests {
 
     // MARK: - Which window is this?
 
-    @Test func sessionLabelLeadsWithProjectAndSessionName() {
+    @Test func sessionLabelIsProjectAndSessionName() {
         #expect(RemoteBridgeLogic.sessionLabel(
-            directory: "/Users/me/Code/vedetta", terminalApp: "VS Code",
-            title: "Fix the bridge", sessionId: "abc"
-        ) == "vedetta · Fix the bridge · VS Code")
-        // No session name yet: the host app is all that's left to identify it.
+            directory: "/Users/me/Code/vedetta", title: "Fix the bridge", sessionId: "abc"
+        ) == "vedetta · Fix the bridge")
         #expect(RemoteBridgeLogic.sessionLabel(
-            directory: "/Users/me/Code/vedetta", terminalApp: "VS Code",
-            title: nil, sessionId: "abc"
-        ) == "vedetta · VS Code")
-        #expect(RemoteBridgeLogic.sessionLabel(
-            directory: "/Users/me/Code/vedetta", terminalApp: nil,
-            title: nil, sessionId: "abc"
-        ) == "vedetta")
+            directory: "/Users/me/Code/vedetta", title: nil, sessionId: "abc") == "vedetta")
         // Nothing to say beats saying nothing: fall back to the raw id.
         #expect(RemoteBridgeLogic.sessionLabel(
-            directory: nil, terminalApp: nil, title: "", sessionId: "abc") == "abc")
-    }
-
-    @Test func terminalNameMapsKnownHostsAndDegradesGracefully() {
-        #expect(RemoteBridgeLogic.terminalName(
-            bundleIdentifier: "com.googlecode.iTerm2", termProgram: nil) == "iTerm2")
-        #expect(RemoteBridgeLogic.terminalName(
-            bundleIdentifier: nil, termProgram: "vscode") == "VS Code")
-        #expect(RemoteBridgeLogic.terminalName(
-            bundleIdentifier: "com.example.SomeShell", termProgram: nil) == "someshell")
-        #expect(RemoteBridgeLogic.terminalName(bundleIdentifier: nil, termProgram: nil) == nil)
+            directory: nil, title: "", sessionId: "abc") == "abc")
+        #expect(RemoteBridgeLogic.sessionLabel(
+            directory: "/Users/me/Code/vedetta",
+            title: String(repeating: "x", count: 80), sessionId: "abc"
+        ).count == 51)  // "vedetta · " + 40 + ellipsis
     }
 
     // MARK: - Question diffing
