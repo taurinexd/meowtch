@@ -42,9 +42,15 @@ back to the exact terminal that asked.
   app is gone they exit silently and never slow Claude Code down)
 - **Auto-update** — checks GitHub Releases (only with your consent),
   verifies an EdDSA signature, swaps the app and relaunches
+- **Remote bridge** — optional: hand pending questions and plan approvals
+  to a local command of your choosing (a phone notifier, a bot), and an
+  answer written back counts exactly like a click in the notch. Off until
+  you name a command in Settings → Integrations
 - **Private by default** — no cloud, no accounts, no telemetry. The only
   network traffic is the update check and the optional usage refresh,
-  both off until you say yes
+  both off until you say yes. The remote bridge opens no connection
+  either — it runs the command you configured, and that command is as
+  trusted as your terminal
 
 ## Install
 

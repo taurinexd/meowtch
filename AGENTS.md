@@ -53,7 +53,8 @@ the bundle id and paths carry the user's TCC grants and installed hooks.
 
 ## Layout
 - `App/Sources/Vedetta` — the app: notch panel/UI, `EventDispatcher`, `EventServer`
-  socket, `JumpService`, `VedettaSetup` (hooks/launcher), `UsageModel`/`CodexUsageProbe`.
+  socket, `JumpService`, `VedettaSetup` (hooks/launcher), `UsageModel`/`CodexUsageProbe`,
+  `RemoteBridge` (optional mirror of questions/plans to a local command).
 - `App/Sources/VedettaKit` — shared model/parsers: `SessionEventReducer`, `SessionStore`,
   `TranscriptPeek`, `CodexScan`, `HookConfigurator`, `AgentSession`.
 - `App/Sources/VedettaBridge` — the `vedetta-bridge` hook helper (reads the hook payload,
