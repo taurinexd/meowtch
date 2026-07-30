@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             JumpService.installVSCodeExtension()
             UsageModel.shared.start()
+            RemoteBridge.shared.start()
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in
                 Task { @MainActor in
