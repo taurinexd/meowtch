@@ -471,6 +471,16 @@ risposta (**scrittura atomica**: temp con punto + rename) è ora scritto
 nella docstring di `parseAnswer` — un `.json` che non parsa viene scartato,
 non ritentato.
 
+**6. «Quale finestra sta chiedendo?»** (chiesto da Matteo davanti al primo
+messaggio riuscito). Il payload passava il session id nudo, un UUID: dal
+telefono non si capiva quale delle sessioni aperte stesse parlando. Ora
+`session` è un'etichetta leggibile — `vedetta · VS Code · Fix del bridge`
+(cartella di progetto · app che ospita il terminale · titolo di sessione),
+costruita da `sessionLabel`/`terminalName` con una mappa dei bundle id
+noti (Terminal, iTerm2, Warp, VS Code/Insiders/OSS, Cursor, Windsurf,
+Hyper, kitty, WezTerm, Ghostty) e degradazione all'ultimo componente del
+bundle id. L'UUID resta disponibile come campo `sessionId`.
+
 **Verifica live (2026-07-30)**: sessione Claude reale in plan mode via
 harness pty → card nel notch → messaggio Telegram con titolo e corpo del
 piano → **tap "Approva" dal telefono di Matteo** → `applied remote

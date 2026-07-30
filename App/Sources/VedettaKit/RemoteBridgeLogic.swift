@@ -14,14 +14,20 @@ public enum RemoteBridgeLogic {
 
     public struct QuestionSnapshot: Equatable {
         public let sessionId: String
+        /// Human-readable "which window is this?" — see `sessionLabel`.
+        public let label: String
         public let title: String
         public let options: [String]
         /// Only single-question, single-select prompts are remotely answerable
         /// in this version; others stay notch-only.
         public let eligible: Bool
 
-        public init(sessionId: String, title: String, options: [String], eligible: Bool) {
+        public init(
+            sessionId: String, label: String, title: String,
+            options: [String], eligible: Bool
+        ) {
             self.sessionId = sessionId
+            self.label = label
             self.title = title
             self.options = options
             self.eligible = eligible
@@ -35,20 +41,72 @@ public enum RemoteBridgeLogic {
     public struct PlanSnapshot: Equatable {
         public let id: Int
         public let sessionId: String
+        public let label: String
         public let markdown: String
 
-        public init(id: Int, sessionId: String, markdown: String) {
+        public init(id: Int, sessionId: String, label: String, markdown: String) {
             self.id = id
             self.sessionId = sessionId
+            self.label = label
             self.markdown = markdown
         }
     }
 
     public enum Event: Equatable {
-        case newQuestion(id: String, title: String, options: [String], session: String)
+        case newQuestion(id: String, title: String, options: [String],
+                         session: String, sessionId: String)
         case resolvedQuestion(id: String)
-        case newPlan(id: String, title: String, body: String, session: String)
+        case newPlan(id: String, title: String, body: String,
+                     session: String, sessionId: String)
         case resolvedPlan(id: String)
+    }
+
+    // MARK: - Which window is this?
+
+    /// A remote prompt is useless if you cannot tell which of five open
+    /// sessions is asking. The label answers that in one line: the project
+    /// folder, the app hosting the terminal, and the session's own title.
+    public static func sessionLabel(
+        directory: String?, terminalApp: String?, title: String?, sessionId: String
+    ) -> String {
+        var parts: [String] = []
+        if let directory, !directory.isEmpty {
+            let name = (directory as NSString).lastPathComponent
+            if !name.isEmpty, name != "/" { parts.append(name) }
+        }
+        if let terminalApp, !terminalApp.isEmpty { parts.append(terminalApp) }
+        if let title, !title.isEmpty, !parts.contains(title) {
+            parts.append(condense(title, limit: 40))
+        }
+        // Better a raw id than nothing to go on.
+        return parts.isEmpty ? sessionId : parts.joined(separator: " · ")
+    }
+
+    /// Terminal identities arrive as bundle ids; these are the hosts we can
+    /// name. Anything else degrades to the last bundle-id component, which
+    /// still beats showing nothing.
+    public static func terminalName(bundleIdentifier: String?, termProgram: String?) -> String? {
+        let known = [
+            "com.apple.terminal": "Terminal",
+            "com.googlecode.iterm2": "iTerm2",
+            "dev.warp.warp-stable": "Warp",
+            "com.microsoft.vscode": "VS Code",
+            "com.microsoft.vscode-insiders": "VS Code Insiders",
+            "com.visualstudio.code.oss": "VS Code",
+            "com.todesktop.230313mzl4w4u92": "Cursor",
+            "com.exafunction.windsurf": "Windsurf",
+            "co.zeit.hyper": "Hyper",
+            "net.kovidgoyal.kitty": "kitty",
+            "com.github.wez.wezterm": "WezTerm",
+            "com.mitchellh.ghostty": "Ghostty",
+            "com.jetbrains.intellij": "IntelliJ",
+        ]
+        if let id = bundleIdentifier?.lowercased(), !id.isEmpty {
+            if let name = known[id] { return name }
+            if let tail = id.split(separator: ".").last { return String(tail) }
+        }
+        guard let termProgram, !termProgram.isEmpty else { return nil }
+        return termProgram == "vscode" ? "VS Code" : termProgram
     }
 
     // MARK: - Question identity
@@ -123,7 +181,8 @@ public enum RemoteBridgeLogic {
         for snapshot in eligible where !known.contains(snapshot.remoteId) {
             events.append(.newQuestion(
                 id: snapshot.remoteId, title: snapshot.title,
-                options: snapshot.options, session: snapshot.sessionId
+                options: snapshot.options, session: snapshot.label,
+                sessionId: snapshot.sessionId
             ))
         }
         for gone in known.subtracting(current).sorted() {
@@ -143,7 +202,8 @@ public enum RemoteBridgeLogic {
                 id: "plan-\(plan.id)",
                 title: planTitle(from: plan.markdown),
                 body: planBody(from: plan.markdown),
-                session: plan.sessionId
+                session: plan.label,
+                sessionId: plan.sessionId
             ))
         }
         for gone in known.subtracting(current).sorted() {
@@ -155,14 +215,16 @@ public enum RemoteBridgeLogic {
     /// JSON payload handed to the notify command on stdin.
     public static func payload(for event: Event) -> [String: Any] {
         switch event {
-        case let .newQuestion(id, title, options, session):
+        case let .newQuestion(id, title, options, session, sessionId):
             return ["event": "new", "id": id, "kind": "question",
-                    "title": title, "options": options, "session": session]
+                    "title": title, "options": options,
+                    "session": session, "sessionId": sessionId]
         case let .resolvedQuestion(id):
             return ["event": "resolved", "id": id, "kind": "question", "title": ""]
-        case let .newPlan(id, title, body, session):
+        case let .newPlan(id, title, body, session, sessionId):
             return ["event": "new", "id": id, "kind": "plan",
-                    "title": title, "body": body, "session": session]
+                    "title": title, "body": body,
+                    "session": session, "sessionId": sessionId]
         case let .resolvedPlan(id):
             return ["event": "resolved", "id": id, "kind": "plan", "title": ""]
         }
