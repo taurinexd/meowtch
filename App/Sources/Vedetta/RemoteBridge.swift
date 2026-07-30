@@ -103,11 +103,29 @@ final class RemoteBridge {
 
     // MARK: - Outbound (notify)
 
+    /// "vedetta · VS Code · Fix del bridge" — enough to know which of five
+    /// open sessions is asking, from a phone.
+    private func label(for sessionId: String) -> String {
+        let store = EventDispatcher.store
+        let session = store?.sessions.first { $0.id == sessionId }
+        let terminal = store?.terminal(for: sessionId)
+        return RemoteBridgeLogic.sessionLabel(
+            directory: session?.directory,
+            terminalApp: RemoteBridgeLogic.terminalName(
+                bundleIdentifier: terminal?.bundleIdentifier,
+                termProgram: terminal?.termProgram
+            ),
+            title: session?.title,
+            sessionId: sessionId
+        )
+    }
+
     private func syncQuestions(_ live: [QuestionStore.Live]) {
         let snapshots = live.map { entry -> RemoteBridgeLogic.QuestionSnapshot in
             let first = entry.questions.first
             return RemoteBridgeLogic.QuestionSnapshot(
                 sessionId: entry.sessionId,
+                label: label(for: entry.sessionId),
                 title: first?.prompt ?? "",
                 options: first?.choices.map(\.label) ?? [],
                 eligible: entry.questions.count == 1 && !(first?.multiSelect ?? true)
@@ -124,7 +142,8 @@ final class RemoteBridge {
             // tool input carries no summary, so `toolDetail` is nil here.
             guard case .plan(let markdown) = item.kind else { return nil }
             return RemoteBridgeLogic.PlanSnapshot(
-                id: item.id, sessionId: item.sessionId, markdown: markdown)
+                id: item.id, sessionId: item.sessionId,
+                label: label(for: item.sessionId), markdown: markdown)
         }
         let (events, known) = RemoteBridgeLogic.diffPlans(known: knownPlans, pending: snapshots)
         knownPlans = known

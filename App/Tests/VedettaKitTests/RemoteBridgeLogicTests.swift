@@ -9,7 +9,8 @@ struct RemoteBridgeLogicTests {
         options: [String] = ["A", "B"], eligible: Bool = true
     ) -> RemoteBridgeLogic.QuestionSnapshot {
         RemoteBridgeLogic.QuestionSnapshot(
-            sessionId: sessionId, title: prompt, options: options, eligible: eligible)
+            sessionId: sessionId, label: "proj · Terminal", title: prompt,
+            options: options, eligible: eligible)
     }
 
     // MARK: - Identity
@@ -36,13 +37,40 @@ struct RemoteBridgeLogicTests {
         #expect(RemoteBridgeLogic.split(questionId: ".abc") == nil)
     }
 
+    // MARK: - Which window is this?
+
+    @Test func sessionLabelNamesProjectHostAndTitle() {
+        #expect(RemoteBridgeLogic.sessionLabel(
+            directory: "/Users/me/Code/vedetta", terminalApp: "VS Code",
+            title: "Fix the bridge", sessionId: "abc"
+        ) == "vedetta · VS Code · Fix the bridge")
+        #expect(RemoteBridgeLogic.sessionLabel(
+            directory: "/Users/me/Code/vedetta", terminalApp: nil,
+            title: nil, sessionId: "abc"
+        ) == "vedetta")
+        // Nothing to say beats saying nothing: fall back to the raw id.
+        #expect(RemoteBridgeLogic.sessionLabel(
+            directory: nil, terminalApp: nil, title: "", sessionId: "abc") == "abc")
+    }
+
+    @Test func terminalNameMapsKnownHostsAndDegradesGracefully() {
+        #expect(RemoteBridgeLogic.terminalName(
+            bundleIdentifier: "com.googlecode.iTerm2", termProgram: nil) == "iTerm2")
+        #expect(RemoteBridgeLogic.terminalName(
+            bundleIdentifier: nil, termProgram: "vscode") == "VS Code")
+        #expect(RemoteBridgeLogic.terminalName(
+            bundleIdentifier: "com.example.SomeShell", termProgram: nil) == "someshell")
+        #expect(RemoteBridgeLogic.terminalName(bundleIdentifier: nil, termProgram: nil) == nil)
+    }
+
     // MARK: - Question diffing
 
     @Test func newEligibleQuestionEmitsEvent() {
         let snapshot = question()
         let (events, known) = RemoteBridgeLogic.diffQuestions(known: [], live: [snapshot])
         #expect(events == [.newQuestion(
-            id: snapshot.remoteId, title: "Which one?", options: ["A", "B"], session: "s1")])
+            id: snapshot.remoteId, title: "Which one?", options: ["A", "B"],
+            session: "proj · Terminal", sessionId: "s1")])
         #expect(known == [snapshot.remoteId])
     }
 
@@ -76,7 +104,8 @@ struct RemoteBridgeLogicTests {
         let (events, known) = RemoteBridgeLogic.diffQuestions(
             known: [first.remoteId], live: [second])
         #expect(events.contains(.newQuestion(
-            id: second.remoteId, title: "Roll back?", options: ["A", "B"], session: "s1")))
+            id: second.remoteId, title: "Roll back?", options: ["A", "B"],
+            session: "proj · Terminal", sessionId: "s1")))
         #expect(events.contains(.resolvedQuestion(id: first.remoteId)))
         #expect(known == [second.remoteId])
     }
@@ -85,11 +114,13 @@ struct RemoteBridgeLogicTests {
 
     @Test func planDiffEmitsPrefixedIdsAndReadableTitle() {
         let plan = RemoteBridgeLogic.PlanSnapshot(
-            id: 7, sessionId: "s1", markdown: "# Fix the socket\n\nSteps follow.")
+            id: 7, sessionId: "s1", label: "proj · VS Code",
+            markdown: "# Fix the socket\n\nSteps follow.")
         let (events, known) = RemoteBridgeLogic.diffPlans(known: [], pending: [plan])
         #expect(events == [.newPlan(
             id: "plan-7", title: "Fix the socket",
-            body: "# Fix the socket\n\nSteps follow.", session: "s1")])
+            body: "# Fix the socket\n\nSteps follow.",
+            session: "proj · VS Code", sessionId: "s1")])
         #expect(known == [7])
         let (resolved, empty) = RemoteBridgeLogic.diffPlans(known: known, pending: [])
         #expect(resolved == [.resolvedPlan(id: "plan-7")])
@@ -116,12 +147,14 @@ struct RemoteBridgeLogicTests {
 
     @Test func payloadShapes() {
         let question = RemoteBridgeLogic.payload(
-            for: .newQuestion(id: "s1.abcd1234", title: "T", options: ["A"], session: "s1"))
+            for: .newQuestion(id: "s1.abcd1234", title: "T", options: ["A"],
+                              session: "proj", sessionId: "s1"))
         #expect(question["event"] as? String == "new")
         #expect(question["kind"] as? String == "question")
         #expect(question["options"] as? [String] == ["A"])
         let plan = RemoteBridgeLogic.payload(
-            for: .newPlan(id: "plan-7", title: "Fix it", body: "# Fix it", session: "s1"))
+            for: .newPlan(id: "plan-7", title: "Fix it", body: "# Fix it",
+                          session: "proj", sessionId: "s1"))
         #expect(plan["title"] as? String == "Fix it")
         #expect(plan["body"] as? String == "# Fix it")
         let resolved = RemoteBridgeLogic.payload(for: .resolvedPlan(id: "plan-7"))
@@ -131,9 +164,10 @@ struct RemoteBridgeLogicTests {
 
     @Test func everyPayloadIsJSONSerialisable() {
         let events: [RemoteBridgeLogic.Event] = [
-            .newQuestion(id: "s1.abcd1234", title: "T", options: ["A"], session: "s1"),
+            .newQuestion(id: "s1.abcd1234", title: "T", options: ["A"],
+                         session: "proj", sessionId: "s1"),
             .resolvedQuestion(id: "s1.abcd1234"),
-            .newPlan(id: "plan-1", title: "T", body: "# T", session: "s1"),
+            .newPlan(id: "plan-1", title: "T", body: "# T", session: "proj", sessionId: "s1"),
             .resolvedPlan(id: "plan-1"),
         ]
         for event in events {
