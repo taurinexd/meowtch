@@ -64,8 +64,9 @@ public enum RemoteBridgeLogic {
     // MARK: - Which window is this?
 
     /// A remote prompt is useless if you cannot tell which of five open
-    /// sessions is asking. The label answers that in one line: the project
-    /// folder, the app hosting the terminal, and the session's own title.
+    /// sessions is asking. Project folder first, then the session's own name
+    /// — that is what tells two windows apart; the host app only earns its
+    /// place when the session has no name yet.
     public static func sessionLabel(
         directory: String?, terminalApp: String?, title: String?, sessionId: String
     ) -> String {
@@ -74,10 +75,9 @@ public enum RemoteBridgeLogic {
             let name = (directory as NSString).lastPathComponent
             if !name.isEmpty, name != "/" { parts.append(name) }
         }
+        let name = title.map { condense($0, limit: 40) } ?? ""
+        if !name.isEmpty, !parts.contains(name) { parts.append(name) }
         if let terminalApp, !terminalApp.isEmpty { parts.append(terminalApp) }
-        if let title, !title.isEmpty, !parts.contains(title) {
-            parts.append(condense(title, limit: 40))
-        }
         // Better a raw id than nothing to go on.
         return parts.isEmpty ? sessionId : parts.joined(separator: " · ")
     }
