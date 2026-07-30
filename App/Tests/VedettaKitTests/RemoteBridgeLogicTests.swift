@@ -39,11 +39,16 @@ struct RemoteBridgeLogicTests {
 
     // MARK: - Which window is this?
 
-    @Test func sessionLabelNamesProjectHostAndTitle() {
+    @Test func sessionLabelLeadsWithProjectAndSessionName() {
         #expect(RemoteBridgeLogic.sessionLabel(
             directory: "/Users/me/Code/vedetta", terminalApp: "VS Code",
             title: "Fix the bridge", sessionId: "abc"
-        ) == "vedetta · VS Code · Fix the bridge")
+        ) == "vedetta · Fix the bridge · VS Code")
+        // No session name yet: the host app is all that's left to identify it.
+        #expect(RemoteBridgeLogic.sessionLabel(
+            directory: "/Users/me/Code/vedetta", terminalApp: "VS Code",
+            title: nil, sessionId: "abc"
+        ) == "vedetta · VS Code")
         #expect(RemoteBridgeLogic.sessionLabel(
             directory: "/Users/me/Code/vedetta", terminalApp: nil,
             title: nil, sessionId: "abc"
