@@ -27,11 +27,15 @@ final class RemoteBridge {
     private var activeCommand: String?
 
     /// Spawning the notifier is a fork+exec of a user command: off the main
-    /// thread, so a slow interpreter can never stutter the notch. Concurrent,
-    /// because we wait for each notifier to finish and a slow one must not
-    /// hold up the next event.
-    private static let notifyQueue = DispatchQueue(
-        label: "app.vedetta.remote-bridge.notify", attributes: .concurrent)
+    /// thread, so a slow interpreter can never stutter the notch. **Serial**,
+    /// and each notifier is waited out before the next starts: a `resolved`
+    /// overtaking its own `new` leaves an orphaned message on the remote
+    /// surface that nothing will ever retract. Order beats latency here.
+    private static let notifyQueue = DispatchQueue(label: "app.vedetta.remote-bridge.notify")
+
+    /// A hung notifier must not hold the queue forever; past this it is
+    /// terminated and the next event goes out.
+    private static let notifyTimeout: TimeInterval = 30
 
     static let commandDefaultsKey = "remoteBridgeCommand"
 
@@ -106,6 +110,9 @@ final class RemoteBridge {
     /// "vedetta · Fix del bridge" — enough to know which of five open
     /// sessions is asking, from a phone.
     private func label(for sessionId: String) -> String {
+        if let store = EventDispatcher.store {
+            SessionBootstrap.refreshNameNow(for: sessionId, in: store)
+        }
         let session = EventDispatcher.store?.sessions.first { $0.id == sessionId }
         return RemoteBridgeLogic.sessionLabel(
             directory: session?.directory, title: session?.title, sessionId: sessionId)
@@ -148,6 +155,7 @@ final class RemoteBridge {
         let payload = RemoteBridgeLogic.payload(for: event)
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
         let label = "\(payload["event"] ?? "?") \(payload["id"] ?? "?")"
+        let timeout = RemoteBridge.notifyTimeout
 
         RemoteBridge.notifyQueue.async {
             let process = Process()
@@ -158,9 +166,13 @@ final class RemoteBridge {
             process.standardInput = stdin
             process.standardOutput = FileHandle.nullDevice
             process.standardError = stderr
+            let finished = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in finished.signal() }
             var outcome: String
+            var started = false
             do {
                 try process.run()
+                started = true
                 // A notifier that dies before reading stdin (a broken shim, a
                 // failing interpreter) leaves a broken pipe. SIGPIPE is
                 // ignored process-wide (main.swift), so the non-throwing
@@ -177,13 +189,20 @@ final class RemoteBridge {
             // notifier can accept the JSON and then refuse, or crash. Without
             // its exit code the log would claim success while nothing ever
             // reached the phone — exactly how a disabled gateway hid itself.
-            let complaint = String(
-                decoding: (try? stderr.fileHandleForReading.readToEnd()) ?? Data(), as: UTF8.self
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
-            process.waitUntilExit()
-            if process.terminationStatus != 0 {
-                outcome += " — command exited \(process.terminationStatus)"
-                if !complaint.isEmpty { outcome += ": \(complaint.prefix(400))" }
+            if started {
+                if finished.wait(timeout: .now() + timeout) == .timedOut {
+                    process.terminate()
+                    _ = finished.wait(timeout: .now() + 2)
+                    outcome += " — timed out after \(Int(timeout))s"
+                }
+                // Read once it has exited: the pipe is at EOF, so no blocking.
+                let complaint = String(
+                    decoding: (try? stderr.fileHandleForReading.readToEnd()) ?? Data(), as: UTF8.self
+                ).trimmingCharacters(in: .whitespacesAndNewlines)
+                if process.terminationStatus != 0 {
+                    outcome += " — command exited \(process.terminationStatus)"
+                    if !complaint.isEmpty { outcome += ": \(complaint.prefix(400))" }
+                }
             }
             Task { @MainActor in RemoteBridge.shared.log(outcome) }
         }

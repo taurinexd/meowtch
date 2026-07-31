@@ -59,8 +59,8 @@ struct RemoteBridgeLogicTests {
             directory: nil, title: "", sessionId: "abc") == "abc")
         #expect(RemoteBridgeLogic.sessionLabel(
             directory: "/Users/me/Code/vedetta",
-            title: String(repeating: "x", count: 80), sessionId: "abc"
-        ).count == 51)  // "vedetta · " + 40 + ellipsis
+            title: String(repeating: "x", count: 200), sessionId: "abc"
+        ).count == 91)  // "vedetta · " + 80 + ellipsis
     }
 
     // MARK: - Question diffing
