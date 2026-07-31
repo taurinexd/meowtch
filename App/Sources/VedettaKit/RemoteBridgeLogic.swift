@@ -7,10 +7,10 @@ import Foundation
 /// No network is involved: the notify command is a local executable the user
 /// chooses (e.g. a Telegram forwarder), keeping the no-cloud contract intact.
 public enum RemoteBridgeLogic {
-    /// How much of a plan travels to the remote surface. Telegram caps a
-    /// message at 4096 characters and the notifier adds a header, so the
-    /// body stays well under that.
-    public static let planBodyLimit = 3000
+    /// How much of a plan travels to the remote surface. Telegram's rich
+    /// messages (Bot API 10.1) hold 32k with a "Show more" fold at ~8k, so
+    /// the body stops at the fold: past it nobody reads anyway.
+    public static let planBodyLimit = 8000
 
     /// Per-option description budget. AskUserQuestion descriptions can run
     /// long and a Telegram message caps at 4096 characters, so each one is
@@ -93,7 +93,7 @@ public enum RemoteBridgeLogic {
             let name = (directory as NSString).lastPathComponent
             if !name.isEmpty, name != "/" { parts.append(name) }
         }
-        let name = title.map { condense($0, limit: 40) } ?? ""
+        let name = title.map { condense($0, limit: 80) } ?? ""
         if !name.isEmpty, !parts.contains(name) { parts.append(name) }
         // Better a raw id than nothing to go on.
         return parts.isEmpty ? sessionId : parts.joined(separator: " · ")

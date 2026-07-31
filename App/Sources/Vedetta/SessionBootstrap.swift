@@ -20,6 +20,21 @@ enum SessionBootstrap {
     @MainActor private static var codexIndexes: [String: CodexSessionIndexStore] = [:]
     @MainActor private static var codexWriterPIDs: [String: Int32] = [:]
 
+    /// Pulls one session's user-given name straight from its transcript.
+    /// The 15s pass below gets there eventually, but a remote prompt is
+    /// composed once and read minutes later on a phone: a `/rename` typed
+    /// seconds before the question must already be in the label.
+    @MainActor
+    static func refreshNameNow(for id: String, in store: SessionStore) {
+        guard let path = scannedPaths[id],
+              var session = store.sessions.first(where: { $0.id == id }),
+              session.agent == .claude,
+              let name = TranscriptPeek.read(path: path).sessionName,
+              name != session.title else { return }
+        session.title = name
+        store.upsert(session)
+    }
+
     @MainActor
     static func registerScannedPath(_ path: String, for id: String) {
         scannedPaths[id] = path

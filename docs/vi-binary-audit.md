@@ -494,6 +494,30 @@ l'estensione non è breaking. Il digest dell'id ora include anche le
 descrizioni: due domande con le stesse etichette ma significati diversi
 sono domande diverse.
 
+**Regressione d'ordine e ritocchi (2026-07-31, segnalati dal gateway)**.
+Il log del bridge mostrava un `resolved` consegnato **prima** del proprio
+`new` (07:55:42 vs 07:55:47, stessa domanda): a valle il gateway trovava
+il `resolved` senza mapping, lo trattava da no-op, e il `new` che arrivava
+dopo lasciava un messaggio Telegram che nessuno avrebbe più ritirato.
+Causa mia: quando ho aggiunto l'attesa dell'uscita del notifier ho reso
+`notifyQueue` **concorrente**, così due invocazioni si sovrapponevano e
+l'ordine di consegna dipendeva dalla latenza di avvio di `uv`/python. Ora
+la coda è **seriale** e ogni notifier è atteso prima del successivo, con
+un tetto di 30s oltre il quale viene terminato perché uno appeso non
+blocchi la fila. Verificato con un notifier che dorme 3s sul `new` ed è
+istantaneo sul `resolved`: l'ordine di arrivo resta `new` → `resolved`.
+Lezione: qui l'ordine vale più della latenza, e "concorrente + attesa"
+è la combinazione che sembra innocua e non lo è.
+
+Insieme: il nome sessione nell'etichetta passa da 40 a **80 caratteri**
+(su Telegram lo spazio c'è), `planBodyLimit` da 3000 a **8000** (i rich
+message Bot API 10.1 reggono 32k con la piega "Show more" a ~8k), e
+l'etichetta viene composta dopo un **peek mirato del transcript**
+(`SessionBootstrap.refreshNameNow`): il passaggio periodico applica il
+nome dato con `/rename` entro 15s, troppo tardi per una domanda che
+arriva a +10s dal lancio: la prima domanda di una sessione orchestrata
+portava ancora l'auto-titolo.
+
 **Verifica live (2026-07-30)**: sessione Claude reale in plan mode via
 harness pty → card nel notch → messaggio Telegram con titolo e corpo del
 piano → **tap "Approva" dal telefono di Matteo** → `applied remote
