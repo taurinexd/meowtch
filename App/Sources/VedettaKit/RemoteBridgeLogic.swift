@@ -12,19 +12,37 @@ public enum RemoteBridgeLogic {
     /// body stays well under that.
     public static let planBodyLimit = 3000
 
+    /// Per-option description budget. AskUserQuestion descriptions can run
+    /// long and a Telegram message caps at 4096 characters, so each one is
+    /// condensed to a phrase-sized excerpt.
+    public static let optionDetailLimit = 300
+
+    /// A choice as it travels: the label is what you tap, the detail is the
+    /// reason to tap it. Dropping the detail meant choosing blind from a
+    /// phone, since AskUserQuestion usually puts the decisive part there.
+    public struct Option: Equatable {
+        public let label: String
+        public let detail: String?
+
+        public init(label: String, detail: String? = nil) {
+            self.label = label
+            self.detail = detail
+        }
+    }
+
     public struct QuestionSnapshot: Equatable {
         public let sessionId: String
         /// Human-readable "which window is this?" — see `sessionLabel`.
         public let label: String
         public let title: String
-        public let options: [String]
+        public let options: [Option]
         /// Only single-question, single-select prompts are remotely answerable
         /// in this version; others stay notch-only.
         public let eligible: Bool
 
         public init(
             sessionId: String, label: String, title: String,
-            options: [String], eligible: Bool
+            options: [Option], eligible: Bool
         ) {
             self.sessionId = sessionId
             self.label = label
@@ -53,7 +71,7 @@ public enum RemoteBridgeLogic {
     }
 
     public enum Event: Equatable {
-        case newQuestion(id: String, title: String, options: [String],
+        case newQuestion(id: String, title: String, options: [Option],
                          session: String, sessionId: String)
         case resolvedQuestion(id: String)
         case newPlan(id: String, title: String, body: String,
@@ -89,13 +107,16 @@ public enum RemoteBridgeLogic {
     /// options it was minted for, and `apply` refuses anything that no longer
     /// matches — a late tap is dropped instead of landing on the wrong
     /// question. The separator is `.` because a session id never contains one.
-    public static func fingerprint(prompt: String, options: [String]) -> String {
-        let material = ([prompt] + options).joined(separator: "\u{1F}")
+    public static func fingerprint(prompt: String, options: [Option]) -> String {
+        // Descriptions count: two prompts can share labels and differ only in
+        // what those labels mean.
+        let material = ([prompt] + options.flatMap { [$0.label, $0.detail ?? ""] })
+            .joined(separator: "\u{1F}")
         let digest = SHA256.hash(data: Data(material.utf8))
         return digest.prefix(4).map { String(format: "%02x", $0) }.joined()
     }
 
-    public static func questionId(sessionId: String, prompt: String, options: [String]) -> String {
+    public static func questionId(sessionId: String, prompt: String, options: [Option]) -> String {
         "\(sessionId).\(fingerprint(prompt: prompt, options: options))"
     }
 
@@ -188,8 +209,17 @@ public enum RemoteBridgeLogic {
     public static func payload(for event: Event) -> [String: Any] {
         switch event {
         case let .newQuestion(id, title, options, session, sessionId):
+            // Options travel as objects; a receiver that only reads `label`
+            // keeps working, which is what made this extension safe to ship.
+            let encoded = options.map { option -> [String: Any] in
+                var entry: [String: Any] = ["label": option.label]
+                if let detail = option.detail, !detail.isEmpty {
+                    entry["detail"] = condense(detail, limit: optionDetailLimit)
+                }
+                return entry
+            }
             return ["event": "new", "id": id, "kind": "question",
-                    "title": title, "options": options,
+                    "title": title, "options": encoded,
                     "session": session, "sessionId": sessionId]
         case let .resolvedQuestion(id):
             return ["event": "resolved", "id": id, "kind": "question", "title": ""]

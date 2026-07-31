@@ -118,7 +118,9 @@ final class RemoteBridge {
                 sessionId: entry.sessionId,
                 label: label(for: entry.sessionId),
                 title: first?.prompt ?? "",
-                options: first?.choices.map(\.label) ?? [],
+                options: first?.choices.map {
+                    RemoteBridgeLogic.Option(label: $0.label, detail: $0.detail)
+                } ?? [],
                 eligible: entry.questions.count == 1 && !(first?.multiSelect ?? true)
             )
         }
@@ -234,7 +236,10 @@ final class RemoteBridge {
                   let question = live.questions.first,
                   !question.multiSelect,
                   RemoteBridgeLogic.fingerprint(
-                      prompt: question.prompt, options: question.choices.map(\.label)
+                      prompt: question.prompt,
+                      options: question.choices.map {
+                          RemoteBridgeLogic.Option(label: $0.label, detail: $0.detail)
+                      }
                   ) == fingerprint,
                   question.choices.indices.contains(choice - 1) else {
                 log("stale or invalid question answer for \(id)")

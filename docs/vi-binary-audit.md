@@ -481,6 +481,19 @@ Matteo**: sapere che è VS Code non restringe nulla, sono le due finestre
 sullo stesso progetto a doversi distinguere, e per quello serve il nome
 sessione. L'UUID resta disponibile come campo `sessionId`.
 
+**Contratto v4 (2026-07-31)** — le opzioni delle domande viaggiano come
+oggetti `{"label", "detail"}` invece che come stringhe: `QuestionStore`
+parsa già la descrizione di ogni scelta e `QuestionSnapshot` la buttava
+via, così dal telefono si sceglieva alla cieca (in AskUserQuestion la
+parte decisionale sta spesso nella descrizione, non nell'etichetta). Ogni
+`detail` è condensato a 300 caratteri su una riga sola: il messaggio
+Telegram ha un tetto di 4096 e il gateway ci mette anche titolo, elenco e
+intestazione. Un'opzione senza descrizione resta `{"label"}` nudo, e un
+ricevitore che legge solo `label` continua a funzionare — per questo
+l'estensione non è breaking. Il digest dell'id ora include anche le
+descrizioni: due domande con le stesse etichette ma significati diversi
+sono domande diverse.
+
 **Verifica live (2026-07-30)**: sessione Claude reale in plan mode via
 harness pty → card nel notch → messaggio Telegram con titolo e corpo del
 piano → **tap "Approva" dal telefono di Matteo** → `applied remote
