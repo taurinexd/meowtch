@@ -10,7 +10,12 @@ struct RemoteBridgeLogicTests {
     ) -> RemoteBridgeLogic.QuestionSnapshot {
         RemoteBridgeLogic.QuestionSnapshot(
             sessionId: sessionId, label: "proj · Terminal", title: prompt,
-            options: options, eligible: eligible)
+            options: options.map { RemoteBridgeLogic.Option(label: $0) },
+            eligible: eligible)
+    }
+
+    private func options(_ labels: String...) -> [RemoteBridgeLogic.Option] {
+        labels.map { RemoteBridgeLogic.Option(label: $0) }
     }
 
     // MARK: - Identity
@@ -21,14 +26,18 @@ struct RemoteBridgeLogicTests {
         #expect(parts?.sessionId == "s1")
         #expect(parts?.fingerprint.count == 8)
         #expect(id == RemoteBridgeLogic.questionId(
-            sessionId: "s1", prompt: "Which one?", options: ["A", "B"]))
+            sessionId: "s1", prompt: "Which one?", options: options("A", "B")))
     }
 
     @Test func fingerprintChangesWithPromptOrOptions() {
-        let base = RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: ["A", "B"])
-        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which two?", options: ["A", "B"]) != base)
-        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: ["A", "C"]) != base)
-        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: ["A", "B"]) == base)
+        let base = RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: options("A", "B"))
+        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which two?", options: options("A", "B")) != base)
+        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: options("A", "C")) != base)
+        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: options("A", "B")) == base)
+        // Same labels, different meaning: a different question.
+        #expect(RemoteBridgeLogic.fingerprint(prompt: "Which one?", options: [
+            .init(label: "A", detail: "the safe one"), .init(label: "B"),
+        ]) != base)
     }
 
     @Test func splitRejectsAnIdWithoutADigest() {
@@ -60,7 +69,7 @@ struct RemoteBridgeLogicTests {
         let snapshot = question()
         let (events, known) = RemoteBridgeLogic.diffQuestions(known: [], live: [snapshot])
         #expect(events == [.newQuestion(
-            id: snapshot.remoteId, title: "Which one?", options: ["A", "B"],
+            id: snapshot.remoteId, title: "Which one?", options: options("A", "B"),
             session: "proj · Terminal", sessionId: "s1")])
         #expect(known == [snapshot.remoteId])
     }
@@ -95,7 +104,7 @@ struct RemoteBridgeLogicTests {
         let (events, known) = RemoteBridgeLogic.diffQuestions(
             known: [first.remoteId], live: [second])
         #expect(events.contains(.newQuestion(
-            id: second.remoteId, title: "Roll back?", options: ["A", "B"],
+            id: second.remoteId, title: "Roll back?", options: options("A", "B"),
             session: "proj · Terminal", sessionId: "s1")))
         #expect(events.contains(.resolvedQuestion(id: first.remoteId)))
         #expect(known == [second.remoteId])
@@ -138,11 +147,14 @@ struct RemoteBridgeLogicTests {
 
     @Test func payloadShapes() {
         let question = RemoteBridgeLogic.payload(
-            for: .newQuestion(id: "s1.abcd1234", title: "T", options: ["A"],
+            for: .newQuestion(id: "s1.abcd1234", title: "T",
+                              options: [.init(label: "A", detail: "why A")],
                               session: "proj", sessionId: "s1"))
         #expect(question["event"] as? String == "new")
         #expect(question["kind"] as? String == "question")
-        #expect(question["options"] as? [String] == ["A"])
+        let encoded = question["options"] as? [[String: Any]]
+        #expect(encoded?.first?["label"] as? String == "A")
+        #expect(encoded?.first?["detail"] as? String == "why A")
         let plan = RemoteBridgeLogic.payload(
             for: .newPlan(id: "plan-7", title: "Fix it", body: "# Fix it",
                           session: "proj", sessionId: "s1"))
@@ -153,9 +165,25 @@ struct RemoteBridgeLogicTests {
         #expect(resolved["kind"] as? String == "plan")
     }
 
+    @Test func longOptionDescriptionsAreCondensed() {
+        let payload = RemoteBridgeLogic.payload(for: .newQuestion(
+            id: "s1.abcd1234", title: "T",
+            options: [.init(label: "A", detail: String(repeating: "y", count: 900) + "\nsecond line")],
+            session: "proj", sessionId: "s1"))
+        let detail = (payload["options"] as? [[String: Any]])?.first?["detail"] as? String
+        #expect(detail?.count == RemoteBridgeLogic.optionDetailLimit + 1)  // + ellipsis
+        #expect(detail?.contains("\n") == false)
+        // An option with no description stays a bare label.
+        let bare = RemoteBridgeLogic.payload(for: .newQuestion(
+            id: "s1.abcd1234", title: "T", options: [.init(label: "A")],
+            session: "proj", sessionId: "s1"))
+        #expect((bare["options"] as? [[String: Any]])?.first?["detail"] == nil)
+    }
+
     @Test func everyPayloadIsJSONSerialisable() {
         let events: [RemoteBridgeLogic.Event] = [
-            .newQuestion(id: "s1.abcd1234", title: "T", options: ["A"],
+            .newQuestion(id: "s1.abcd1234", title: "T",
+                         options: [.init(label: "A", detail: "why A")],
                          session: "proj", sessionId: "s1"),
             .resolvedQuestion(id: "s1.abcd1234"),
             .newPlan(id: "plan-1", title: "T", body: "# T", session: "proj", sessionId: "s1"),
