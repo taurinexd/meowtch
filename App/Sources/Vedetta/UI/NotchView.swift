@@ -163,6 +163,11 @@ struct NotchView: View {
                 StateIndicator(state: topState, scale: 0.75)
             }
             Spacer()
+            if privacy.mode == .call {
+                Image(systemName: "phone.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.secondaryText)
+            }
             if !visibleSessions.isEmpty {
                 Text("\(visibleSessions.count)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
@@ -396,6 +401,7 @@ struct NotchView: View {
 
     @AppStorage(SettingsKey.showUsageLimits) private var showUsageLimits = true
     @State private var muted = SoundEngine.shared.isMuted
+    @ObservedObject private var privacy = ScreenPrivacy.shared
 
     /// Usage summary on the left, volume + settings icons on the right.
     private var topBar: some View {
@@ -404,6 +410,25 @@ struct NotchView: View {
                 usageSummary
             }
             Spacer()
+            Button {
+                privacy.setMode(privacy.mode == .call ? .code : .call)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: privacy.mode == .call
+                          ? "phone.fill"
+                          : "chevron.left.forwardslash.chevron.right")
+                    Text(privacy.mode == .call ? "CALL" : "CODE")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                // Fixed width so the speaker and gear never shift when the
+                // label changes length — the same trick the mute icon uses.
+                .frame(width: 54, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressFlashStyle())
+            .help(privacy.mode == .call
+                  ? "CALL — Meowtch stays out of screen shares"
+                  : "CODE — Meowtch appears in screen shares")
             Button {
                 SoundEngine.shared.isMuted.toggle()
                 muted = SoundEngine.shared.isMuted
