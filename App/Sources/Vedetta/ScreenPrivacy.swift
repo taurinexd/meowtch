@@ -14,6 +14,14 @@ final class ScreenPrivacy: ObservableObject {
 
     @Published private(set) var mode: CallMode = .code
 
+    /// Whether the windows are currently kept out of screen captures.
+    /// Orthogonal to the mode on purpose: CALL turns this on and CODE turns it
+    /// off, but the ghost in the notch overrides either. That lets the panel be
+    /// hidden while coding (screen-sharing a demo) and, just as importantly,
+    /// stay visible during a call — otherwise the CALL surface could never be
+    /// screenshotted while it is being built.
+    @Published private(set) var hidden = false
+
     private var keyWindowObserver: NSObjectProtocol?
 
     private init() {
@@ -36,6 +44,12 @@ final class ScreenPrivacy: ObservableObject {
     func setMode(_ mode: CallMode) {
         guard mode != self.mode else { return }
         self.mode = mode
+        setHidden(mode.hidesFromScreenCapture)
+    }
+
+    /// The ghost. Also the escape hatch for developing the CALL surface.
+    func setHidden(_ hidden: Bool) {
+        self.hidden = hidden
         applyToAllWindows()
     }
 
@@ -50,6 +64,6 @@ final class ScreenPrivacy: ObservableObject {
 
     private func apply(to window: NSWindow) {
         // .readOnly is AppKit's default: capture allowed, no remote control.
-        window.sharingType = mode.hidesFromScreenCapture ? .none : .readOnly
+        window.sharingType = hidden ? .none : .readOnly
     }
 }

@@ -168,6 +168,14 @@ struct NotchView: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(Theme.secondaryText)
             }
+            if privacy.hidden {
+                PixelSprite(
+                    pattern: SpritePattern.ghost,
+                    color: Theme.secondaryText,
+                    pixelSize: 1.2,
+                    glow: false
+                )
+            }
             if !visibleSessions.isEmpty {
                 Text("\(visibleSessions.count)")
                     .font(.system(size: 13, weight: .bold, design: .monospaced))
@@ -414,21 +422,46 @@ struct NotchView: View {
                 privacy.setMode(privacy.mode == .call ? .code : .call)
             } label: {
                 HStack(spacing: 3) {
-                    Image(systemName: privacy.mode == .call
-                          ? "phone.fill"
-                          : "chevron.left.forwardslash.chevron.right")
+                    // curlybraces and phone.fill are both 15pt wide, and the
+                    // label is monospaced, so nothing shifts when the mode
+                    // flips — the previous chevron glyph was 21pt and made the
+                    // text jump sideways on every press.
+                    Image(systemName: privacy.mode == .call ? "phone.fill" : "curlybraces")
                     Text(privacy.mode == .call ? "CALL" : "CODE")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
                 }
-                // Fixed width so the speaker and gear never shift when the
-                // label changes length — the same trick the mute icon uses.
-                .frame(width: 54, alignment: .leading)
+                .frame(width: 52, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressFlashStyle())
             .help(privacy.mode == .call
-                  ? "CALL — Meowtch stays out of screen shares"
-                  : "CODE — Meowtch appears in screen shares")
+                  ? "CALL — the notch is the in-call copilot"
+                  : "CODE — the notch tracks coding sessions")
+            Button {
+                privacy.setHidden(!privacy.hidden)
+            } label: {
+                // Same composition as the mute button: the glyph plus a small
+                // xmark for the off state, in a fixed frame so its neighbours
+                // never move.
+                HStack(spacing: 1.5) {
+                    PixelSprite(
+                        pattern: SpritePattern.ghost,
+                        color: privacy.hidden ? Theme.primaryText : Theme.secondaryText,
+                        pixelSize: 1.3,
+                        glow: false
+                    )
+                    if !privacy.hidden {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                }
+                .frame(width: 22, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressFlashStyle())
+            .help(privacy.hidden
+                  ? "Hidden from screen capture"
+                  : "Visible to screen capture")
             Button {
                 SoundEngine.shared.isMuted.toggle()
                 muted = SoundEngine.shared.isMuted

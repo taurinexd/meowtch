@@ -424,6 +424,18 @@ enum EventDispatcher {
             }
             return try? JSONSerialization.data(withJSONObject: [
                 "mode": ScreenPrivacy.shared.mode.rawValue,
+                "hidden": ScreenPrivacy.shared.hidden,
+            ])
+
+        case "screenPrivacy":
+            // The ghost, over the wire: the CALL surface has to stay
+            // screenshottable while it is being built.
+            if let value = envelope["value"] as? Bool {
+                ScreenPrivacy.shared.setHidden(value)
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "mode": ScreenPrivacy.shared.mode.rawValue,
+                "hidden": ScreenPrivacy.shared.hidden,
             ])
 
         case "setExpanded":

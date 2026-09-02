@@ -37,3 +37,20 @@ struct PixelSprite: View {
         .shadow(color: glow ? color.opacity(0.8) : .clear, radius: pixelSize * 1.4)
     }
 }
+
+/// Shared bitmap patterns for `PixelSprite`.
+enum SpritePattern {
+    /// The screen-privacy ghost: solid body, two eye gaps, three legs.
+    /// Ten columns wide so the eyes and the legs land on the same axes.
+    static let ghost: [String] = [
+        "  ######  ",
+        " ######## ",
+        "##########",
+        "##  ##  ##",
+        "##  ##  ##",
+        "##########",
+        "##########",
+        "##########",
+        "##  ##  ##",
+    ]
+}
