@@ -8,10 +8,11 @@ clienti su Google Meet, dove serve tutt'altro: un assistente che ascolta la
 conversazione e suggerisce risposte, **invisibile quando condivide lo schermo**.
 
 Esiste un intero genere di tool che fa questo (Cluely e i suoi cloni open source:
-Glass, Pluely, Natively, cue, OpenCluely, Vysper, hiddenai). Sono tutti Electron
-o Tauri, tutti con whisper.cpp, tutti cross-platform. Meowtch è Swift nativo su
-macOS 26: le ragioni che portano quei progetti alle loro scelte tecniche **non
-valgono qui**, e questo apre soluzioni che loro non possono usare.
+Glass, Pluely, Natively, cue, OpenCluely, Vysper, hiddenai). Sei su sette sono Electron o
+Tauri e cross-platform, e usano STT portabile — whisper.cpp in locale o servizi cloud.
+L'eccezione, hiddenai, è Swift nativo ma è un giocattolo da 26 stelle senza cattura dell'audio
+di sistema. Meowtch è Swift nativo su macOS 26: le ragioni che portano quei progetti alle loro
+scelte tecniche **non valgono qui**, e questo apre soluzioni che loro non possono usare.
 
 La feature si aggiunge come **modalità**, non come app separata: un toggle
 CODE/CALL nella notch espansa, a sinistra del pulsante audio.
@@ -29,9 +30,13 @@ CODE/CALL nella notch espansa, a sinistra del pulsante audio.
 - Contesto: file Webgas globale + scheda cliente dentro la cartella del cliente
 - Fine call: proposta di aggiornamento della scheda cliente
 - Consumi in tempo reale agganciati a `UsageModel`, con auto-switch a Ollama sotto soglia
+- Contatore live durante la risposta (secondi + token), nella forma dello spinner di Claude Code
 
 **Fuori:**
-- Trascrizione/notetaking come deliverable → lo fa già Gemini di Meet, nativamente
+- Trascrizione/notetaking come deliverable → lo fa già Gemini di Meet, nativamente.
+  ⚠️ Precondizione da verificare: *"Take notes for me"* richiede Workspace **Business
+  Standard o superiore** (non Starter). Se il piano Webgas fosse Starter, questa voce
+  andrebbe riconsiderata
 - Screenshot → LLM (esiste in 7 tool su 7, ma nasce per barare a LeetCode; nelle call
   commerciali il cliente parla, non mostra algoritmi)
 - Process disguise / evasione del proctoring
@@ -55,10 +60,12 @@ di controllo, catturati con tre motori.
 |---|---|---|
 | `SCScreenshotManager` (ScreenCaptureKit) | visibile | **assente** |
 | `/usr/sbin/screencapture` (Apple) | visibile | **assente** |
-| Chrome `getDisplayMedia` — la via di Google Meet | visibile | **assente** |
+| Chrome `getDisplayMedia` (campione WebRTC) | visibile | **assente** |
 
-Verdetto: **`sharingType = .none` è rispettato su macOS 26.5.2**, inclusa la
-condivisione schermo reale in Chrome.
+Verdetto: **`sharingType = .none` è rispettato su macOS 26.5.2**, inclusa una condivisione
+schermo reale in Chrome. Precisazione sul metodo: la terza riga è stata verificata sulla pagina
+campione WebRTC `getDisplayMedia`, che usa la stessa identica API di Google Meet, non dentro una
+riunione Meet.
 
 Tre limiti da conoscere:
 - È un flag **per-finestra**: va messo su ogni superficie (pannello notch, popover,
@@ -92,8 +99,11 @@ Versione installata: 2.1.258. Flag rilevanti verificati in `--help`:
 - `--input-format stream-json` — input realtime su stdin: **un processo per call**, non per risposta
 - `--output-format stream-json` — risposte in streaming
 - `--append-system-prompt` — inietta la persona della call senza toccare la config di Matteo
-- `--restricted`, `--disallowedTools`, `--strict-mcp-config` — copilota bloccato su pura
-  generazione di testo: niente Read/Bash/MCP, nessuna sorpresa e nessuna latenza da tool call
+- `--tools ""` — **disabilita tutti i tool**: copilota bloccato su pura generazione di testo,
+  nessuna sorpresa e nessuna latenza da tool call. (⚠️ `--restricted` da solo **non** basta:
+  verificato in `--help`, rimuove solo i tool che eseguono comandi o codice — Bash, REPL — e
+  WebFetch; Read ed Edit resterebbero attivi. Si usa comunque, insieme a
+  `--strict-mcp-config`, per ignorare settings utente/progetto e server MCP.)
 - `--model` — scelta del modello
 
 ### 4. Lo stream porta con sé i consumi, in push
@@ -101,13 +111,23 @@ Versione installata: 2.1.258. Flag rilevanti verificati in `--help`:
 L'evento `result` contiene `usage`, `modelUsage` per modello, `total_cost_usd`,
 `duration_ms`. E lo stream emette un evento di tipo **`rate_limit_event`**.
 
-Le stringhe del binario contengono `utilization`, `resets_at` / `resetsAt`,
-`five_hour`, `seven_day`, `rate_limit_info` — cioè **le stesse due finestre che
-`UsageModel` già disegna nella notch**.
+Le due finestre che porta sono **le stesse che `UsageModel` già disegna nella notch**.
 
-⚠️ I nomi dei campi vengono dal grep del binario compilato, non da un payload
-osservato. **Lo schema esatto va confermato catturando un evento reale** alla prima
-prova di implementazione.
+**Schema confermato** catturando un evento reale (`--tools "" --output-format stream-json`):
+
+```json
+{"type":"rate_limit_event","rate_limit_info":{
+  "status":"allowed","rateLimitType":"five_hour","resetsAt":1788369600,
+  "overageStatus":"rejected","isUsingOverage":false,
+  "unifiedWindows":{
+    "five_hour":{"utilization":0.06,"resetsAt":1788369600},
+    "seven_day":{"utilization":0.05,"resetsAt":1788732000}}},
+ "uuid":"…","session_id":"…"}
+```
+
+`utilization` è una **frazione** (0.06 = 6% consumato), `resetsAt` è un Unix timestamp,
+entrambe le finestre sono presenti in ogni evento. `overageStatus` / `isUsingOverage`
+dicono anche se si sta sconfinando nel piano a consumo.
 
 ### 5. L'overhead per sessione della CLI è alto — la sessione persistente è obbligatoria
 
@@ -132,14 +152,27 @@ la trascrizione on-device e le sessioni di lavoro.
 
 ## Cosa si impara dai tool esistenti
 
-Comparativa completa dei sette progetti in conversazione. Qui restano solo le
-conclusioni che influenzano il design.
+Licenze e stelle verificate via API GitHub il 2026-09-02; il resto viene dai README.
 
-**Perché tutti usano Whisper, e perché noi no:** sono tutti cross-platform (il
-framework Speech di Apple è macOS-only); sono nati prima di macOS 26 (`SpeechAnalyzer`
-è di settembre 2025, e prima c'era solo `SFSpeechRecognizer`, pensato per dettatura
-breve); devono supportare macOS 12+; da Node non si raggiunge il framework Apple senza
-scrivere un modulo nativo. Nessuna di queste vale per Meowtch.
+| Tool | Stack | Licenza | ⭐ | Audio sistema | STT |
+|---|---|---|---|---|---|
+| Glass (Pickle) | Electron + Rust | GPL-3.0 | 7596 | sì, con AEC | Whisper locale o cloud |
+| Pluely | Tauri + Rust | GPL-3.0 nel repo, README dice proprietaria | 2619 | sì | non specificata |
+| Natively | Electron + Rust + SQLite | NOASSERTION (custom, non commerciale) | 2412 | sì | 4 locali + 8 cloud |
+| cue | Electron | GPL-3.0 | 1292 | sì, SCK loopback | whisper.cpp |
+| OpenCluely | Electron | Apache-2.0 (README dice MIT) | 878 | **no, solo mic** | Whisper o Azure |
+| Vysper | Electron | Apache-2.0 | 135 | sì, via Sox | **Azure STT** |
+| hiddenai | **Swift + SwiftUI** | MIT | 26 | **no, solo mic** | Whisper API (cloud) |
+
+I due che catturano solo il microfono sentono l'utente, non l'interlocutore: inutili in call.
+È la conferma che il dual-channel non è un lusso.
+
+**Perché quasi tutti usano Whisper, e perché noi no:** sono cross-platform e il framework
+Speech di Apple è macOS-only; sono nati prima di macOS 26 (`SpeechAnalyzer` è di settembre
+2025, e prima c'era solo `SFSpeechRecognizer`, pensato per dettatura breve); devono supportare
+macOS 12+; da Node non si raggiunge il framework Apple senza scrivere un modulo nativo.
+Nessuna di queste vale per Meowtch. Chi non usa Whisper usa comunque un servizio cloud
+(Azure per Vysper), che per una call con un cliente è la scelta peggiore delle due.
 
 **La lezione più importante viene dallo spec Auto Answer v2 di Natively** (repo
 clonato come riferimento architetturale; vedi nota di licenza in fondo):
@@ -203,6 +236,18 @@ tutto ciò che tocca AppKit, audio o processi in `Vedetta`.
 il canale *è* l'etichetta di chi parla. Sistema = cliente, mic = Matteo. Niente
 diarizzazione, niente speaker label da indovinare, niente modelli VAD.
 
+⚠️ **Il vantaggio vale solo in cuffia.** A speaker aperti la voce del cliente esce dagli
+altoparlanti e rientra nel microfono: il canale mic conterrebbe entrambe le voci e il gate
+crederebbe che sta parlando Matteo ogni volta che parla il cliente — sopprimendo proprio i
+suggerimenti che servono (vedi "tre soppressioni"). Glass risolve con un AEC scritto in Rust;
+noi **non** implementiamo cancellazione d'eco. Quindi:
+
+- **L'uso in cuffia è una precondizione dichiarata**, non un consiglio.
+- All'ingresso in CALL si legge il device di output corrente: se non è né cuffie né headset,
+  la notch avvisa che il rilevamento sarà inaffidabile. Meglio un avviso esplicito che un
+  copilota che tace senza spiegazioni.
+- Se in futuro servisse l'uso a speaker aperti, l'AEC è un progetto a sé, non un ritocco.
+
 **Endpointer:** il timer parte quando il cliente smette di parlare, riparte a ogni
 nuovo parlato, chiude quando il silenzio supera la soglia **e** i controlli di
 completezza non indicano una frase troncata. Soglie come costanti nominate, non magic
@@ -212,10 +257,15 @@ number sparsi.
 aiuta (`do you`, `can we`, inversione). In italiano una domanda chiusa è
 morfologicamente identica all'affermazione: *"Riuscite a farlo entro giugno"* e
 *"Riuscite a farlo entro giugno?"* hanno le stesse parole nello stesso ordine.
-Restano la punteggiatura che `SpeechTranscriber` inferisce dalla prosodia e i
-marcatori lessicali (chi, cosa, come, quando, quanto, perché, quale, potete, riuscite,
-avete). **È il punto in cui il gate sbaglierà di più**, ed è il candidato numero uno
-per un modello locale piccolo se le euristiche non bastano.
+Restano la punteggiatura emessa da `SpeechTranscriber` e i marcatori lessicali (chi, cosa,
+come, quando, quanto, perché, quale, potete, riuscite, avete). **È il punto in cui il gate
+sbaglierà di più**, ed è il candidato numero uno per un modello locale piccolo se le euristiche
+non bastano.
+
+⚠️ Assunzione non ancora verificata: che `SpeechTranscriber` emetta davvero punteggiatura
+interrogativa in italiano, e che lo faccia in modo affidabile. Serve una prova con audio reale
+prima di costruirci sopra il gate — se la punteggiatura non arriva, restano solo i marcatori
+lessicali e il modello piccolo diventa necessario, non opzionale.
 
 **Tre soppressioni**, che valgono più di qualsiasi raffinatezza sul rilevamento:
 - se sta parlando Matteo (canale mic attivo) → nessun suggerimento: sta già rispondendo
@@ -233,10 +283,16 @@ dicono e si alza la soglia.
 `usageSummary → Spacer → speaker → gear`), inserito a sinistra del pulsante audio. È il
 solo punto di ingresso: nessuna finestra nuova, nessuna voce di menu.
 
-**In CALL, notch espansa:** il filo della conversazione con i due interlocutori
-visivamente distinti (il canale è già l'etichetta, non serve indovinare chi parla), il
-suggerimento corrente che scorre in streaming, e lo stato del motore con il consumo
-progressivo della call.
+**In CALL, notch espansa:** il filo della conversazione con i due interlocutori visivamente
+distinti (il canale è già l'etichetta, non serve indovinare chi parla), il suggerimento corrente
+che scorre in streaming, e lo stato del motore con il consumo progressivo della call.
+
+**Contatore live mentre il copilota risponde**, nella forma dello spinner di Claude Code
+(`43s · ↓ 2.7k tokens`): secondi trascorsi dall'inizio della risposta e token accumulati.
+Fattibile perché la CLI espone **`--include-partial-messages`** (verificato in `--help`), che
+emette i chunk mentre arrivano invece del solo `result` finale — quindi i token si contano in
+tempo reale, non a posteriori. Gli stessi due numeri servono anche a strumentare
+`decision_to_first_token_ms` senza codice aggiuntivo.
 
 **In CALL, notch collassata:** un indicatore minimo — in ascolto / suggerimento pronto —
 coerente con la glance mode già esistente.
@@ -263,27 +319,44 @@ cosa ha chiesto il cliente, cosa gli è stato promesso, obiezioni emerse — e M
 approva o scarta. La scheda cresce a ogni chiamata e la successiva parte informata.
 
 **Il trascritto muore in RAM.** Niente audio, niente trascritto, niente suggerimenti su
-disco. Il riassunto della riunione resta a Gemini di Meet, che gestisce anche il
-consenso dei partecipanti (obbligatorio da aprile 2026).
+disco. Il riassunto della riunione resta a Gemini di Meet, che gestisce anche il consenso dei
+partecipanti (Google ha annunciato il consenso esplicito obbligatorio ad aprile 2026).
 
 **Rischio git, e come si chiude.** La scheda contiene budget, obiezioni e promesse:
 roba che non deve finire in un commit. Metà delle cartelle cliente di Matteo sono repo
-git (`shop-wp`, `erp-connector`, `theme`, `client-b`; `design/studio` no).
+git — verificato: `shop-wp`, `erp-connector`, `theme` e `internal-site` lo sono,
+`design/studio` e `client-b` no.
 Quindi: file sotto `.meowtch/`, e alla creazione Meowtch lo aggiunge a
 **`.git/info/exclude`**, non a `.gitignore` — `.gitignore` è tracciato e comparirebbe
 come modifica nel repo del cliente, `.git/info/exclude` è locale e invisibile.
 
-**Nessuna eredità di `AGENTS.md` / `CLAUDE.md`.** Il processo parte nella cartella
-cliente ma con le istruzioni di progetto disattivate: la persona in call è definita solo
-da `webgas.md` + `client.md`. Un `AGENTS.md` che parla di Pint e migration non c'entra
-nulla con una call commerciale e occupa contesto.
+Due casi da gestire esplicitamente, entrambi presenti fra le cartelle di Matteo:
+- **cartella non versionata** (`design/studio`, `client-b`): nessun `.git`, l'esclusione è un
+  no-op silenzioso, non un errore;
+- **worktree git**: `.git` è un *file*, non una directory, e `info/exclude` vive nel git dir
+  principale. Va risolto con `git rev-parse --git-common-dir`, non concatenando `/.git/info/`.
+
+**Nessuna eredità di `AGENTS.md` / `CLAUDE.md`, ottenuta non lanciando il processo lì.**
+La cartella cliente è *dove vive la scheda*, non la working directory del copilota: il processo
+parte con cwd in `~/.vedetta/call/`, una directory neutra e priva di file di memoria, e riceve
+`webgas.md` + `client.md` come testo via `--append-system-prompt`.
+
+Il motivo di questa scelta è una correzione emersa in revisione: **nessun flag della CLI
+garantisce di ignorare `CLAUDE.md`/`AGENTS.md`**. `--restricted` ignora i *settings* utente,
+progetto e locali — verificato nel testo completo di `--help` — ma non menziona i file di
+memoria. Costruire su quel comportamento significherebbe dipendere da qualcosa di non
+documentato; cambiare working directory elimina il problema alla radice invece di aggirarlo.
+Un `AGENTS.md` che parla di Pint e di migration non c'entra nulla con una call commerciale.
 
 ## Motori di risposta
 
 Protocollo unico, due implementazioni.
 
 **`ClaudeCLIEngine` (default).** Un processo `claude -p --input-format stream-json
---output-format stream-json --append-system-prompt <persona> --restricted` per call.
+--output-format stream-json --include-partial-messages --append-system-prompt <persona>
+--tools "" --restricted --strict-mcp-config` per call. (`--include-partial-messages` serve al
+contatore live e alla misura di `decision_to_first_token_ms`: senza, i token si conoscono solo
+a risposta finita.)
 Ogni domanda è un messaggio JSON su stdin; la risposta torna in streaming e finisce
 nella notch. La sessione mantiene da sola il filo dell'intera conversazione.
 
@@ -313,16 +386,22 @@ UsageModel  ←  push    (statusline)        esiste — muta in headless
             ←  stream  (rate_limit_event)  NUOVO — push a ogni risposta
 ```
 
-La terza sorgente è più fresca della pull (nessun intervallo di polling) e copre
-esattamente il caso in cui la push è cieca: in `-p` headless la statusline non gira.
-Si innesta nel merge per-account che `UsageModel` già fa, non accanto.
+La terza sorgente è più fresca della pull (nessun intervallo di polling) e copre esattamente
+il caso in cui la push è cieca. **Verificato empiricamente**: lanciando `claude -p` con
+`--settings '{"statusLine":{"type":"command","command":"touch <marker>"}}'`, il marker non viene
+mai creato — in print mode la statusline non viene eseguita, quindi `rl.json` non si aggiorna e
+la sorgente push resta ferma per tutta la durata della call. Si innesta nel merge per-account che
+`UsageModel` già fa, non accanto.
 
 L'evento `result` di ogni risposta porta inoltre `usage`, `modelUsage` e
 `total_cost_usd`: totale progressivo della call, mostrabile in notch mentre si parla.
 
-**Il monitoraggio è un comando, non un cruscotto.** La soglia è espressa come
-**percentuale residua della finestra 5h** (default proposto: 20%, configurabile in
-Settings). Quando `UsageModel` scende sotto quel valore la notch avvisa e il copilota
+**Il monitoraggio è un comando, non un cruscotto.** La soglia si esprime sul campo reale:
+`unifiedWindows.five_hour.utilization`, che misura la quota **consumata**, non quella residua
+(`0.06` = 6% usato). Default proposto: **`utilization ≥ 0.80`**, cioè meno del 20% di finestra
+5h rimasto, configurabile in Settings. Il verso va scritto così nel codice e nel test: espresso
+come "percentuale residua" si implementa invertito senza che nulla se ne accorga.
+Quando la soglia viene superata la notch avvisa e il copilota
 **passa da solo a `OllamaEngine`** per il resto della chiamata. Assistenza degradata
 invece di assistenza assente davanti a un cliente. Se `OllamaEngine` non è
 disponibile — Ollama non installato, nessun modello — l'avviso resta e il copilota si
@@ -330,12 +409,29 @@ sospende: mai un fallimento silenzioso a metà call.
 
 ## Privacy, permessi, contratto
 
-**Tre permessi nuovi:** microfono, audio di sistema, riconoscimento vocale.
+**Permessi nuovi:** microfono (`NSMicrophoneUsageDescription`) e audio di sistema
+(`NSAudioCaptureUsageDescription`). ⚠️ Da verificare se `SpeechAnalyzer`, essendo
+esclusivamente on-device, richieda anche l'autorizzazione al riconoscimento vocale come
+faceva `SFSpeechRecognizer`: non è stato accertato, e il probe sui locale non ne ha avuto
+bisogno — ma leggere i locale non è trascrivere.
 
-Per l'audio di sistema si sceglie il **process tap Core Audio** mirato sul processo del
-meeting, invece di ScreenCaptureKit: permesso più stretto e non cattura l'audio
-dell'intero sistema. È API C ostica — **serve uno spike in implementazione**, con SCK
-audio come fallback documentato.
+Per l'audio di sistema si sceglie il **process tap Core Audio**
+(`AudioHardwareCreateProcessTap` + `CATapDescription`, macOS 14.2+) mirato sul processo del
+meeting, invece di ScreenCaptureKit. Motivi verificati:
+
+- È una **categoria TCC distinta** (`NSAudioCaptureUsageDescription`): il prompt dice
+  *"System Audio Recording"*, non *"Screen & System Audio Recording"*. Richiesta più piccola
+  e indicatore di privacy più onesto.
+- Non cattura lo schermo, e non l'audio dell'intero sistema: si può puntare al solo processo
+  della riunione.
+- **Richiede un'identità di firma stabile**, perché il record TCC è indicizzato su quella.
+  Meowtch ce l'ha già — *"Vedetta Dev Signing"* esiste esattamente per non perdere i grant
+  Accessibility a ogni rebuild. Lo stesso meccanismo copre anche questo permesso.
+- Dettaglio d'implementazione: è **`AudioDeviceStart` a far comparire il prompt**, non la
+  creazione del tap. Il consenso va quindi richiesto all'ingresso in CALL, non all'avvio dell'app.
+
+Esiste un'implementazione di riferimento leggibile, [insidegui/AudioCap](https://github.com/insidegui/AudioCap).
+Resta comunque uno spike prima dell'implementazione, con SCK audio come fallback documentato.
 
 **Emendamento alla regola no-telemetry.** `CLAUDE.md` dichiara: *"No telemetry, ever.
 The only network traffic is the daily update check and the opt-in Claude usage probe."*
@@ -369,11 +465,13 @@ manual_override_rate         quante volte la hotkey ha coperto un buco del gate
 | Rischio | Mitigazione |
 |---|---|
 | Rilevamento domande in italiano (nessun marcatore sintattico) | Euristiche + punteggiatura prosodica; escalation a modello locale piccolo se la precisione è bassa; la hotkey rende gli errori non fatali |
-| Process tap Core Audio (API C ostica) | Spike dedicato prima dell'implementazione; fallback SCK audio |
-| Schema di `rate_limit_event` non confermato | Catturare un evento reale alla prima prova; fallback sulla sonda pull esistente |
+| Process tap Core Audio (API C, poco battuta) | Ridimensionato: categoria TCC dedicata confermata, identità di firma già presente, implementazione di riferimento disponibile. Spike breve; fallback SCK audio |
 | Download dell'asset `it-IT` al primo uso | UI di primo avvio dedicata, non un blocco silenzioso a metà call |
+| `SpeechTranscriber` potrebbe non emettere punteggiatura interrogativa affidabile in italiano | Prova con audio reale **prima** di implementare il gate; fallback su marcatori lessicali + modello locale piccolo |
+| Rientro dell'audio del cliente nel microfono a speaker aperti | Cuffie come precondizione dichiarata + avviso sul device di output all'ingresso in CALL; nessun AEC |
 | Entitlement di bypass su macOS 15.4+ | Documentato: "invisibile a Meet", non "invisibile in assoluto" |
 | Costo/rate limit durante call lunghe | Sessione persistente + budget + auto-switch a Ollama |
+| **Dipendenza da un'interfaccia non contrattuale**: `--tools ""`, lo schema di `rate_limit_event` e il formato stream-json sono comportamenti osservati sulla CLI **2.1.258**, non API garantite. Un aggiornamento della CLI può romperli in silenzio | Parser tollerante (come già fa `UsageModel` con `rl.json`), degradazione esplicita invece di crash, e un test che gira contro la CLI installata e fallisce rumorosamente se lo schema cambia |
 
 ## Nota di licenza
 
@@ -387,6 +485,9 @@ Resta un vincolo pratico da rispettare: **Meowtch è MIT e pubblica** (release G
 Natively in un repo MIT creerebbe un conflitto reale, perché MIT concede a valle l'uso
 commerciale che quella licenza nega. Riferimento sì, copia-incolla no.
 
-Fra i tool comparati, quelli effettivamente riusabili come codice sono OpenCluely (MIT)
-e Vysper (Apache-2.0); Glass e cue sono GPL-3 (contagiose); Pluely v1 è proprietaria.
+Licenze verificate via API GitHub (i README non sono affidabili su questo): riusabili come
+codice sono **OpenCluely e Vysper, entrambi Apache-2.0** — il README di OpenCluely dice MIT, il
+file LICENSE dice Apache-2.0 — e hiddenai (MIT). **Glass e cue sono GPL-3.0**, contagiose.
+**Pluely è un caso ambiguo**: il LICENSE nel repo è GPL-3.0, ma README e sito dichiarano v1
+proprietaria. Da trattare come non riusabile finché la contraddizione non è risolta.
 Dato che tutto va comunque reimplementato in Swift, il punto è in gran parte accademico.
