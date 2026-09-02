@@ -1,0 +1,392 @@
+# CALL mode — copilota per chiamate cliente
+
+## Contesto
+
+Meowtch oggi è un tool per chi programma con agent AI: la notch mostra sessioni
+Claude Code e Codex, approvazioni, domande, usage. Matteo però fa anche call con
+clienti su Google Meet, dove serve tutt'altro: un assistente che ascolta la
+conversazione e suggerisce risposte, **invisibile quando condivide lo schermo**.
+
+Esiste un intero genere di tool che fa questo (Cluely e i suoi cloni open source:
+Glass, Pluely, Natively, cue, OpenCluely, Vysper, hiddenai). Sono tutti Electron
+o Tauri, tutti con whisper.cpp, tutti cross-platform. Meowtch è Swift nativo su
+macOS 26: le ragioni che portano quei progetti alle loro scelte tecniche **non
+valgono qui**, e questo apre soluzioni che loro non possono usare.
+
+La feature si aggiunge come **modalità**, non come app separata: un toggle
+CODE/CALL nella notch espansa, a sinistra del pulsante audio.
+
+## Scope
+
+**Dentro:**
+- Toggle CODE ⇄ CALL nella `topBar` della notch espansa
+- Protezione dalla cattura schermo (`sharingType = .none`) su tutte le superfici, solo in CALL
+- Cattura audio dual-channel: audio di sistema (il cliente) + microfono (Matteo), separati
+- Trascrizione live on-device in italiano (`SpeechAnalyzer` / `SpeechTranscriber`)
+- Endpointing semantico + gate che decide quando c'è un'occasione di risposta
+- Hotkey di override manuale ("rispondi ora")
+- Motore di risposta pluggable: `claude` CLI (default) e Ollama (fallback/privacy)
+- Contesto: file Webgas globale + scheda cliente dentro la cartella del cliente
+- Fine call: proposta di aggiornamento della scheda cliente
+- Consumi in tempo reale agganciati a `UsageModel`, con auto-switch a Ollama sotto soglia
+
+**Fuori:**
+- Trascrizione/notetaking come deliverable → lo fa già Gemini di Meet, nativamente
+- Screenshot → LLM (esiste in 7 tool su 7, ma nasce per barare a LeetCode; nelle call
+  commerciali il cliente parla, non mostra algoritmi)
+- Process disguise / evasione del proctoring
+- RAG vettoriale locale (scartato a favore di file + scheda cliente: 80% del valore, 5% della complessità)
+- Salvataggio del trascritto su disco
+- Windows/Linux (irrilevante: l'app è macOS-only)
+
+## Evidenze empiriche raccolte (2026-09-02, macchina di Matteo, macOS 26.5.2)
+
+Tutto ciò che segue è stato verificato, non assunto.
+
+### 1. L'invisibilità funziona ancora, contro quanto dice Apple
+
+Le fonti si contraddicevano: il [forum Apple](https://developer.apple.com/forums/thread/792152)
+sostiene che da macOS 15.4 `sharingType = .none` blocchi solo le API CoreGraphics
+legacy e **non** ScreenCaptureKit; test indipendenti di marzo 2026 sostenevano il
+contrario. Risolto con uno spike: due `NSPanel` a colori pieni, uno protetto e uno
+di controllo, catturati con tre motori.
+
+| Motore di cattura | Pannello di controllo | Pannello protetto |
+|---|---|---|
+| `SCScreenshotManager` (ScreenCaptureKit) | visibile | **assente** |
+| `/usr/sbin/screencapture` (Apple) | visibile | **assente** |
+| Chrome `getDisplayMedia` — la via di Google Meet | visibile | **assente** |
+
+Verdetto: **`sharingType = .none` è rispettato su macOS 26.5.2**, inclusa la
+condivisione schermo reale in Chrome.
+
+Tre limiti da conoscere:
+- È un flag **per-finestra**: va messo su ogni superficie (pannello notch, popover,
+  Settings). Una dimenticata e quella si vede.
+- Le finestre protette **restano elencate** in `SCShareableContent` (verificato: il
+  probe le vede entrambe). Sparisce il contenuto, non la voce nel selettore "condividi
+  una finestra" di Chrome.
+- Da macOS 15.4 esiste un'entitlement che consente a client di cattura privilegiati
+  di vedere comunque le finestre protette. Non si applica a Chrome/Meet, ma potrebbe
+  applicarsi a tool di remote support o proctoring aziendale. È "invisibile a Meet",
+  non "invisibile in assoluto".
+
+Nota collaterale: `CGWindowListCreateImage` è stato **rimosso dall'SDK** in macOS 15
+(`obsoleted`), quindi la via legacy non è più nemmeno compilabile.
+
+**Stato attuale di Meowtch: nessun `sharingType` in tutto `App/Sources`.** Oggi, in
+ogni condivisione schermo, il cliente vede le card delle sessioni, i nomi dei progetti
+e le domande in attesa. Va chiuso a prescindere da CALL.
+
+### 2. La trascrizione italiana on-device esiste e non costa nulla
+
+`SpeechTranscriber` (macOS 26) supporta 30 locale, fra cui **`it-IT` e `it-CH`**
+(verificato con probe). On-device, senza percorso server, senza modelli da impacchettare.
+
+Caveat: `installedLocales` è **vuoto** — l'asset italiano si scarica al primo uso
+tramite il sistema. Serve gestire quel primo avvio nell'UI.
+
+### 3. La CLI `claude` regge una sessione persistente
+
+Versione installata: 2.1.258. Flag rilevanti verificati in `--help`:
+- `--input-format stream-json` — input realtime su stdin: **un processo per call**, non per risposta
+- `--output-format stream-json` — risposte in streaming
+- `--append-system-prompt` — inietta la persona della call senza toccare la config di Matteo
+- `--restricted`, `--disallowedTools`, `--strict-mcp-config` — copilota bloccato su pura
+  generazione di testo: niente Read/Bash/MCP, nessuna sorpresa e nessuna latenza da tool call
+- `--model` — scelta del modello
+
+### 4. Lo stream porta con sé i consumi, in push
+
+L'evento `result` contiene `usage`, `modelUsage` per modello, `total_cost_usd`,
+`duration_ms`. E lo stream emette un evento di tipo **`rate_limit_event`**.
+
+Le stringhe del binario contengono `utilization`, `resets_at` / `resetsAt`,
+`five_hour`, `seven_day`, `rate_limit_info` — cioè **le stesse due finestre che
+`UsageModel` già disegna nella notch**.
+
+⚠️ I nomi dei campi vengono dal grep del binario compilato, non da un payload
+osservato. **Lo schema esatto va confermato catturando un evento reale** alla prima
+prova di implementazione.
+
+### 5. L'overhead per sessione della CLI è alto — la sessione persistente è obbligatoria
+
+Misura reale: prompt *"rispondi solo: ok"*, quattro token di output.
+
+```
+total_cost_usd = 0.158565
+cache_creation_input_tokens = 15345
+cache_read_input_tokens = 10010
+```
+
+Non è il modello, è il contesto che la CLI carica all'avvio di ogni sessione. Venti
+risposte in una call, ognuna con sessione nuova, costerebbero ~$3 e aprirebbero un
+buco reale nella finestra 5h usata per lavorare. **Un processo per call, riusato per
+ogni risposta.**
+
+### 6. Hardware
+
+M1 Pro, 16 GB. Ollama **non installato**. Rilevante per il dimensionamento del
+motore locale: un 8B quantizzato occupa 5-6 GB residenti mentre girano Meet in video,
+la trascrizione on-device e le sessioni di lavoro.
+
+## Cosa si impara dai tool esistenti
+
+Comparativa completa dei sette progetti in conversazione. Qui restano solo le
+conclusioni che influenzano il design.
+
+**Perché tutti usano Whisper, e perché noi no:** sono tutti cross-platform (il
+framework Speech di Apple è macOS-only); sono nati prima di macOS 26 (`SpeechAnalyzer`
+è di settembre 2025, e prima c'era solo `SFSpeechRecognizer`, pensato per dettatura
+breve); devono supportare macOS 12+; da Node non si raggiunge il framework Apple senza
+scrivere un modulo nativo. Nessuna di queste vale per Meowtch.
+
+**La lezione più importante viene dallo spec Auto Answer v2 di Natively** (repo
+clonato come riferimento architetturale; vedi nota di licenza in fondo):
+
+- La latenza percepita **non è il modello**. Misurano tre numeri:
+  `median_endpoint_to_decision_ms`, `p95_endpoint_to_decision_ms`,
+  `median_decision_to_first_token_ms`. Il tempo totale di generazione non è nemmeno
+  strumentato, perché con lo streaming non conta.
+- **Endpointing semantico, non timer fisso**: testualmente, «*The goal is not merely to
+  detect `?` or wait 900 ms after an STT final*» e «*Do not hardcode a universal 900 ms
+  trigger anymore*». Il timer riparte a ogni nuovo parlato e chiude solo con silenzio
+  sufficiente **e** frase che sembra completa.
+- **La qualità è non rispondere nel momento sbagliato**: le metriche dichiarate
+  prioritarie sono `false_trigger_rate` e `premature_trigger_rate`, non la bontà della
+  risposta.
+- **Il detector non chiama mai l'LLM di risposta** (testuale: «*The detector should NOT
+  directly call the answer LLM*»).
+- **Due risposte non vanno mai in streaming in parallelo**: la seconda si accoda.
+- **Il tiering dei modelli è il design**, non un ripiego: ogni provider espone un id
+  "Fastest" e uno "Highest Quality".
+- **Un registry multi-provider è manutenzione perpetua**: i commenti nel loro codice
+  documentano id Llama ritirati da Groq (luglio e agosto 2026) e id NVIDIA che
+  rispondono `410 Gone` pur essendo elencati nel catalogo. Ragione in più per fermarsi
+  a due motori.
+
+## Architettura
+
+```
+CALL mode
+├── CallModeController      stato CODE/CALL; applica sharingType a tutte le superfici
+├── AudioCapture            2 canali separati: sistema (cliente) + mic (Matteo)
+├── LiveTranscriber         SpeechAnalyzer per canale → segmenti volatili e finali
+├── TurnEndpointer          quando il cliente ha davvero finito di parlare
+├── AnswerTrigger           è un'occasione di risposta? (non chiama mai il motore)
+├── AnswerEngine  «protocollo»
+│   ├── ClaudeCLIEngine     un processo per call, stream-json su stdin/stdout
+│   └── OllamaEngine        HTTP streaming su localhost:11434
+├── ContextStore            contesto Webgas globale + scheda cliente
+├── CallUsageTracker        terza sorgente per UsageModel + budget e auto-switch
+└── CallView                UI nella notch espansa
+```
+
+Collocazione secondo le convenzioni del repo: modello e parser puri in `VedettaKit`
+(`TurnEndpointer`, `AnswerTrigger`, `ContextStore`, parsing degli eventi stream-json),
+tutto ciò che tocca AppKit, audio o processi in `Vedetta`.
+
+### Confini non negoziabili
+
+1. **Il trigger non chiama mai il motore di risposta.** Decisione e generazione sono
+   percorsi separati: la decisione costa zero e non eredita la latenza del modello.
+   (Se le euristiche non bastassero, il trigger può interpellare un modello locale
+   piccolo — che resta comunque un percorso distinto dal motore di risposta.)
+2. **Due risposte non vanno mai in streaming insieme.** Seconda domanda durante uno
+   streaming → si accoda.
+3. **Si misurano `endpoint → decision` e `decision → first token`** fin dal primo
+   commit. Senza strumentazione si ottimizza a caso.
+
+## Il trigger
+
+**Vantaggio strutturale rispetto ai tool Electron:** catturando due canali separati,
+il canale *è* l'etichetta di chi parla. Sistema = cliente, mic = Matteo. Niente
+diarizzazione, niente speaker label da indovinare, niente modelli VAD.
+
+**Endpointer:** il timer parte quando il cliente smette di parlare, riparte a ogni
+nuovo parlato, chiude quando il silenzio supera la soglia **e** i controlli di
+completezza non indicano una frase troncata. Soglie come costanti nominate, non magic
+number sparsi.
+
+**Rischio principale, specifico all'italiano.** In inglese la sintassi interrogativa
+aiuta (`do you`, `can we`, inversione). In italiano una domanda chiusa è
+morfologicamente identica all'affermazione: *"Riuscite a farlo entro giugno"* e
+*"Riuscite a farlo entro giugno?"* hanno le stesse parole nello stesso ordine.
+Restano la punteggiatura che `SpeechTranscriber` inferisce dalla prosodia e i
+marcatori lessicali (chi, cosa, come, quando, quanto, perché, quale, potete, riuscite,
+avete). **È il punto in cui il gate sbaglierà di più**, ed è il candidato numero uno
+per un modello locale piccolo se le euristiche non bastano.
+
+**Tre soppressioni**, che valgono più di qualsiasi raffinatezza sul rilevamento:
+- se sta parlando Matteo (canale mic attivo) → nessun suggerimento: sta già rispondendo
+- se una risposta è in streaming → la successiva si accoda
+- se la domanda è quasi identica a una già risposta → si ignora
+
+**Rete di sicurezza: hotkey di override.** Premuta, il copilota risponde sull'ultimo
+tratto di conversazione senza consultare nessuna euristica. Rende non fatali gli errori
+del gate: se sbaglia in difetto la hotkey copre, se sbaglia in eccesso le metriche lo
+dicono e si alza la soglia.
+
+## Superficie
+
+**Il toggle** sta nella `topBar` di `NotchView` (oggi:
+`usageSummary → Spacer → speaker → gear`), inserito a sinistra del pulsante audio. È il
+solo punto di ingresso: nessuna finestra nuova, nessuna voce di menu.
+
+**In CALL, notch espansa:** il filo della conversazione con i due interlocutori
+visivamente distinti (il canale è già l'etichetta, non serve indovinare chi parla), il
+suggerimento corrente che scorre in streaming, e lo stato del motore con il consumo
+progressivo della call.
+
+**In CALL, notch collassata:** un indicatore minimo — in ascolto / suggerimento pronto —
+coerente con la glance mode già esistente.
+
+**Passaggio di modalità:** all'ingresso in CALL ogni superficie passa a
+`sharingType = .none` e all'uscita torna normale. Vale per il pannello notch, i popover
+e la finestra Settings: **una sola dimenticata vanifica la feature**. Serve un punto
+unico che enumera le finestre, non chiamate sparse.
+
+Un indicatore visibile dice che la protezione è attiva. Può essere vistoso quanto serve:
+essendo dentro una finestra protetta, non lo vede nessun altro.
+
+## Contesto e schede cliente
+
+```
+ContextStore
+├── contesto Webgas globale     ~/.vedetta/call/webgas.md
+└── scheda cliente              <cartella scelta>/.meowtch/client.md
+```
+
+Prima della call si seleziona la cartella del cliente (es. `~/Code/design/studio`) e la
+scheda vive lì, accanto al lavoro. A fine call il copilota **propone** una modifica —
+cosa ha chiesto il cliente, cosa gli è stato promesso, obiezioni emerse — e Matteo
+approva o scarta. La scheda cresce a ogni chiamata e la successiva parte informata.
+
+**Il trascritto muore in RAM.** Niente audio, niente trascritto, niente suggerimenti su
+disco. Il riassunto della riunione resta a Gemini di Meet, che gestisce anche il
+consenso dei partecipanti (obbligatorio da aprile 2026).
+
+**Rischio git, e come si chiude.** La scheda contiene budget, obiezioni e promesse:
+roba che non deve finire in un commit. Metà delle cartelle cliente di Matteo sono repo
+git (`shop-wp`, `erp-connector`, `theme`, `client-b`; `design/studio` no).
+Quindi: file sotto `.meowtch/`, e alla creazione Meowtch lo aggiunge a
+**`.git/info/exclude`**, non a `.gitignore` — `.gitignore` è tracciato e comparirebbe
+come modifica nel repo del cliente, `.git/info/exclude` è locale e invisibile.
+
+**Nessuna eredità di `AGENTS.md` / `CLAUDE.md`.** Il processo parte nella cartella
+cliente ma con le istruzioni di progetto disattivate: la persona in call è definita solo
+da `webgas.md` + `client.md`. Un `AGENTS.md` che parla di Pint e migration non c'entra
+nulla con una call commerciale e occupa contesto.
+
+## Motori di risposta
+
+Protocollo unico, due implementazioni.
+
+**`ClaudeCLIEngine` (default).** Un processo `claude -p --input-format stream-json
+--output-format stream-json --append-system-prompt <persona> --restricted` per call.
+Ogni domanda è un messaggio JSON su stdin; la risposta torna in streaming e finisce
+nella notch. La sessione mantiene da sola il filo dell'intera conversazione.
+
+**`OllamaEngine`.** HTTP streaming su `localhost:11434`. Tre casi d'uso reali che il
+cloud non copre: cliente sensibile in cui nulla deve lasciare la macchina, call offline,
+zero consumo del rate limit.
+
+**Perché la CLI per prima, nonostante l'attrattiva di "solo locale".** Ollama-only è
+*più* lavoro, non meno: la CLI è già installata, è un sottoprocesso, zero dipendenze
+nuove, zero budget di RAM, qualità massima. Ollama significa installazione, ~5 GB di
+modello e prompt tuning per un modello piccolo, su 16 GB già occupati da Meet in video.
+E soprattutto: la prima domanda a cui rispondere è *"un copilota in call serve
+davvero?"*. Se non è utile con un modello frontier dietro, non lo sarà con un 8B —
+validare col motore più debole rischia di uccidere una buona feature su una cattiva
+prima impressione.
+
+**Ollama non è l'alternativa al default: è la sua rete di sicurezza** (vedi budget,
+sotto). È la ragione più solida per costruire il protocollo a due motori fin da subito.
+
+## Consumi in tempo reale
+
+Non serve una sonda nuova: **il motore stesso è il feed**.
+
+```
+UsageModel  ←  push    (statusline)        esiste — muta in headless
+            ←  pull    (sonda OAuth)       esiste — a intervalli
+            ←  stream  (rate_limit_event)  NUOVO — push a ogni risposta
+```
+
+La terza sorgente è più fresca della pull (nessun intervallo di polling) e copre
+esattamente il caso in cui la push è cieca: in `-p` headless la statusline non gira.
+Si innesta nel merge per-account che `UsageModel` già fa, non accanto.
+
+L'evento `result` di ogni risposta porta inoltre `usage`, `modelUsage` e
+`total_cost_usd`: totale progressivo della call, mostrabile in notch mentre si parla.
+
+**Il monitoraggio è un comando, non un cruscotto.** La soglia è espressa come
+**percentuale residua della finestra 5h** (default proposto: 20%, configurabile in
+Settings). Quando `UsageModel` scende sotto quel valore la notch avvisa e il copilota
+**passa da solo a `OllamaEngine`** per il resto della chiamata. Assistenza degradata
+invece di assistenza assente davanti a un cliente. Se `OllamaEngine` non è
+disponibile — Ollama non installato, nessun modello — l'avviso resta e il copilota si
+sospende: mai un fallimento silenzioso a metà call.
+
+## Privacy, permessi, contratto
+
+**Tre permessi nuovi:** microfono, audio di sistema, riconoscimento vocale.
+
+Per l'audio di sistema si sceglie il **process tap Core Audio** mirato sul processo del
+meeting, invece di ScreenCaptureKit: permesso più stretto e non cattura l'audio
+dell'intero sistema. È API C ostica — **serve uno spike in implementazione**, con SCK
+audio come fallback documentato.
+
+**Emendamento alla regola no-telemetry.** `CLAUDE.md` dichiara: *"No telemetry, ever.
+The only network traffic is the daily update check and the opt-in Claude usage probe."*
+`ClaudeCLIEngine` manda il trascritto della call ad Anthropic. È una violazione
+deliberata di una regola dichiarata e va scritta nel contratto, non fatta passare in
+silenzio.
+
+La distinzione che regge: *telemetria* è dato sull'utente, spedito per scopi del vendor,
+senza che l'utente lo chieda; un copilota che risponde a una domanda posta dall'utente è
+una chiamata di servizio richiesta. Traffico di rete sono entrambi, quindi la regola va
+emendata comunque — ma l'emendamento è **"su iniziativa dell'utente, con consenso,
+spento di default, con kill-switch"**, non "adesso facciamo analytics". Precedente
+esistente nel repo: il kill-switch `remote_questions` di `RemoteBridge`.
+
+`OllamaEngine` è l'unica configurazione che lascia la regola intatta.
+
+## Metriche
+
+Strumentate dal primo commit, esposte via socket per il debug:
+
+```
+endpoint_to_decision_ms      (mediana e p95)
+decision_to_first_token_ms   (mediana)
+false_trigger_rate           ← prioritaria
+premature_trigger_rate       ← prioritaria
+manual_override_rate         quante volte la hotkey ha coperto un buco del gate
+```
+
+## Rischi aperti
+
+| Rischio | Mitigazione |
+|---|---|
+| Rilevamento domande in italiano (nessun marcatore sintattico) | Euristiche + punteggiatura prosodica; escalation a modello locale piccolo se la precisione è bassa; la hotkey rende gli errori non fatali |
+| Process tap Core Audio (API C ostica) | Spike dedicato prima dell'implementazione; fallback SCK audio |
+| Schema di `rate_limit_event` non confermato | Catturare un evento reale alla prima prova; fallback sulla sonda pull esistente |
+| Download dell'asset `it-IT` al primo uso | UI di primo avvio dedicata, non un blocco silenzioso a metà call |
+| Entitlement di bypass su macOS 15.4+ | Documentato: "invisibile a Meet", non "invisibile in assoluto" |
+| Costo/rate limit durante call lunghe | Sessione persistente + budget + auto-switch a Ollama |
+
+## Nota di licenza
+
+Il repo di **Natively** è stato clonato come riferimento architetturale. La sua licenza
+(Natively Personal Use Source License v1.0) è *source-available*, non open source, e
+vieta esplicitamente uso commerciale e client work. Matteo ha contattato il dev e ha
+conferma per il proprio caso studio personale.
+
+Resta un vincolo pratico da rispettare: **Meowtch è MIT e pubblica** (release GitHub +
+`install.sh`). Le *idee* architetturali si riusano liberamente; **copiare codice** di
+Natively in un repo MIT creerebbe un conflitto reale, perché MIT concede a valle l'uso
+commerciale che quella licenza nega. Riferimento sì, copia-incolla no.
+
+Fra i tool comparati, quelli effettivamente riusabili come codice sono OpenCluely (MIT)
+e Vysper (Apache-2.0); Glass e cue sono GPL-3 (contagiose); Pluely v1 è proprietaria.
+Dato che tutto va comunque reimplementato in Swift, il punto è in gran parte accademico.
