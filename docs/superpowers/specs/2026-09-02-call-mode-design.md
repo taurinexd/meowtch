@@ -468,6 +468,7 @@ manual_override_rate         quante volte la hotkey ha coperto un buco del gate
 | Process tap Core Audio (API C, poco battuta) | Ridimensionato: categoria TCC dedicata confermata, identità di firma già presente, implementazione di riferimento disponibile. Spike breve; fallback SCK audio |
 | Download dell'asset `it-IT` al primo uso | UI di primo avvio dedicata, non un blocco silenzioso a metà call |
 | `SpeechTranscriber` potrebbe non emettere punteggiatura interrogativa affidabile in italiano | Prova con audio reale **prima** di implementare il gate; fallback su marcatori lessicali + modello locale piccolo |
+| **Apple avverte che una finestra `NSWindowSharingNone` «will also not be able to participate in a number of system services»** (header di `NSWindow`), senza elencarli | Verifica esplicita in M1 su Mission Control e Stage Manager; la modalità è temporanea e non persiste fra i lanci, quindi l'esposizione è limitata alla durata della call |
 | Rientro dell'audio del cliente nel microfono a speaker aperti | Cuffie come precondizione dichiarata + avviso sul device di output all'ingresso in CALL; nessun AEC |
 | Entitlement di bypass su macOS 15.4+ | Documentato: "invisibile a Meet", non "invisibile in assoluto" |
 | Costo/rate limit durante call lunghe | Sessione persistente + budget + auto-switch a Ollama |
