@@ -606,3 +606,21 @@ screenshot — solo a occhio, guardando lo schermo.
 eventuali effetti collaterali su Mission Control / Stage Manager, che l'header di
 `NSWindow` lascia intendere senza elencarli («will also not be able to participate in a
 number of system services»).
+
+### Effetto collaterale confermato: lo screenshot mirato alla finestra fallisce (2026-09-02)
+
+In CALL, uno screenshot **mirato alla finestra** (`Cmd+Shift+4` → Spazio → click sul
+pannello) non produce un'immagine vuota: macOS mostra un **messaggio di errore**.
+`WindowServer` rifiuta di consegnare il contenuto di una finestra `NSWindowSharingNone`,
+e il sistema preferisce fallire rumorosamente.
+
+La cattura dell'**intero schermo** invece riesce sempre e si limita a omettere la finestra
+(è così che sono state fatte le verifiche qui sopra).
+
+È il primo dei «number of system services» che l'header di `NSWindow` nomina senza
+elencare. Benigno: si manifesta solo in CALL, solo su cattura per-finestra, e sparisce
+tornando a CODE. Vale però la pena saperlo prima di stupirsi.
+
+Conseguenza pratica: l'indicatore a notch collassata **non è fotografabile con alcuno
+strumento del sistema**. Verificato a occhio da Matteo (la scritta CALL con l'icona del
+telefono compare come previsto).
