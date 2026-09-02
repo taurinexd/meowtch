@@ -579,3 +579,30 @@ Tutto su `main` locale (nessun push). Commit principali:
 - **Multi-domanda** = wizard una-alla-volta (`WizardQuestionView`); il terminale usa una tab-bar (`currentQuestionIndex`, chord Tab "switch questions", tab "✓ Submit"). Free-text/Skip esistono solo nel picker terminale (`type:"input"`, `response`), non nel notch di VI.
 - **Self-cleanup launcher** orfano >5 min via `.orphaned` + JXA che rimuove hook/statusLine col marker (VI: marker `vibe-island`; noi: `vedetta`). Implementato (commit `5d8c266`).
 - **Il self-cleanup di VI 1.0.41 è ROTTO** (scoperto disinstallandola, 2026-07-22): il ramo orphan del suo launcher muore con `unmatched "` (parse error zsh a riga 48, heredoc JXA) — non scrive mai il marker né esegue il cleanup. La disinstallazione ha richiesto pulizia manuale dei config (backup in `~/.vedetta/backups/*-pre-vi-uninstall`). Il launcher di Vedetta è verificato pulito con `zsh -n`. Da aggiungere: un parse-check del launcher nei test/build.
+
+## CALL mode M1 — verifica della protezione dalla cattura (2026-09-02)
+
+Build di sviluppo `dist/Meowtch.app`, macOS 26.5.2, MacBook Pro + display esterno.
+Modalità pilotata via il nuovo comando socket `{"cmd":"callMode","value":"code|call"}`
+(commit `dfc3fb2`): senza, la verifica richiederebbe un click che nessuno script può dare.
+
+| Prova | CODE | CALL |
+|---|---|---|
+| Notch espansa, `screencapture -x` | visibile (titoli sessione, prompt, progetti leggibili) | **assente** |
+| Finestra Settings aperta, stessa cattura | visibile | **assente** |
+| Notch **collassata**, stessa regione ritagliata, catture consecutive | barra visibile con sprite e contatore | **assente** |
+
+La terza riga è il controllo che conta: `autoCollapseOnMouseLeave` è attivo di default,
+quindi una notch sparita da uno scatto potrebbe essersi semplicemente collassata. Tenendo
+lo stato di espansione **costante** e cambiando solo la modalità, l'unica spiegazione
+rimasta è `sharingType`. La finestra Settings è un secondo controllo indipendente: non si
+auto-collassa, ed era dimostrabilmente aperta (ricompare tornando a CODE).
+
+**Limite noto, per costruzione:** l'indicatore a notch collassata (glifo telefono) vive
+dentro una finestra che in CALL è invisibile a qualunque cattura. Non è verificabile con
+screenshot — solo a occhio, guardando lo schermo.
+
+**Ancora da verificare a mano:** condivisione reale in Chrome (`getDisplayMedia`), ed
+eventuali effetti collaterali su Mission Control / Stage Manager, che l'header di
+`NSWindow` lascia intendere senza elencarli («will also not be able to participate in a
+number of system services»).
