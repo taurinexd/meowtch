@@ -61,11 +61,11 @@ di controllo, catturati con tre motori.
 | `SCScreenshotManager` (ScreenCaptureKit) | visibile | **assente** |
 | `/usr/sbin/screencapture` (Apple) | visibile | **assente** |
 | Chrome `getDisplayMedia` (campione WebRTC) | visibile | **assente** |
+| **Google Meet, condivisione reale** | visibile | **assente** |
 
-Verdetto: **`sharingType = .none` è rispettato su macOS 26.5.2**, inclusa una condivisione
-schermo reale in Chrome. Precisazione sul metodo: la terza riga è stata verificata sulla pagina
-campione WebRTC `getDisplayMedia`, che usa la stessa identica API di Google Meet, non dentro una
-riunione Meet.
+Verdetto: **`sharingType = .none` è rispettato su macOS 26.5.2**, Google Meet incluso —
+verificato prima sulla pagina campione WebRTC `getDisplayMedia` e poi, da Matteo, dentro una
+condivisione schermo reale in una riunione Meet. Non resta ipotesi: è lo scenario d'uso vero.
 
 Tre limiti da conoscere:
 - È un flag **per-finestra**: va messo su ogni superficie (pannello notch, popover,

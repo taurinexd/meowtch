@@ -624,3 +624,14 @@ tornando a CODE. Vale però la pena saperlo prima di stupirsi.
 Conseguenza pratica: l'indicatore a notch collassata **non è fotografabile con alcuno
 strumento del sistema**. Verificato a occhio da Matteo (la scritta CALL con l'icona del
 telefono compare come previsto).
+
+### Google Meet: verifica sullo scenario reale (2026-09-02)
+
+Matteo ha condiviso lo schermo in una riunione **Google Meet** vera, con l'invisibilità
+attiva: la notch non compare. Chiude l'ultima riserva rimasta — le prove precedenti erano
+su `SCScreenshotManager`, `screencapture` e la pagina campione WebRTC `getDisplayMedia`,
+tutte fedeli all'API ma nessuna dentro Meet.
+
+Vale la pena ricordare che il [forum ufficiale Apple](https://developer.apple.com/forums/thread/792152)
+sostiene il contrario per macOS 15.4+ («only block legacy CoreGraphics APIs, not
+ScreenCaptureKit»). Sulla macchina di Matteo, macOS 26.5.2, non è così.
