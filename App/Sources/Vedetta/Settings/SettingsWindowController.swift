@@ -34,6 +34,7 @@ final class SettingsWindowController {
             window.minSize = NSSize(width: 760, height: 520)
             window.center()
             window.isReleasedWhenClosed = false
+            ScreenPrivacy.shared.register(window)
             self.window = window
         }
         // An LSUIElement app has no Dock presence: activate explicitly so

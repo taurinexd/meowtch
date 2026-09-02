@@ -43,6 +43,7 @@ final class OnboardingController {
             self.window?.close()
         })
         self.window = window
+        ScreenPrivacy.shared.register(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }

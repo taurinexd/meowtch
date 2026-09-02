@@ -20,6 +20,7 @@ final class NotchPanel: NSPanel {
         isMovableByWindowBackground = false
         becomesKeyOnlyIfNeeded = true
         animationBehavior = .utilityWindow
+        ScreenPrivacy.shared.register(self)
     }
 
     override var canBecomeKey: Bool { true }
