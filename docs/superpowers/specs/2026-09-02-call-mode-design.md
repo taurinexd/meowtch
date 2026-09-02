@@ -297,13 +297,30 @@ tempo reale, non a posteriori. Gli stessi due numeri servono anche a strumentare
 **In CALL, notch collassata:** un indicatore minimo — in ascolto / suggerimento pronto —
 coerente con la glance mode già esistente.
 
-**Passaggio di modalità:** all'ingresso in CALL ogni superficie passa a
-`sharingType = .none` e all'uscita torna normale. Vale per il pannello notch, i popover
-e la finestra Settings: **una sola dimenticata vanifica la feature**. Serve un punto
-unico che enumera le finestre, non chiamate sparse.
+**Modalità e invisibilità sono due cose distinte** (deciso in implementazione, 2026-09-02).
+CALL dice *cosa fa* la notch; un secondo interruttore — un fantasmino in pixel art accanto
+al toggle — dice *se è catturabile*. CALL accende l'invisibilità e CODE la spegne, ma il
+fantasmino ha l'ultima parola su entrambi.
 
-Un indicatore visibile dice che la protezione è attiva. Può essere vistoso quanto serve:
-essendo dentro una finestra protetta, non lo vede nessun altro.
+Non è un vezzo: legati alla stessa variabile, la superficie CALL sarebbe **impossibile da
+sviluppare**, perché nel momento in cui la notch ha qualcosa da mostrare nessuno screenshot
+può mostrarlo. La separazione compra anche un caso utile di suo: nascondere la notch mentre
+si programma, durante una demo condivisa.
+
+Il fantasmino è pixel art e non un SF Symbol perché in SF Symbols **il fantasma non esiste**
+(verificato) e perché l'app è già 8-bit; si compone con una piccola `xmark` esattamente come
+il pulsante del volume.
+
+**Applicazione:** all'accensione ogni superficie passa a `sharingType = .none` e allo
+spegnimento torna a `.readOnly`. Vale per il pannello notch, i popover e la finestra
+Settings: **una sola dimenticata vanifica la feature**. Serve un punto unico che enumera le
+finestre, non chiamate sparse.
+
+⚠️ Effetto collaterale confermato: mentre è invisibile, uno screenshot **mirato alla
+finestra** (`Cmd+Shift+4` → Spazio) fallisce con un errore di sistema invece di produrre
+un'immagine vuota. La cattura a schermo intero riesce e si limita a omettere la finestra.
+È il primo dei «number of system services» che l'header di `NSWindow` nomina senza elencare,
+e va spiegato nella copy di Settings: un errore secco senza contesto fa pensare a un'app rotta.
 
 ## Contesto e schede cliente
 
