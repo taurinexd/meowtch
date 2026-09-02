@@ -414,6 +414,18 @@ enum EventDispatcher {
             )
             return Data(#"{"ok":true}"#.utf8)
 
+        case "callMode":
+            // Debug-only hook for the screen-privacy verification: flipping the
+            // mode by hand takes a click, and a capture script cannot click.
+            // Reads back the current mode whether or not a value was given.
+            if let raw = envelope["value"] as? String,
+               let mode = CallMode(rawValue: raw) {
+                ScreenPrivacy.shared.setMode(mode)
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "mode": ScreenPrivacy.shared.mode.rawValue,
+            ])
+
         case "setExpanded":
             NotificationCenter.default.post(
                 name: .vedettaDebugSetExpanded,
