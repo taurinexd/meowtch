@@ -13,9 +13,13 @@ back to the exact terminal that asked.
 > that name in the code, the internal paths (`~/.vedetta`) and the bundle
 > id; the cat on duty is Meowtch.
 
-![Collapsed bar](docs/images/collapsed.png)
+<img src="docs/images/collapsed.png" width="254" alt="The collapsed bar: the cat, a pending-approval mark and the session count">
 
-![Expanded panel](docs/images/expanded.png)
+*Collapsed: the cat on duty, a `?` when something needs you, and how many sessions are live.*
+
+<img src="docs/images/expanded.png" width="652" alt="The expanded panel listing sessions with their state, current tool and elapsed time">
+
+*Expanded on hover: active sessions in full, the rest as compact lines.*
 
 ## Features
 
