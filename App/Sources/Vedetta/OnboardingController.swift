@@ -35,6 +35,13 @@ final class OnboardingController {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.backgroundColor = .black
+        // The wizard is always night-sky black; light-mode controls on it
+        // render as white slabs.
+        window.appearance = NSAppearance(named: .darkAqua)
+        // Dark aqua draws the disabled minimize/zoom lights; a wizard has
+        // no use for them.
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.isReleasedWhenClosed = false
         window.center()
         window.contentView = NSHostingView(rootView: OnboardingView { [weak self] in
@@ -53,6 +60,9 @@ final class OnboardingController {
 
 private enum OnboardingStep: Int, CaseIterable {
     case welcome, permissions, agents, allSet
+
+    /// Splash steps center in the window; setup steps anchor to the top.
+    var isSplash: Bool { self == .welcome || self == .allSet }
 
     /// Each step borrows the state color of what it is about: green for
     /// the watch itself, orange for the permission decision, blue for the
@@ -85,9 +95,15 @@ private struct OnboardingView: View {
             StarfieldView(driftSpeed: 2.0, starCount: 90)
 
             VStack(spacing: 0) {
-                Spacer(minLength: 30)
+                // Splash steps float in the middle; setup steps hang from a
+                // fixed line so their headers don't jump between pages.
+                if step.isSplash {
+                    Spacer(minLength: 30)
+                } else {
+                    Spacer().frame(height: 96)
+                }
                 content
-                    .frame(maxWidth: .infinity)
+                    .frame(width: Layout.contentWidth)
                     .transition(.opacity)
                     .id(step)
                 Spacer(minLength: 16)
@@ -95,6 +111,7 @@ private struct OnboardingView: View {
             }
         }
         .frame(width: 560, height: 620)
+        .environment(\.colorScheme, .dark)
         .animation(.easeInOut(duration: 0.3), value: step)
     }
 
@@ -111,19 +128,22 @@ private struct OnboardingView: View {
     // MARK: Steps
 
     private var welcome: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 0) {
             PixelSprite(
                 pattern: MascotFrame.base,
                 color: step.accent,
                 pixelSize: 9
             )
-            Text("VEDETTA")
+            .padding(.bottom, 28)
+            Text("MEOWTCH")
                 .font(.system(size: 26, weight: .black, design: .monospaced))
                 .kerning(10)
                 .foregroundStyle(Theme.primaryText)
+                .padding(.bottom, 12)
             Text("Your coding agents, watched from the notch.")
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(Theme.primaryText)
+                .padding(.bottom, 22)
             TypewriterText(
                 text: "> live sessions · approvals · questions · jump to terminal",
                 color: Theme.secondaryText
@@ -132,46 +152,43 @@ private struct OnboardingView: View {
     }
 
     private var permissions: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 0) {
             stepHeader(
                 "PERMISSIONS",
-                prompt: "> the lookout needs to raise the right window"
+                prompt: "> the cat needs to raise the right window"
             )
-            Text("Accessibility lets Meowtch bring the exact terminal window\nto the front when you jump to a session.")
-                .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(Theme.secondaryText)
-                .multilineTextAlignment(.center)
-            setupRow(
-                title: "Accessibility",
-                ok: axTrusted,
-                okLabel: "granted",
-                actionLabel: "Grant…"
-            ) {
-                let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-                _ = AXIsProcessTrustedWithOptions(options)
-                axTrusted = AXIsProcessTrusted()
+            bodyText("Accessibility lets Meowtch bring the exact terminal\nwindow to the front when you jump to a session.")
+                .padding(.bottom, 20)
+            card {
+                setupRow(
+                    title: "Accessibility",
+                    ok: axTrusted,
+                    okLabel: "granted",
+                    actionLabel: "Grant…"
+                ) {
+                    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+                    _ = AXIsProcessTrustedWithOptions(options)
+                    axTrusted = AXIsProcessTrusted()
+                }
             }
-            Text("You can grant it later — everything else works without it.")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(Theme.secondaryText.opacity(0.7))
+            .padding(.bottom, 12)
+            caption("You can grant it later. Everything else works without it.")
         }
         .onAppear { axTrusted = AXIsProcessTrusted() }
     }
 
     private var agents: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 0) {
             stepHeader(
                 "CONNECT AGENTS",
                 prompt: "> hooking into the agents found on this Mac"
             )
-            VStack(spacing: 10) {
+            card {
                 setupRow(
-                    title: agentLabel(
-                        "Claude Code",
-                        detected: FileManager.default.fileExists(
-                            atPath: NSHomeDirectory() + "/.claude"
-                        )
-                    ),
+                    title: "Claude Code",
+                    note: FileManager.default.fileExists(
+                        atPath: NSHomeDirectory() + "/.claude"
+                    ) ? nil : "not detected",
                     ok: claudeInstalled,
                     okLabel: "hooked",
                     actionLabel: "Hook"
@@ -182,11 +199,11 @@ private struct OnboardingView: View {
                         claudeInstalled = VedettaSetup.claudeHooksInstalled()
                     }
                 }
+                rowDivider
                 setupRow(
-                    title: agentLabel(
-                        "Codex",
-                        detected: VedettaSetup.codexHomes.contains(where: \.isAvailable)
-                    ),
+                    title: "Codex",
+                    note: VedettaSetup.codexHomes.contains(where: \.isAvailable)
+                        ? nil : "not detected",
                     ok: codexInstalled,
                     okLabel: "hooked",
                     actionLabel: "Hook"
@@ -197,6 +214,7 @@ private struct OnboardingView: View {
                         codexInstalled = VedettaSetup.codexHooksInstalled()
                     }
                 }
+                rowDivider
                 setupRow(
                     title: "VS Code jump extension",
                     ok: extensionInstalled,
@@ -206,104 +224,148 @@ private struct OnboardingView: View {
                     JumpService.installVSCodeExtension()
                     extensionInstalled = JumpService.vsCodeExtensionInstalled()
                 }
-                HStack {
-                    Text("Launch at Login")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Theme.primaryText)
-                    Spacer()
-                    Toggle("", isOn: $launchAtLogin)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .onChange(of: launchAtLogin) { _, enabled in
-                            try? enabled
-                                ? SMAppService.mainApp.register()
-                                : SMAppService.mainApp.unregister()
-                        }
-                }
-                .frame(maxWidth: 400)
             }
+            .padding(.bottom, 12)
+            caption("Hooks merge additively, with a timestamped backup.\nCodex asks you to trust them with /hooks on first use.")
             if let setupError {
                 Text(setupError)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
             }
-            Text("Hooks merge additively with a timestamped backup.\nCodex asks you to trust them with /hooks on first use.")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(Theme.secondaryText.opacity(0.7))
-                .multilineTextAlignment(.center)
+            card {
+                toggleRow("Launch at Login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, enabled in
+                        try? enabled
+                            ? SMAppService.mainApp.register()
+                            : SMAppService.mainApp.unregister()
+                    }
+            }
+            .padding(.top, 24)
         }
     }
 
     private var allSet: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 0) {
             PixelSprite(
                 pattern: MascotFrame.base,
                 color: step.accent,
                 pixelSize: 7
             )
+            .padding(.bottom, 24)
             stepHeader("ALL SET", prompt: "> hooks armed for new sessions")
-            Text("Hooks apply to sessions started from now on.\nRestart any running agent to bring it aboard,\nthen hover the notch.")
-                .font(.system(size: 11.5, design: .monospaced))
-                .foregroundStyle(Theme.secondaryText)
-                .multilineTextAlignment(.center)
-            VStack(spacing: 6) {
-                HStack {
-                    Text("Check for updates automatically")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(Theme.primaryText)
-                    Spacer()
-                    Toggle("", isOn: $autoUpdate)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                }
-                .frame(maxWidth: 400)
-                Text("Asks GitHub once a day whether a newer release exists.\nNo account, no telemetry — turn it off and Meowtch never calls home.")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText.opacity(0.7))
-                    .multilineTextAlignment(.center)
+            bodyText("Hooks apply to sessions started from now on.\nRestart any running agent to bring it aboard,\nthen hover the notch.")
+                .padding(.bottom, 24)
+            card {
+                toggleRow("Check for updates automatically", isOn: $autoUpdate)
             }
-            .padding(.top, 6)
+            .padding(.bottom, 12)
+            caption("Asks GitHub once a day whether a newer release exists.\nNo account, no telemetry. Off means it never calls home.")
         }
     }
 
     // MARK: Shared pieces
 
+    private enum Layout {
+        static let contentWidth: CGFloat = 400
+        static let rowHeight: CGFloat = 44
+    }
+
     private func stepHeader(_ title: String, prompt: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Text(title)
                 .font(.system(size: 15, weight: .black, design: .monospaced))
                 .kerning(5)
                 .foregroundStyle(step.accent)
             TypewriterText(text: prompt, color: Theme.secondaryText)
         }
+        .padding(.bottom, 24)
     }
 
-    private func agentLabel(_ name: String, detected: Bool) -> String {
-        detected ? name : "\(name) (not detected)"
+    private func bodyText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, design: .monospaced))
+            .lineSpacing(3)
+            .foregroundStyle(Color.white.opacity(0.72))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10.5, design: .monospaced))
+            .lineSpacing(2)
+            .foregroundStyle(Theme.secondaryText)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Rows sit in one panel so their left and right edges read as a list,
+    /// not as loose labels floating under centered text.
+    private func card<Content: View>(@ViewBuilder _ rows: () -> Content) -> some View {
+        VStack(spacing: 0, content: rows)
+            .padding(.horizontal, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.white.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+    }
+
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.08))
+            .frame(height: 1)
     }
 
     private func setupRow(
         title: String,
+        note: String? = nil,
         ok: Bool,
         okLabel: String,
         actionLabel: String,
         action: @escaping () -> Void
     ) -> some View {
-        HStack {
+        HStack(spacing: 8) {
             Text(title)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.primaryText)
-            Spacer()
+            if let note {
+                Text(note)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            Spacer(minLength: 12)
             if ok {
                 Label(okLabel, systemImage: "checkmark.circle.fill")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.color(for: .waitingForInput))
             } else {
                 Button(actionLabel, action: action)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(PixelButtonStyle(color: step.accent))
             }
         }
-        .frame(maxWidth: 400)
+        .frame(height: Layout.rowHeight)
+    }
+
+    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Theme.primaryText)
+            Spacer(minLength: 12)
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .tint(step.accent)
+                .labelsHidden()
+        }
+        .frame(height: Layout.rowHeight)
     }
 
     private var footer: some View {
@@ -350,5 +412,27 @@ private struct OnboardingView: View {
             setupError = error.localizedDescription
         }
     }
+}
 
+/// Outlined, monospaced action button: reads as part of the terminal
+/// palette instead of a stock AppKit capsule.
+private struct PixelButtonStyle: ButtonStyle {
+    var color: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 12)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(color.opacity(configuration.isPressed ? 0.28 : 0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(color.opacity(0.6), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+    }
 }

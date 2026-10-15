@@ -20,8 +20,12 @@ struct TypewriterText: View {
 
     var body: some View {
         // The full line reserves its final size invisibly, so the layout
-        // never shifts while the visible prefix grows over it.
-        Text(text)
+        // never shifts while the visible prefix grows over it. The cursor is
+        // part of that line, and the line never wraps: a parent narrower
+        // than it centers the overflow instead of pushing it off one side.
+        Text(text + "_")
+            .lineLimit(1)
+            .fixedSize()
             .opacity(0)
             .overlay(alignment: .leading) {
                 HStack(spacing: 0) {
