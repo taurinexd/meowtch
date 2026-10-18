@@ -1302,9 +1302,15 @@ private struct AccountDetailView: View {
         let path = account.path
         let isDefault = account.isDefault
         DispatchQueue.global().async {
+            guard let claude = ClaudeCLI.resolve() else {
+                DispatchQueue.main.async { identityError = "claude CLI not found" }
+                return
+            }
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ["-lc", "claude auth status --json 2>/dev/null"]
+            process.arguments = ClaudeCLI.shellArguments(
+                claude, "auth status --json 2>/dev/null"
+            )
             var environment = ProcessInfo.processInfo.environment
             // Setting CLAUDE_CONFIG_DIR — even to the default path — makes
             // Claude Code look up a namespaced Keychain item, which the

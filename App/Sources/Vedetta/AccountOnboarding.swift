@@ -73,15 +73,15 @@ final class AccountOnboarding: ObservableObject {
     }
 
     private func beginLogin(configDir: String, isDefault: Bool) {
-        guard claudeIsOnPath() else {
+        guard let claude = ClaudeCLI.resolve() else {
             phase = .failed(
-                "The `claude` CLI isn't on your PATH. Install Claude Code, then run the command below."
+                "Couldn't find the `claude` CLI. Install Claude Code, then run the command below."
             )
             return
         }
-        openLoginTerminal(configDir: configDir, isDefault: isDefault)
+        openLoginTerminal(claude: claude, configDir: configDir, isDefault: isDefault)
         phase = .awaitingLogin
-        startPolling(configDir: configDir, isDefault: isDefault)
+        startPolling(claude: claude, configDir: configDir, isDefault: isDefault)
     }
 
     func cancel() {
@@ -97,24 +97,13 @@ final class AccountOnboarding: ObservableObject {
 
     // MARK: - Steps
 
-    private func claudeIsOnPath() -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "command -v claude"]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        guard (try? process.run()) != nil else { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
-    }
-
     /// Opens Terminal on the login for this config dir. Uses a `.command`
     /// script opened via `open` — no Automation permission needed (unlike
     /// AppleScript `do script`, which fails silently without it). The
     /// `export` and trailing interactive shell keep CLAUDE_CONFIG_DIR set
     /// for the whole window, so any `claude` the user runs there afterward
     /// stays on this account and never rewrites the shared default login.
-    private func openLoginTerminal(configDir: String, isDefault: Bool) {
+    private func openLoginTerminal(claude: String, configDir: String, isDefault: Bool) {
         // The default account logs in WITHOUT CLAUDE_CONFIG_DIR (its
         // credential lives in the un-suffixed Keychain item); a custom
         // account exports the var so the window stays isolated to it.
@@ -127,14 +116,15 @@ final class AccountOnboarding: ObservableObject {
                 + "'"
             envLine = "export CLAUDE_CONFIG_DIR=\(quotedDir)"
         }
-        // `-l`: a login shell so ~/.local/bin (where `claude` lives) is on
-        // PATH; the final exec leaves an interactive shell with the env set.
+        // The login runs the resolved binary by absolute path (PATH in a
+        // `.command` script isn't guaranteed to hold ~/.local/bin); the
+        // final exec leaves an interactive shell with the env set.
         let script = """
         #!/bin/zsh -l
         \(envLine)
         echo '-> Complete the login below. This window stays on this account.'
         echo ''
-        claude auth login
+        \(ClaudeCLI.shellQuote(claude)) auth login
         exec zsh -il
         """
         let path = VedettaSetup.runDir + "/account-login.command"
@@ -154,7 +144,7 @@ final class AccountOnboarding: ObservableObject {
         try? open.run()
     }
 
-    private func startPolling(configDir: String, isDefault: Bool) {
+    private func startPolling(claude: String, configDir: String, isDefault: Bool) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             // ~5 minutes at a 2s cadence.
@@ -162,7 +152,7 @@ final class AccountOnboarding: ObservableObject {
                 try? await Task.sleep(for: .seconds(2))
                 if Task.isCancelled { return }
                 guard let identity = await Self.authStatus(
-                    configDir: configDir, isDefault: isDefault
+                    claude: claude, configDir: configDir, isDefault: isDefault
                 ), identity.loggedIn else { continue }
                 await MainActor.run {
                     guard let self else { return }
@@ -191,12 +181,16 @@ final class AccountOnboarding: ObservableObject {
 
     /// `claude auth status --json` for a config dir, off the main actor.
     /// The default account must run with CLAUDE_CONFIG_DIR unset.
-    private static func authStatus(configDir: String, isDefault: Bool) async -> Identity? {
+    private static func authStatus(
+        claude: String, configDir: String, isDefault: Bool
+    ) async -> Identity? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-                process.arguments = ["-lc", "claude auth status --json 2>/dev/null"]
+                process.arguments = ClaudeCLI.shellArguments(
+                    claude, "auth status --json 2>/dev/null"
+                )
                 var environment = ProcessInfo.processInfo.environment
                 if isDefault {
                     environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")

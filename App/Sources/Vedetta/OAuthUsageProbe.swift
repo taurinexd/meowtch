@@ -21,9 +21,10 @@ enum OAuthUsageProbe {
     /// recent known-good pinned one.
     static let userAgent: String = {
         let pinned = "2.1.218"
+        guard let claude = ClaudeCLI.resolve() else { return "claude-code/\(pinned)" }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "claude --version 2>/dev/null"]
+        process.arguments = ClaudeCLI.shellArguments(claude, "--version 2>/dev/null")
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()

@@ -635,3 +635,49 @@ tutte fedeli all'API ma nessuna dentro Meet.
 Vale la pena ricordare che il [forum ufficiale Apple](https://developer.apple.com/forums/thread/792152)
 sostiene il contrario per macOS 15.4+ («only block legacy CoreGraphics APIs, not
 ScreenCaptureKit»). Sulla macchina di Matteo, macOS 26.5.2, non è così.
+
+## Pass 13 — Account: "claude non nel PATH", riga ~/.claude vuota, usage 14%, switch live (2026-10-18)
+
+Quattro segnalazioni di Matteo, verificate sulla sua macchina (CLI 2.1.302).
+
+**1. "The `claude` CLI isn't on your PATH" in Add account — FIXATO.** L'app,
+lanciata dal Finder, eredita il PATH nudo di launchd; ogni chiamata passava da
+`zsh -lc "claude …"`, che legge `.zprofile` ma NON `.zshrc`, ed è proprio lì che
+l'installer nativo aggiunge `~/.local/bin`. Riprodotto con `env -i … zsh -lc`
+→ exit 127. Effetti a cascata dello stesso bug: il polling `auth status` del
+wizard andava in timeout (claude-1/2/3 registrati senza email né piano), il
+pulsante Identify falliva e lo User-Agent della probe ricadeva sul pinned. Fix:
+`ClaudeCLILocator` (VedettaKit, testato) + `ClaudeCLI.resolve()` — path noti
+prima, fallback `zsh -ilc 'command -v claude'` — e il binario eseguito per path
+assoluto in tutti e quattro i punti (wizard, script `.command`, Identify, UA).
+
+**2. Riga `.claude` vuota e non rimovibile — per costruzione, non un bug di
+storage.** `ClaudeAccountRegistry.resolve` inserisce sempre `~/.claude` come
+default non rimovibile. È "vuota" perché la sua identità non viene mai scritta:
+nessun record in `claude.customAccounts` per quel path, e Identify falliva per
+il punto 1. In più il suo item namespaced (`…-f4cf096c`) e
+`~/.claude/.credentials.json` (9 ott) sono scaduti/401, e lo stesso account
+(dev@uptonica.com, Max) è registrato una seconda volta come `.claude-dev`.
+
+**3. Seat premium Team: usage condivisa? NO.** `/api/oauth/usage` per token
+(18 ott ~19:45): claude-1 5h=17%, claude-2 0%, claude-3 0% (stesso org Team
+Webgas); dev 5h=19% / 7d=100%. Il 14% identico era misattribuzione: probe di
+rete spenta (`claude.networkRefresh` assente), nessuna sessione con
+`CLAUDE_CONFIG_DIR=…claude-N` (nessun `rl-<hash>.json`), quindi l'unica fonte
+era `rl.json` delle sessioni plain `claude`, attribuito al proprietario dello
+slot del momento. Ogni switch ri-etichettava gli stessi numeri.
+
+**4. Lo switch sposta le sessioni già aperte? NO (solo i `claude` nuovi).**
+Dal bundle 2.1.302: il token OAuth è memoizzato in-process (`Nn()`/`wke`), e il
+change-check (`tw`) sul backend Keychain confronta solo l'mtime di
+`<configDir>/.credentials.json`; il Keychain viene riletto solo se il token
+memoizzato è inutilizzabile (refresh token morto), su 401 o al refresh a
+scadenza (~8h). Lo switch scrive solo l'item Keychain → la sessione aperta
+continua con l'account precedente. Coerente con i dati: claude-2/3 a 0% dopo
+"switch" verso di loro. Lo switch inoltre non aggiorna `oauthAccount` in
+`~/.claude.json`: `claude auth status` dopo lo switch a claude-1 riporta
+`email: dev@uptonica.com` con `subscriptionType: team`, un ibrido.
+
+Nota a margine: `make test` ora fallisce in link perché è selezionato Xcode
+completo e i `TESTFLAGS` del CLT si scontrano con il suo Testing.framework;
+`cd App && swift test` passa (250 test).
