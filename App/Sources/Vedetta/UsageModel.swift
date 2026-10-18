@@ -137,19 +137,22 @@ final class UsageModel: ObservableObject {
         // rl.json — the default config dir's statusline drop — is written
         // by plain `claude`, i.e. by whichever account owns the shared
         // slot right now, NOT necessarily the default account. Attribute
-        // it to the owner; pushes older than the last slot handover belong
-        // to the previous owner and are dropped.
+        // it to the owner, minus what still belongs to the previous one:
+        // pushes from before the handover or inside its grace window, and
+        // the previous owner's windows re-rendered after it.
         let slotCachePath = accounts.first.map(VedettaSetup.statusLineCachePath(for:))
         let handoverAt = AccountSwitcher.lastHandoverAt
+        let handoverSnapshot = AccountSwitcher.slotPushAtHandover
         claudeUsages = accounts.map { account in
             var push: AccountQuota.Sample?
             if !account.isDefault {
-                push = pushSample(
-                    at: VedettaSetup.statusLineCachePath(for: account), notBefore: nil
-                )
+                push = pushSample(at: VedettaSetup.statusLineCachePath(for: account))
             }
             if AccountSwitcher.ownsSharedSlot(account), let slotCachePath,
-               let slotPush = pushSample(at: slotCachePath, notBefore: handoverAt),
+               let slotPush = pushSample(at: slotCachePath),
+               AccountQuota.slotPushBelongsToOwner(
+                   slotPush, handoverAt: handoverAt, snapshot: handoverSnapshot
+               ),
                slotPush.at >= (push?.at ?? .distantPast) {
                 push = slotPush
             }
@@ -163,11 +166,10 @@ final class UsageModel: ObservableObject {
         Task { await refreshCodex() }
     }
 
-    private func pushSample(at path: String, notBefore: Date?) -> AccountQuota.Sample? {
+    private func pushSample(at path: String) -> AccountQuota.Sample? {
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: path),
               let modified = attrs[.modificationDate] as? Date,
-              notBefore.map({ modified > $0 }) ?? true,
               let data = fm.contents(atPath: path) else { return nil }
         let parsed = RateLimitHarvest.parse(from: data)
         guard parsed.fiveHour != nil || parsed.sevenDay != nil else { return nil }

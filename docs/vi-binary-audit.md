@@ -681,3 +681,33 @@ continua con l'account precedente. Coerente con i dati: claude-2/3 a 0% dopo
 Nota a margine: `make test` ora fallisce in link perché è selezionato Xcode
 completo e i `TESTFLAGS` del CLT si scontrano con il suo Testing.framework;
 `cd App && swift test` passa (250 test).
+
+### Fix 2–4 (stesso giorno)
+
+- **4 — switch live, verificato con prova controllata.** Config dir usa-e-getta
+  con item Keychain proprio, sessione `claude -p --input-format stream-json`
+  persistente, token scambiato a metà sessione (claude-2 → claude-1); account
+  riconosciuto dal `resetsAt` del `rate_limit_event`. Senza `.credentials.json`
+  o con mtime toccato: il messaggio dopo lo scambio è servito da claude-1.
+  Con file stale intatto (il caso di Matteo: `~/.claude/.credentials.json` del
+  9 ott): resta su claude-2. Fix: `AccountSwitcher.nudgeOpenSessions()` bumpa
+  l'mtime del file (mai il contenuto, mai lo crea) dopo la scrittura dello
+  slot. Ritardo atteso: fino a ~30s (cache di lettura Keychain della CLI) +
+  la richiesta successiva. `oauthAccount` in `.claude.json` NON segue (resta
+  il primo account, solo cosmetico nella CLI) — non lo tocchiamo.
+- **3 — attribuzione di rl.json.** Snapshot di rl.json a ogni handover
+  (`claude.slotPushAtHandover`); `AccountQuota.slotPushBelongsToOwner` scarta
+  i push nei 45s dopo l'handover e quelli identici allo snapshot (numeri del
+  vecchio owner ri-renderizzati). Due account freschi con finestre identiche
+  restano indistinguibili, ma i numeri sono uguali: innocuo per costruzione.
+- **2 — identità.** `ClaudeCLI.backfillIdentities()` al lancio e dopo ogni
+  switch riempie email/piano mancanti (verificato dal build dev lanciato con
+  `open`: claude-1/2/3 → `team`). Il default si identifica SOLO mentre
+  possiede lo slot (`canIdentify`), altrimenti `auth status` dà l'ibrido; lo
+  si cattura comunque prima di cederlo (`switchDefault`), e finché resta
+  ignoto la riga dice "plain claude is on <owner>". Lo stesso guard copre
+  Identify, che prima avrebbe salvato l'ibrido.
+
+Nota operativa: lanciare il build dev accanto all'app installata ruba il
+socket; uccidendo il dev, l'istanza installata NON si ri-binda
+(`ensureListening` non se ne accorge) — hook persi finché non la si riavvia.

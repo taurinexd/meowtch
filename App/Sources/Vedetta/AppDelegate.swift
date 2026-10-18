@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             JumpService.installVSCodeExtension()
             UsageModel.shared.start()
+            DispatchQueue.global(qos: .utility).async { ClaudeCLI.backfillIdentities() }
             RemoteBridge.shared.begin()
             let store = self.store
             let timer = Timer(timeInterval: 15, repeats: true) { _ in

@@ -90,6 +90,30 @@ public enum AccountQuota {
         return 3
     }
 
+    /// Open sessions cache their Keychain read for 30s (CLI 2.1.302), so a
+    /// reply landing this soon after a handover may still have been served
+    /// by the previous owner's token.
+    public static let slotHandoverGrace: TimeInterval = 45
+
+    /// Whether a push read from the shared slot's statusline drop (rl.json,
+    /// written by every plain `claude`) can be credited to the slot's
+    /// current owner. After a handover it can't be while the grace window
+    /// runs, nor when its windows are exactly what the drop held at the
+    /// handover — the previous owner's numbers, re-rendered by a session
+    /// that hasn't made a request on the new token yet.
+    public static func slotPushBelongsToOwner(
+        _ push: Sample, handoverAt: Date?, snapshot: ParsedUsage?,
+        grace: TimeInterval = slotHandoverGrace
+    ) -> Bool {
+        guard let handoverAt else { return true }
+        guard push.at.timeIntervalSince(handoverAt) >= grace else { return false }
+        if let snapshot, snapshot.fiveHour != nil || snapshot.sevenDay != nil,
+           push.fiveHour == snapshot.fiveHour, push.sevenDay == snapshot.sevenDay {
+            return false
+        }
+        return true
+    }
+
     public static func isStale(
         _ sample: Sample?, now: Date, tolerance: TimeInterval = 600
     ) -> Bool {

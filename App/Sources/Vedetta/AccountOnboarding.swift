@@ -81,7 +81,7 @@ final class AccountOnboarding: ObservableObject {
         }
         openLoginTerminal(claude: claude, configDir: configDir, isDefault: isDefault)
         phase = .awaitingLogin
-        startPolling(claude: claude, configDir: configDir, isDefault: isDefault)
+        startPolling(configDir: configDir, isDefault: isDefault)
     }
 
     func cancel() {
@@ -144,7 +144,7 @@ final class AccountOnboarding: ObservableObject {
         try? open.run()
     }
 
-    private func startPolling(claude: String, configDir: String, isDefault: Bool) {
+    private func startPolling(configDir: String, isDefault: Bool) {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             // ~5 minutes at a 2s cadence.
@@ -152,7 +152,7 @@ final class AccountOnboarding: ObservableObject {
                 try? await Task.sleep(for: .seconds(2))
                 if Task.isCancelled { return }
                 guard let identity = await Self.authStatus(
-                    claude: claude, configDir: configDir, isDefault: isDefault
+                    configDir: configDir, isDefault: isDefault
                 ), identity.loggedIn else { continue }
                 await MainActor.run {
                     guard let self else { return }
@@ -173,51 +173,14 @@ final class AccountOnboarding: ObservableObject {
         }
     }
 
-    private struct Identity {
-        let loggedIn: Bool
-        let email: String?
-        let plan: String?
-    }
-
     /// `claude auth status --json` for a config dir, off the main actor.
-    /// The default account must run with CLAUDE_CONFIG_DIR unset.
     private static func authStatus(
-        claude: String, configDir: String, isDefault: Bool
-    ) async -> Identity? {
+        configDir: String, isDefault: Bool
+    ) async -> ClaudeAuthStatus? {
         await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-                process.arguments = ClaudeCLI.shellArguments(
-                    claude, "auth status --json 2>/dev/null"
-                )
-                var environment = ProcessInfo.processInfo.environment
-                if isDefault {
-                    environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
-                } else {
-                    environment["CLAUDE_CONFIG_DIR"] = configDir
-                }
-                process.environment = environment
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = Pipe()
-                guard (try? process.run()) != nil else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                process.waitUntilExit()
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                guard let object = try? JSONSerialization.jsonObject(with: data),
-                      let root = object as? [String: Any] else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                let account = root["account"] as? [String: Any]
-                continuation.resume(returning: Identity(
-                    loggedIn: (root["loggedIn"] as? Bool) ?? false,
-                    email: root["email"] as? String ?? account?["email"] as? String,
-                    plan: root["subscriptionType"] as? String
-                        ?? account?["subscriptionType"] as? String
+                continuation.resume(returning: ClaudeCLI.authStatus(
+                    configDir: configDir, isDefault: isDefault
                 ))
             }
         }

@@ -19,6 +19,7 @@ enum AccountSwitcher {
     private static let defaultSlotKey = "claude.defaultSlotAccount"
     private static let switchedAtKey = "claude.defaultSlotSwitchedAt"
     private static let slotUnidentifiedKey = "claude.slotUnidentified"
+    private static let slotPushSnapshotKey = "claude.slotPushAtHandover"
     static let legacyService = "Claude Code-credentials"
 
     static var defaultConfigDir: String {
@@ -36,6 +37,14 @@ enum AccountSwitcher {
     static var lastHandoverAt: Date? {
         let stamp = UserDefaults.standard.double(forKey: switchedAtKey)
         return stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+    }
+
+    /// What the shared statusline drop (rl.json) held at the last handover:
+    /// the previous owner's windows. A later push repeating them exactly is
+    /// a leftover, never the new owner's (`AccountQuota.slotPushBelongsToOwner`).
+    static var slotPushAtHandover: ParsedUsage? {
+        UserDefaults.standard.data(forKey: slotPushSnapshotKey)
+            .map(RateLimitHarvest.parse(from:))
     }
 
     /// True when the slot holds a credential of no registered account (the
@@ -64,14 +73,40 @@ enum AccountSwitcher {
         // Never overwrite the slot before the account leaving it has a
         // durable copy — otherwise a denied backup write would lose it.
         guard ensureCurrentSlotBacked() else { return .failed }
+        // The default account can only be identified while it holds the
+        // slot (`ClaudeCLI.canIdentify`): last chance before it leaves.
+        ClaudeCLI.backfillIdentities { $0.isDefault }
         let source = namespacedService(for: account.path)
         guard let token = keychainReadRaw(service: source) else { return .noCredential }
         guard keychainWrite(service: legacyService, value: token) else { return .failed }
         recordHandover(to: account.path)
+        nudgeOpenSessions()
+        DispatchQueue.global(qos: .utility).async { ClaudeCLI.backfillIdentities() }
         return .ok
     }
 
+    /// Makes already-open plain `claude` sessions pick up the new slot
+    /// credential. The CLI memoizes its token and, on the Keychain backend,
+    /// only re-reads the Keychain when `<configDir>/.credentials.json` is
+    /// missing or its mtime changed — so a stale leftover file (an old
+    /// plaintext login) pins every open session to the previous account.
+    /// Bumping the mtime, content untouched, makes the next request re-read
+    /// (verified live on 2.1.302, 2026-10-18). Never creates the file.
+    private static func nudgeOpenSessions() {
+        let path = defaultConfigDir + "/.credentials.json"
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        try? FileManager.default.setAttributes(
+            [.modificationDate: Date()], ofItemAtPath: path
+        )
+    }
+
     private static func recordHandover(to path: String) {
+        // Snapshot the drop BEFORE handing over: its windows are the
+        // previous owner's, whatever the file's age.
+        UserDefaults.standard.set(
+            FileManager.default.contents(atPath: VedettaSetup.cacheDir + "/rl.json"),
+            forKey: slotPushSnapshotKey
+        )
         UserDefaults.standard.set(
             ClaudeAccountRegistry.canonical(path), forKey: defaultSlotKey
         )

@@ -39,6 +39,60 @@ enum ClaudeCLI {
         return ["-lc", "PATH=\(dir):$PATH \(shellQuote(binary)) \(arguments)"]
     }
 
+    /// `claude auth status --json` for a config dir. The default account
+    /// must run with CLAUDE_CONFIG_DIR unset: setting it — even to the
+    /// default path — makes Claude Code look up a namespaced Keychain item,
+    /// which the default account (credential stored un-suffixed) doesn't
+    /// have. Blocks; call off the main thread.
+    static func authStatus(configDir: String, isDefault: Bool) -> ClaudeAuthStatus? {
+        guard let claude = resolve() else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = shellArguments(claude, "auth status --json 2>/dev/null")
+        var environment = ProcessInfo.processInfo.environment
+        if isDefault {
+            environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+        } else {
+            environment["CLAUDE_CONFIG_DIR"] = configDir
+        }
+        process.environment = environment
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return ClaudeAuthStatus.parse(data)
+    }
+
+    /// Whether `auth status` speaks for this account. Not for the default
+    /// one while another account holds the shared slot: the CLI then mixes
+    /// the email cached in ~/.claude.json (the last real login) with the
+    /// plan of the switched-in token — seen live on 2026-10-18 as
+    /// dev@… + "team".
+    static func canIdentify(_ account: ClaudeAccount) -> Bool {
+        !account.isDefault || AccountSwitcher.ownsSharedSlot(account)
+    }
+
+    /// Fills in email/plan for registered accounts that have none — the
+    /// default row included, which nothing else ever identifies. Silent on
+    /// failure; the row keeps its Identify button. Call off the main thread.
+    static func backfillIdentities(where include: (ClaudeAccount) -> Bool = { _ in true }) {
+        for account in VedettaSetup.claudeAccounts
+        where account.email == nil && account.isAvailable && canIdentify(account)
+            && include(account) {
+            guard let status = authStatus(
+                configDir: account.path, isDefault: account.isDefault
+            ), status.loggedIn, status.email != nil else { continue }
+            DispatchQueue.main.async {
+                VedettaSetup.updateStoredClaudeAccount(path: account.path) {
+                    $0.email = status.email
+                    $0.subscriptionType = status.plan
+                }
+            }
+        }
+    }
+
     static func shellQuote(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }

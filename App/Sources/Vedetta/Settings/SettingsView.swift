@@ -964,6 +964,12 @@ private struct AccountsSettingsPage: View {
         if account.isDefault { parts.append("Default") }
         parts.append(account.email ?? (account.path as NSString).lastPathComponent)
         if let plan = account.subscriptionType { parts.append(plan) }
+        if account.email == nil, !ClaudeCLI.canIdentify(account),
+           let owner = accounts.first(where: AccountSwitcher.ownsSharedSlot) {
+            // Plain `claude` runs on another account: nothing on disk says
+            // who this one is until it's switched back.
+            parts.append("plain claude is on \(owner.displayName)")
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -1299,53 +1305,26 @@ private struct AccountDetailView: View {
     /// `claude auth status --json` for this config dir: email + plan.
     private func refreshIdentity() {
         identityError = nil
+        guard ClaudeCLI.canIdentify(account) else {
+            identityError = "plain claude is on another account — switch back to identify"
+            return
+        }
         let path = account.path
         let isDefault = account.isDefault
         DispatchQueue.global().async {
-            guard let claude = ClaudeCLI.resolve() else {
-                DispatchQueue.main.async { identityError = "claude CLI not found" }
-                return
-            }
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            process.arguments = ClaudeCLI.shellArguments(
-                claude, "auth status --json 2>/dev/null"
-            )
-            var environment = ProcessInfo.processInfo.environment
-            // Setting CLAUDE_CONFIG_DIR — even to the default path — makes
-            // Claude Code look up a namespaced Keychain item, which the
-            // default account (credential stored un-suffixed) doesn't have.
-            // So the default account must run with the var unset.
-            if isDefault {
-                environment.removeValue(forKey: "CLAUDE_CONFIG_DIR")
-            } else {
-                environment["CLAUDE_CONFIG_DIR"] = path
-            }
-            process.environment = environment
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = Pipe()
-            guard (try? process.run()) != nil else { return }
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let status = ClaudeCLI.authStatus(configDir: path, isDefault: isDefault)
             DispatchQueue.main.async {
-                guard let object = try? JSONSerialization.jsonObject(with: data),
-                      let root = object as? [String: Any] else {
+                guard let status else {
                     identityError = "identity check failed"
                     return
                 }
-                let loggedIn = (root["loggedIn"] as? Bool) ?? false
-                guard loggedIn else {
+                guard status.loggedIn else {
                     identityError = "not logged in"
                     return
                 }
-                let email = root["email"] as? String
-                    ?? (root["account"] as? [String: Any])?["email"] as? String
-                let plan = root["subscriptionType"] as? String
-                    ?? (root["account"] as? [String: Any])?["subscriptionType"] as? String
                 VedettaSetup.updateStoredClaudeAccount(path: path) {
-                    $0.email = email
-                    $0.subscriptionType = plan
+                    $0.email = status.email
+                    $0.subscriptionType = status.plan
                 }
                 identityError = nil
                 onChange()

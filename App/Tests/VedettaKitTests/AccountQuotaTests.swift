@@ -88,6 +88,44 @@ struct AccountQuotaTests {
         scheduler.record429(account: a, retryAfter: nil, now: t0)
         #expect(scheduler.shouldPoll(account: a, index: 0, now: t0.addingTimeInterval(601)))
     }
+
+    // MARK: - Shared-slot push attribution
+
+    private func push(_ percent: Int, resets: TimeInterval, at: Date) -> AccountQuota.Sample {
+        AccountQuota.Sample(
+            fiveHour: QuotaWindow(percent: percent, resetsAt: Date(timeIntervalSince1970: resets)),
+            sevenDay: nil, at: at, origin: .push
+        )
+    }
+
+    @Test func slotPushWithoutAHandoverIsTheOwners() {
+        let fresh = push(14, resets: 1_792_355_400, at: t0)
+        #expect(AccountQuota.slotPushBelongsToOwner(fresh, handoverAt: nil, snapshot: nil))
+    }
+
+    @Test func slotPushInsideTheGraceWindowIsDropped() {
+        // Open sessions keep their Keychain read cached for 30s: a reply
+        // landing right after the switch was still served by the old
+        // account's token.
+        let early = push(20, resets: 1_792_364_400, at: t0.addingTimeInterval(30))
+        #expect(!AccountQuota.slotPushBelongsToOwner(early, handoverAt: t0, snapshot: nil))
+        let late = push(20, resets: 1_792_364_400, at: t0.addingTimeInterval(60))
+        #expect(AccountQuota.slotPushBelongsToOwner(late, handoverAt: t0, snapshot: nil))
+    }
+
+    @Test func slotPushRepeatingThePreviousOwnersWindowsIsDropped() {
+        // The bug seen live on 2026-10-18: the same 14% re-credited to
+        // claude-1, -2 and -3 in turn. A push identical to what the drop
+        // held at the handover is the old owner's numbers re-rendered.
+        let snapshot = ParsedUsage(
+            fiveHour: QuotaWindow(percent: 14, resetsAt: Date(timeIntervalSince1970: 1_792_355_400)),
+            sevenDay: nil, meters: []
+        )
+        let leftover = push(14, resets: 1_792_355_400, at: t0.addingTimeInterval(600))
+        #expect(!AccountQuota.slotPushBelongsToOwner(leftover, handoverAt: t0, snapshot: snapshot))
+        let own = push(0, resets: 1_792_364_400, at: t0.addingTimeInterval(600))
+        #expect(AccountQuota.slotPushBelongsToOwner(own, handoverAt: t0, snapshot: snapshot))
+    }
 }
 
 struct UsageColumnsTests {
