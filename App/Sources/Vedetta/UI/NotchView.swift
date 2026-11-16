@@ -288,6 +288,9 @@ struct NotchView: View {
             } else if model.usageDrilldown {
                 UsageDrilldownView(usage: usage, store: store)
                     .transition(.opacity)
+            } else if privacy.mode == .call {
+                CallListenView()
+                    .transition(.opacity)
             } else {
                 sessionList
                     .transition(.opacity)

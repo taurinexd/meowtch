@@ -1,4 +1,6 @@
 import AVFAudio
+import Combine
+import CoreAudio
 import Foundation
 import VedettaKit
 
@@ -14,19 +16,32 @@ final class CallSession: ObservableObject {
     @Published private(set) var clientLevel: Double = 0
     @Published private(set) var meLevel: Double = 0
     @Published private(set) var transcript = CallTranscript()
+    /// Whether the default output is private to the user's ears; read when
+    /// listening starts (spec: headphones are a stated precondition).
+    @Published private(set) var headphones = true
 
     private var systemTap: AnyObject?
     private var microphone: MicrophoneCapture?
     private var consumers: [Task<Void, Never>] = []
     private var transcribers: [AnyObject] = []
+    private var modeObserver: AnyCancellable?
+
+    private init() {
+        // Leaving CALL ends listening: the microphone never stays on in CODE.
+        modeObserver = ScreenPrivacy.shared.$mode.sink { mode in
+            guard mode == .code else { return }
+            Task { @MainActor in CallSession.shared.stop() }
+        }
+    }
 
     func start() {
         guard !isListening else { return }
         problem = nil
-        guard #available(macOS 14.2, *) else {
+        guard #available(macOS 26, *) else {
             problem = .requiresMacOS26
             return
         }
+        headphones = Self.defaultOutputIsHeadphones()
         isListening = true
         Task { await self.startCaptures() }
     }
@@ -78,6 +93,16 @@ final class CallSession: ObservableObject {
             NSLog("Vedetta call: capture failed: %@", String(describing: error))
             self.problem = .noMeetingAudio
         }
+    }
+
+    /// Reads the default output device's transport and data source.
+    private static func defaultOutputIsHeadphones() -> Bool {
+        guard let device: AudioObjectID = scalarProperty(
+            AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice
+        ) else { return false }
+        let transport: UInt32 = scalarProperty(device, kAudioDevicePropertyTransportType) ?? 0
+        let source: UInt32? = scalarProperty(device, kAudioDevicePropertyDataSource, scope: kAudioDevicePropertyScopeOutput)
+        return CallAudioRules.isHeadphoneOutput(transportType: transport, dataSource: source)
     }
 
     /// Debug: transcribes an audio file as if it were the client channel,
