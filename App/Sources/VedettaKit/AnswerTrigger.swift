@@ -45,7 +45,7 @@ public enum AnswerTrigger {
     static let meSpeakingWindow: TimeInterval = 1.5
     /// Without a «?», the transcript must stop changing this long first:
     /// the last words of a question arrive after the audio went quiet.
-    static let textSettle: TimeInterval = 0.5
+    static let textSettle: TimeInterval = 0.8
     static let minimumWords = 3
     /// A question longer than this many sentences is cut to its tail.
     static let maxQuestionSentences = 2
@@ -60,6 +60,7 @@ public enum AnswerTrigger {
     ]
     static let modalOpeners = [
         "potete", "potreste", "puoi", "potresti", "riuscite", "riesci", "avete", "hai", "sapete", "sai",
+        "possiamo", "possono", "si potrebbe", "sarebbe possibile", "ci dite", "mi dite", "vi risulta",
         "è possibile", "si può", "ci sono", "c'è", "mi sai dire", "mi dici",
     ]
 
@@ -86,7 +87,12 @@ public enum AnswerTrigger {
             return .fire(question: question, endpointAt: clientAt)
         }
         let settled = input.lastClientActivity.map { input.now.timeIntervalSince($0) } ?? .infinity
-        if looksLikeQuestion(question), silence >= silenceAfterMarker, settled >= textSettle {
+        // The transcript must have moved after the audio stopped: before
+        // that, the last words are still being recognized.
+        let caughtUp = input.lastClientSpeech.flatMap { speech in
+            input.lastClientActivity.map { $0 > speech }
+        } ?? true
+        if looksLikeQuestion(question), silence >= silenceAfterMarker, settled >= textSettle, caughtUp {
             return .fire(question: question, endpointAt: clientAt)
         }
         return .wait
@@ -95,7 +101,13 @@ public enum AnswerTrigger {
     /// The tail of what was said, at most `maxQuestionSentences` sentences,
     /// without the stray punctuation a cut leaves at the start.
     public static func questionText(_ pending: String) -> String {
-        sentences(pending).suffix(maxQuestionSentences).joined(separator: " ")
+        var parts = sentences(pending)
+        // A cut inside a word the transcriber later rewrote leaves a tail
+        // like «llo?» in front: lowercase start, more sentences after it.
+        if parts.count > 1, let first = parts.first?.first, first.isLowercase {
+            parts.removeFirst()
+        }
+        return parts.suffix(maxQuestionSentences).joined(separator: " ")
     }
 
     static func sentences(_ text: String) -> [String] {

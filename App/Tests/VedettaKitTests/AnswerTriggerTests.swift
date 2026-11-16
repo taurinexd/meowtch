@@ -93,12 +93,16 @@ struct AnswerTriggerTests {
 
     @Test func audioSilenceWinsOverLateTranscriptUpdates() {
         #expect(fires(AnswerTrigger.decide(live("Come gestite le disiscrizioni dalla newsletter",
-                                                audioSilence: 1.4, textSettled: 0.5))))
+                                                audioSilence: 1.4, textSettled: 0.9))))
     }
 
     @Test func markerWaitsForTheTextToSettle() {
         #expect(AnswerTrigger.decide(live("Come gestite le disiscrizioni dalla neo",
                                           audioSilence: 1.2, textSettled: 0.1)) == .wait)
+        // Seen live: «Quanto costa aggiungere una seconda» fired 0.5 s after
+        // the last update, before «lingua» arrived.
+        #expect(AnswerTrigger.decide(live("Quanto costa aggiungere una seconda",
+                                          audioSilence: 1.4, textSettled: 0.6)) == .wait)
     }
 
     @Test func clientStillSpeakingWaitsEvenWithAQuestionMark() {
@@ -109,6 +113,30 @@ struct AnswerTriggerTests {
     @Test func endpointIsWhenTheAudioWentQuiet() {
         #expect(AnswerTrigger.decide(live("Quando andate online col sito?", audioSilence: 0.8, textSettled: 0.2))
             == .fire(question: "Quando andate online col sito?", endpointAt: now - 0.8))
+    }
+
+    // Real client questions about ongoing work, 2026-11-16.
+    @Test func possiamoIsARequest() {
+        #expect(fires(AnswerTrigger.decide(input("Possiamo mettere la sola installazione anche per i quadrisplit", clientSilence: 1.2))))
+    }
+
+    @Test func markerWaitsUntilTheTextCaughtUpWithTheAudio() {
+        // Audio quiet for 1.3 s, text unchanged for 0.9 s but last updated
+        // before the audio stopped: the end of the question is still coming.
+        let pending = "Come funziona l'IVA al dieci per cento nel carre"
+        #expect(AnswerTrigger.decide(TriggerInput(
+            pending: pending, now: now, lastClientActivity: now - 1.4, lastClientSpeech: now - 1.3,
+            lastMeActivity: nil, answered: []
+        )) == .wait)
+        #expect(fires(AnswerTrigger.decide(TriggerInput(
+            pending: pending + "llo", now: now, lastClientActivity: now - 0.9, lastClientSpeech: now - 1.8,
+            lastMeActivity: nil, answered: []
+        ))))
+    }
+
+    @Test func questionDropsALeadingFragment() {
+        #expect(AnswerTrigger.questionText("llo? Avete già provato un ordine vero") == "Avete già provato un ordine vero")
+        #expect(AnswerTrigger.questionText("Sì? Quando?") == "Sì? Quando?")
     }
 
     @Test func questionKeepsOnlyTheLastTwoSentences() {

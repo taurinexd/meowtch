@@ -36,6 +36,9 @@ the bundle id and paths carry the user's TCC grants and installed hooks.
 - **No telemetry, ever.** The only network traffic is the daily update check (explicit
   consent, `updateAutoCheck`) and the opt-in Claude usage probe. No analytics, no
   cloud backend — a deliberate difference from the original.
+  One amendment: CALL suggestions send the call transcript to Claude through the local
+  `claude` CLI. They run only on the user's initiative, are off by default
+  (`callSuggestionsEnabled`), and the switch in the CALL view is the kill-switch.
 - **Releases.** `Scripts/make-release.sh` cuts everything (tests → app → EdDSA-signed
   `Meowtch.zip` → DMG → tag → GitHub release). The signing key lives in the Keychain
   ("Vedetta Update Signing") and can never be rotated without stranding shipped apps —

@@ -78,6 +78,9 @@ struct CallCopilotPromptTests {
         let prompt = CallCopilotPrompt.system(webgas: nil, client: nil)
         #expect(prompt.contains("mai impegni a nome di Matteo"))
         #expect(prompt.contains("ti faccio sapere"))
+        // Seen live: «la parte di Matteo non è finita» from a client sheet
+        // that names him in the third person.
+        #expect(prompt.contains("Matteo, nel contesto, sei tu"))
     }
 
     @Test func userMessageLabelsSpeakers() {

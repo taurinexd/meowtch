@@ -34,7 +34,8 @@ public enum CallCopilotPrompt {
     Ti arriva la domanda appena fatta dal cliente e le ultime battute della conversazione.
 
     Rispondi con ciò che Matteo può dire ad alta voce, adesso:
-    - italiano parlato, prima persona di Matteo, tono cordiale e diretto;
+    - italiano parlato, prima persona di Matteo, tono cordiale e diretto. \
+    Matteo, nel contesto, sei tu: «il lavoro di Matteo» diventa «la mia parte»;
     - al massimo 2 righe, oppure 3 punti brevi;
     - niente premesse, niente «Puoi dire», niente virgolette: solo la frase;
     - mai inventare numeri, date, prezzi o stato dei lavori che non sono nel contesto: \

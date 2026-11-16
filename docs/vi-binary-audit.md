@@ -736,3 +736,39 @@ Conseguenze per il trigger (passo 2 dello spec 2026-11-16):
   lavorare sul testo **volatile** + silenzio sul canale, non aspettare il finale.
 - Il «?» è affidabile solo con parola interrogativa. Le domande chiuse escono col punto:
   servono marcatori lessicali **e** un classificatore piccolo (o la hotkey) per quelle.
+
+## CALL mode M3 — corsia rapida (2026-11-16)
+
+Sessione `claude -p` persistente per call (CLI 2.1.325, `--model haiku`, `--tools ""`,
+`--restricted`, `--strict-mcp-config`, cwd `~/.vedetta/call`), un messaggio stream-json per
+domanda. Misure su audio sintetico (`say`, voce Alice) passato al trascrittore da file:
+
+| Prova | Scattate | endpoint → decisione (mediana / p95) | decisione → primo token | Costo |
+|---|---|---|---|---|
+| 20 domande (10 aperte, 10 chiuse) | 12/20: tutte le aperte + 2 con attacco modale | 1,18 s / 1,7 s | 0,71–0,92 s | 0,012 $ |
+| 10 domande vere di un cliente e-commerce sulle task in corso, con scheda cliente | 7 eventi su 10 domande (2 coppie unite) | 1,45 s / 1,9 s | 0,75 s | 0,0045 $ |
+
+Cosa ha deciso le regole del trigger (tutte misurate, non assunte):
+- **Il trascritto è in ritardo sull'audio di ~1 s** e continua ad aggiornarsi nelle pause
+  brevi; il «?» compare spesso solo quando riprende il parlato. Il silenzio si legge
+  dall'RMS del canale (soglia 0,02), non dagli aggiornamenti del testo: con il testo come
+  orologio, 1 domanda su 20 scattava.
+- Senza «?» serve anche che il testo sia **fermo da 0,8 s** e **aggiornato dopo** la fine
+  dell'audio: a 0,5 s una domanda partiva tagliata («…una seconda» senza «lingua»).
+- Le ultime parole possono arrivare con più di 1 s di ritardo («nel carre» → «llo»):
+  resta un taglio occasionale, la risposta regge perché il modello capisce il senso.
+- L'attacco modale («Riuscite», «Possiamo», «Si può») va cercato all'inizio di **ogni
+  frase** del testo in attesa, non solo della prima.
+- Le domande chiuse senza attacco («Il carrello misto funziona già?») non scattano:
+  passano da ⌥ Spazio o si uniscono alla domanda successiva (massimo 2 frasi).
+
+Il prompt vieta impegni a nome di Matteo: le prime risposte promettevano «oggi stesso»,
+«entro venerdì». Con la scheda cliente le risposte riportano lo stato giusto e dicono
+«lo verifico e ti faccio sapere» quando il dato manca.
+
+Hotkey: `RegisterEventHotKey` (Carbon) restituisce `noErr`, ma un ⌥ Spazio sintetico
+(`CGEvent` con flag Option) non l'ha attivata. La funzione dietro (`answerNow`) è provata via
+socket; il tasto vero va provato a mano.
+
+`rate_limit_event` sulla 2.1.325 porta una sola finestra (`seven_day`), non entrambe come
+sulla 2.1.258: la barra legge il 5h da `UsageModel`.
