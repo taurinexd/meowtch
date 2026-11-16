@@ -711,3 +711,28 @@ completo e i `TESTFLAGS` del CLT si scontrano con il suo Testing.framework;
 Nota operativa: lanciare il build dev accanto all'app installata ruba il
 socket; uccidendo il dev, l'istanza installata NON si ri-binda
 (`ensureListening` non se ne accorge) — hook persi finché non la si riavvia.
+
+## CALL mode M2 — cattura audio e trascrizione italiana (2026-11-16)
+
+Cattura verificata su macOS 27.2.1: process tap sul processo helper di Chrome
+(`clientRMS` 0,04–0,29 con parlato in riproduzione), microfono separato, indicatore
+arancione del microfono spento entro 3 s dallo Stop e all'uscita da CALL. Asset `it-IT`
+di `SpeechTranscriber` già installato su questa macchina (download non esercitato).
+
+**Misura di punteggiatura e latenza** — audio **sintetico** (`say -v Alice`, 20 domande
+separate da 1,5 s di silenzio, file passato al trascrittore a velocità reale col comando
+debug `callTranscribeFile`). Il parlato umano reale resta da misurare.
+
+| | solo `.volatileResults` | `+ .fastResults` |
+|---|---|---|
+| primo testo dopo l'inizio | 12,7 s | **1,5 s** |
+| «?» su 10 domande con parola interrogativa (quando, come, quanto, potete…) | 5/10 | **9/10** |
+| «?» su 10 domande chiuse («Il carrello misto funziona già») | 0/10 | **0/10** |
+| cadenza dei risultati finali | ~12 s, più domande per riga | ~12 s, più domande per riga |
+
+Conseguenze per il trigger (passo 2 dello spec 2026-11-16):
+- `.fastResults` è obbligatorio: senza, il testo arriva troppo tardi per suggerire.
+- I risultati **finali** arrivano a blocchi di ~12 s con 2–3 domande dentro: il gate deve
+  lavorare sul testo **volatile** + silenzio sul canale, non aspettare il finale.
+- Il «?» è affidabile solo con parola interrogativa. Le domande chiuse escono col punto:
+  servono marcatori lessicali **e** un classificatore piccolo (o la hotkey) per quelle.

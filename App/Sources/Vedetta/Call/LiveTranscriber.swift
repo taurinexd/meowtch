@@ -21,7 +21,7 @@ final class LiveTranscriber: @unchecked Sendable {
     private static func makeTranscriber(_ locale: Locale) -> SpeechTranscriber {
         SpeechTranscriber(
             locale: locale, transcriptionOptions: [],
-            reportingOptions: [.volatileResults], attributeOptions: []
+            reportingOptions: [.volatileResults, .fastResults], attributeOptions: []
         )
     }
 
