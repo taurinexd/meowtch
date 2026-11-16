@@ -440,6 +440,19 @@ enum EventDispatcher {
                 "problem": session.problem?.message ?? NSNull(),
             ])
 
+        case "callTranscribeFile":
+            // Debug: feed an audio file to the client-channel transcriber.
+            guard let path = envelope["value"] as? String else { return Data(#"{"ok":false}"#.utf8) }
+            CallSession.shared.transcribeFile(URL(fileURLWithPath: path))
+            return Data(#"{"ok":true}"#.utf8)
+
+        case "callTranscript":
+            // Debug: the last 20 transcript lines, oldest first.
+            let lines = CallSession.shared.transcript.recent(20).map { line -> [String: Any] in
+                ["speaker": line.speaker.rawValue, "text": line.text, "final": line.isFinal]
+            }
+            return try? JSONSerialization.data(withJSONObject: ["lines": lines])
+
         case "screenPrivacy":
             // The ghost, over the wire: the CALL surface has to stay
             // screenshottable while it is being built.
