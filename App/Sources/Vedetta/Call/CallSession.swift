@@ -25,6 +25,8 @@ final class CallSession: ObservableObject {
     private var consumers: [Task<Void, Never>] = []
     private var transcribers: [AnyObject] = []
     private var modeObserver: AnyCancellable?
+    private var clientPeak: Double = 0
+    private var silenceWatch: Task<Void, Never>?
 
     private init() {
         // Leaving CALL ends listening: the microphone never stays on in CODE.
@@ -47,6 +49,9 @@ final class CallSession: ObservableObject {
     }
 
     func stop() {
+        silenceWatch?.cancel()
+        silenceWatch = nil
+        clientPeak = 0
         consumers.forEach { $0.cancel() }
         consumers = []
         if #available(macOS 26, *) {
@@ -85,6 +90,7 @@ final class CallSession: ObservableObject {
             systemTap = tap
             consume(clientStream, speaker: .client)
             consume(meStream, speaker: .me)
+            watchForSilentClient()
         } catch CallAudioError.problem(let problem) {
             stop()
             self.problem = problem
@@ -92,6 +98,28 @@ final class CallSession: ObservableObject {
             stop()
             NSLog("Vedetta call: capture failed: %@", String(describing: error))
             self.problem = .noMeetingAudio
+        }
+    }
+
+    /// A denied system-audio permission yields silence, not an error: check
+    /// once, after the threshold, whether the meeting app is playing into a
+    /// tap that has heard nothing at all.
+    @available(macOS 14.2, *)
+    private func watchForSilentClient() {
+        let started = Date()
+        silenceWatch = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self, !Task.isCancelled, self.isListening else { return }
+            let playing = SystemAudioTap.audioProcesses().contains { process in
+                process.isRunningOutput
+                    && !CallAudioRules.meetingProcesses([process], excludingPID: getpid()).isEmpty
+            }
+            if let problem = CallAudioRules.silentClientProblem(
+                listeningFor: Date().timeIntervalSince(started),
+                clientPeak: self.clientPeak, meetingPlaying: playing
+            ) {
+                self.problem = problem
+            }
         }
     }
 
@@ -160,7 +188,12 @@ final class CallSession: ObservableObject {
                 let level = chunk.buffer.rmsLevel
                 await MainActor.run {
                     guard let self else { return }
-                    if speaker == .client { self.clientLevel = level } else { self.meLevel = level }
+                    if speaker == .client {
+                        self.clientLevel = level
+                        self.clientPeak = max(self.clientPeak, level)
+                    } else {
+                        self.meLevel = level
+                    }
                 }
             }
             forwardContinuation.finish()

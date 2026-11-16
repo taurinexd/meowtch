@@ -47,3 +47,15 @@ struct CallAudioRulesTests {
         #expect(CallListenProblem.requiresMacOS26.message == "Listening requires macOS 26.")
     }
 }
+
+struct SilentClientTests {
+    @Test func meetingPlayingButTapSilentMeansPermissionDenied() {
+        #expect(CallAudioRules.silentClientProblem(listeningFor: 9, clientPeak: 0, meetingPlaying: true) == .systemAudioDenied)
+    }
+
+    @Test func tooEarlyOrNoMeetingOrAnySoundIsNotAProblem() {
+        #expect(CallAudioRules.silentClientProblem(listeningFor: 3, clientPeak: 0, meetingPlaying: true) == nil)
+        #expect(CallAudioRules.silentClientProblem(listeningFor: 30, clientPeak: 0, meetingPlaying: false) == nil)
+        #expect(CallAudioRules.silentClientProblem(listeningFor: 30, clientPeak: 0.0001, meetingPlaying: true) == nil)
+    }
+}

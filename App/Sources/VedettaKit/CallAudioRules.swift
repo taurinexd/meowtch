@@ -55,6 +55,20 @@ public enum CallAudioRules {
         }
     }
 
+    /// Seconds of digital silence on the client channel, while a meeting app
+    /// is playing, before calling it a denied permission.
+    static let silentClientThreshold: TimeInterval = 8
+
+    /// A denied "System Audio Recording" permission does not fail: the tap
+    /// just delivers zeros. Exact silence while the meeting app is playing
+    /// for a few seconds is that case, said out loud instead of waiting.
+    public static func silentClientProblem(
+        listeningFor seconds: TimeInterval, clientPeak: Double, meetingPlaying: Bool
+    ) -> CallListenProblem? {
+        guard seconds >= silentClientThreshold, meetingPlaying, clientPeak == 0 else { return nil }
+        return .systemAudioDenied
+    }
+
     static func fourCC(_ code: String) -> UInt32 {
         code.utf8.reduce(0) { ($0 << 8) | UInt32($1) }
     }
