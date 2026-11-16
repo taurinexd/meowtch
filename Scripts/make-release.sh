@@ -6,6 +6,13 @@
 # Usage: Scripts/make-release.sh [--notes "text"]
 set -eu
 
+# Prefer full Xcode when present: recent Command Line Tools ship without the
+# SwiftUI macro plugins (@State fails with "SwiftUIMacros not found").
+XCODE_DEV=/Applications/Xcode.app/Contents/Developer
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d "$XCODE_DEV" ]; then
+    export DEVELOPER_DIR="$XCODE_DEV"
+fi
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
 TAG="v$VERSION"

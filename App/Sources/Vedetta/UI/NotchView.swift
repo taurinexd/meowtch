@@ -211,6 +211,11 @@ struct NotchView: View {
         return session.lastActivityAt.timeIntervalSinceNow > -Self.fullRowGrace
     }
 
+    /// One decision for the whole list, so every row shows the same chips.
+    private var chipVisibility: ChipVisibility {
+        ChipVisibility(sessions: visibleSessions.map { ($0.agent, store.terminal(for: $0.id)) })
+    }
+
     private var fullSessions: [AgentSession] {
         visibleSessions.filter { deservesFullRow($0) }
     }
@@ -314,7 +319,8 @@ struct NotchView: View {
                 session: session,
                 terminal: terminal,
                 showSessionMetadata: showSessionMetadata,
-                showJumpHint: !isInterrupt && terminal?.isJumpable == true
+                showJumpHint: !isInterrupt && terminal?.isJumpable == true,
+                chipVisibility: chipVisibility
             )
             if !isInterrupt {
                 peekReplyPanel(session)
@@ -365,13 +371,15 @@ struct NotchView: View {
     }
 
     private var sessionList: some View {
-            ScrollView(showsIndicators: false) {
+            let chips = chipVisibility
+            return ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach(fullSessions) { session in
                         SessionRowView(
                             session: session,
                             terminal: store.terminal(for: session.id),
-                            showSessionMetadata: showSessionMetadata
+                            showSessionMetadata: showSessionMetadata,
+                            chipVisibility: chips
                         )
                     }
                     ForEach(compactSessions) { session in
@@ -379,7 +387,8 @@ struct NotchView: View {
                             session: session,
                             terminal: store.terminal(for: session.id),
                             isCompact: true,
-                            showSessionMetadata: false
+                            showSessionMetadata: false,
+                            chipVisibility: chips
                         )
                     }
                 }

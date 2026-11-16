@@ -14,6 +14,8 @@ struct SessionRowView: View {
     var showSessionMetadata = false
     /// Adds the teal "^G ↗" jump-shortcut chip (finished-session peek).
     var showJumpHint = false
+    /// Agent/host chips, hidden when every row would show the same one.
+    var chipVisibility = ChipVisibility(showAgent: true, showHost: true)
     @State private var isHovered = false
     @ObservedObject private var approvals = ApprovalCenter.shared
     @ObservedObject private var questions = QuestionStore.shared
@@ -206,7 +208,7 @@ struct SessionRowView: View {
             // an all-done list disappears, like the original.
             if let tasks = session.tasks,
                !tasks.inProgress.isEmpty || !tasks.open.isEmpty {
-                TasksWidget(tasks: tasks)
+                TasksWidget(tasks: tasks, sessionId: session.id)
                     .padding(.top, 16)
             }
         }
@@ -319,6 +321,26 @@ struct SessionRowView: View {
                         }
                     }
                 }
+                // Free answer, like the terminal picker's "Type something".
+                QuestionFreeTextField(
+                    index: question.choices.count,
+                    text: Binding(
+                        get: { questions.freeText(sessionId: live.sessionId, questionIndex: qIndex) },
+                        set: {
+                            questions.setFreeText(
+                                sessionId: live.sessionId, questionIndex: qIndex,
+                                multiSelect: question.multiSelect, $0
+                            )
+                        }
+                    )
+                ) {
+                    if questions.canSubmit(sessionId: live.sessionId) {
+                        questions.submit(sessionId: live.sessionId)
+                    } else if multi {
+                        questions.advanceToNextUnanswered(sessionId: live.sessionId)
+                    }
+                }
+                .id("\(live.sessionId)-\(qIndex)")
             }
             // Skip · Invia — one row. (No "Terminale" button: the native
             // picker is already shown in the terminal while we block, so the
@@ -485,10 +507,12 @@ struct SessionRowView: View {
 
     private var chips: some View {
         HStack(spacing: 5) {
-            Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
+            if chipVisibility.showAgent {
+                Chip(text: session.agent.displayName, tint: Theme.claudeOrange)
+            }
             // The host chip follows the terminal, not the row style: compact
             // rows with a known window still show it, like the original.
-            if terminal?.termProgram == "vscode" || terminal?.bundleIdentifier == "com.microsoft.VSCode" {
+            if chipVisibility.showHost, terminal?.isVSCode == true {
                 Chip(text: "VS Code")
             }
             trailingSlot
@@ -514,14 +538,7 @@ struct SessionRowView: View {
             Chip(text: "59m").hidden()
             Chip(text: "23h").hidden()
             if isHovered {
-                Button {
-                    ArchiveStore.shared.archive(session.id)
-                } label: {
-                    Image(systemName: "tray")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.secondaryText)
-                }
-                .buttonStyle(.plain)
+                ArchiveButton { ArchiveStore.shared.archive(session.id) }
             } else if session.state == .waitingForInput && !isCompact {
                 Circle()
                     .fill(Theme.color(for: .waitingForInput))
@@ -531,6 +548,33 @@ struct SessionRowView: View {
             }
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// "Hide until it wakes up": a 30×24pt target (bigger than the glyph) that
+/// lights up with its own backdrop on hover, so it reads as a button.
+private struct ArchiveButton: View {
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: hovered ? "tray.and.arrow.down.fill" : "tray")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(hovered ? Theme.primaryText : Theme.secondaryText)
+                .frame(width: 30, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color.white.opacity(hovered ? 0.16 : 0.06))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Taller than the chips: let it overhang instead of growing the row.
+        .padding(.vertical, -2)
+        .onHover { hovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: hovered)
+        .help("Hide until it wakes up")
     }
 }
 
@@ -607,6 +651,64 @@ private struct QuestionOption: View {
     }
 }
 
+/// The typed answer under a question's options: same box and numbering as
+/// the options, a real text field (the panel becomes key on click without
+/// activating the app). Return sends; Option-Return adds a line.
+private struct QuestionFreeTextField: View {
+    let index: Int
+    @Binding var text: String
+    let onSubmit: () -> Void
+    @FocusState private var focused: Bool
+    @State private var hovered = false
+
+    private var hasText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(index + 1)")
+                .font(.system(size: 10, weight: .bold))
+                .frame(width: 16, height: 16)
+                .background(Theme.color(for: .needsApproval).opacity(hasText ? 1 : 0.8))
+                .foregroundStyle(.black)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            // A drawn placeholder: on macOS a TextField prompt ignores its
+            // color and renders near-invisible on the dark card.
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text("Type something…")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.secondaryText)
+                        .allowsHitTesting(false)
+                }
+                TextField("", text: $text, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1...5)
+                    .focused($focused)
+                    .onSubmit(onSubmit)
+            }
+        }
+        .padding(8)
+        .background(Color.white.opacity(focused || hasText ? 0.13 : (hovered ? 0.15 : 0.05)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(
+                    Theme.color(for: .needsApproval).opacity(focused || hasText ? 0.6 : 0),
+                    lineWidth: 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        // A click anywhere on the box (not only on the glyphs) focuses it.
+        .onTapGesture { focused = true }
+        .onHover { hovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: hovered)
+    }
+}
+
 /// Small rounded metadata chip ("Claude", "VS Code", "<1m", "BYPASS"…).
 struct Chip: View {
     var text: String
@@ -624,24 +726,107 @@ struct Chip: View {
     }
 }
 
-/// Inset "Tasks" widget mirroring the original's anatomy: in-progress
-/// items with a blue dot, open items with empty checkboxes (capped),
-/// the first completed ones struck through, the rest as a counter.
+/// Which sessions have their task list expanded. Lives outside the views:
+/// row @State dies with every panel collapse.
+@MainActor
+final class TaskDisclosure: ObservableObject {
+    static let shared = TaskDisclosure()
+    @Published private(set) var expanded: Set<String> = []
+
+    func isExpanded(_ id: String) -> Bool { expanded.contains(id) }
+
+    func toggle(_ id: String) {
+        if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
+    }
+}
+
+/// Inset "Tasks" accordion, collapsed by default: one summary row (label,
+/// progress bar, counts, chevron) that toggles on a click anywhere on it.
+/// Expanded, it mirrors the original's anatomy: in-progress items with a
+/// blue dot, open items with empty checkboxes (capped), the first
+/// completed ones struck through, the rest as a counter.
 struct TasksWidget: View {
     let tasks: SessionTasks
+    let sessionId: String
+    @ObservedObject private var disclosure = TaskDisclosure.shared
+    @State private var headerHovered = false
     private let openCap = 5
     private let doneCap = 2
 
+    private var expanded: Bool { disclosure.isExpanded(sessionId) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Text("Tasks")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Theme.primaryText)
-                Text("(\(tasks.done.count) done, \(tasks.inProgress.count) in progress, \(tasks.open.count) open)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.secondaryText)
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if expanded {
+                list
+                    .padding(.horizontal, 10)
+                    .padding(.top, 7)
+                    .padding(.bottom, 10)
+                    .transition(.opacity)
             }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// The whole row is the hit target (32pt tall, full width), not just
+    /// the chevron; the tap is consumed here so the card does not jump.
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text("Tasks")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Theme.primaryText)
+            progressBar
+            Text("\(tasks.done.count) done · \(tasks.inProgress.count) in progress · \(tasks.open.count) open")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(headerHovered ? Theme.primaryText : Theme.secondaryText)
+                .rotationEffect(.degrees(expanded ? 180 : 0))
+                .frame(width: 28, height: 28)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(minHeight: 32)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.white.opacity(headerHovered ? 0.05 : 0))
+        )
+        .contentShape(Rectangle())
+        .onHover { headerHovered = $0 }
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.2)) { disclosure.toggle(sessionId) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(expanded ? "Collapse tasks" : "Expand tasks")
+    }
+
+    /// Done (grey) and in-progress (blue) share of all tasks.
+    private var progressBar: some View {
+        let total = max(1, tasks.done.count + tasks.inProgress.count + tasks.open.count)
+        let width: CGFloat = 70
+        return HStack(spacing: 0) {
+            Rectangle()
+                .fill(Theme.secondaryText.opacity(0.7))
+                .frame(width: width * CGFloat(tasks.done.count) / CGFloat(total))
+            Rectangle()
+                .fill(Theme.toolBlue)
+                .frame(width: width * CGFloat(tasks.inProgress.count) / CGFloat(total))
+            Spacer(minLength: 0)
+        }
+        .frame(width: width, height: 4)
+        .background(Color.white.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 2))
+    }
+
+    private var list: some View {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(tasks.inProgress, id: \.id) { item in
                 HStack(spacing: 8) {
                     Circle().fill(Theme.toolBlue).frame(width: 7, height: 7)
@@ -681,10 +866,6 @@ struct TasksWidget: View {
                     .padding(.leading, 18)
             }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

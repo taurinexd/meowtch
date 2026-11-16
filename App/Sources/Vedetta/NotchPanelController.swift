@@ -61,6 +61,7 @@ final class NotchPanelController {
             self?.focusInterrupt()
         }
         QuestionStore.shared.onResolve = { [weak self] in
+            self?.returnKeyboardFocus()
             self?.collapseIfNoInterrupt()
         }
 
@@ -533,6 +534,20 @@ final class NotchPanelController {
     /// Collapse only once every interactive interrupt is gone — an approval
     /// draining must not close a panel that still has a question to answer,
     /// and vice versa.
+    /// Typing a free answer makes the panel key (without activating the
+    /// app). Once the card is gone, hand the keyboard back to the app the
+    /// user was in, so their next keystroke lands in the terminal again.
+    private func returnKeyboardFocus() {
+        guard panel.isKeyWindow else { return }
+        panel.makeFirstResponder(nil)
+        // The user's app is still the active one (the panel never activates
+        // ours), so activating it again is a no-op and the panel would stay
+        // key. Ordering the panel out and back in drops key status without
+        // a visible flicker; keystrokes then reach the active app again.
+        panel.orderOut(nil)
+        panel.orderFrontRegardless()
+    }
+
     private func collapseIfNoInterrupt() {
         // Never yank the panel out from under the cursor: if the user is
         // hovering, the normal hover-exit collapse takes over when they leave.

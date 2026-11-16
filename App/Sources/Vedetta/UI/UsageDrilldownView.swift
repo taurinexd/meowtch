@@ -3,8 +3,9 @@ import SwiftUI
 import VedettaKit
 
 /// Provider → accounts quota view, swapped in for the session list when
-/// the user taps the usage strip. Every Claude account gets a row with
-/// its 5h/7d windows; stale data shows its age, never a bare percentage.
+/// the user taps the usage strip. Claude accounts form a grid: one row per
+/// account, one column per window (5h, 7d, per-model 7d) with a single
+/// header; stale data shows its age, never a bare percentage.
 /// Tapping a row copies a ready login/switch command to the clipboard.
 /// Rows share the session cards' metrics: content at leading 18 /
 /// trailing 15, hover highlight instead of a permanent backdrop.
@@ -19,7 +20,8 @@ struct UsageDrilldownView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             sectionHeader("CLAUDE")
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
+                if !columns.isEmpty { columnHeader }
                 ForEach(usage.claudeUsages) { entry in
                     accountRow(entry)
                 }
@@ -68,9 +70,34 @@ struct UsageDrilldownView: View {
             .padding(.leading, 18)
     }
 
+    /// Column labels shared by every account row (5h, 7d, per-model 7d).
+    private var columns: [String] {
+        AccountQuota.columns(for: usage.claudeUsages.map(\.meters))
+    }
+
+    private let whoWidth: CGFloat = 172
+    private let columnSpacing: CGFloat = 14
+
+    /// One header line for the whole grid, aligned with the cells below.
+    private var columnHeader: some View {
+        HStack(spacing: columnSpacing) {
+            Color.clear.frame(width: whoWidth, height: 1)
+            ForEach(columns, id: \.self) { label in
+                Text(AccountQuota.columnTitle(label))
+                    .font(.system(size: 9, design: .monospaced))
+                    .kerning(1)
+                    .foregroundStyle(Theme.secondaryText.opacity(0.6))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 15)
+    }
+
     private func accountRow(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
         let isActive = entry.account.path == activeAccountPath
-        return VStack(alignment: .leading, spacing: 9) {
+        return HStack(spacing: columnSpacing) {
             HStack(spacing: 8) {
                 Circle()
                     .fill(isActive ? Theme.color(for: .waitingForInput) : .clear)
@@ -80,35 +107,16 @@ struct UsageDrilldownView: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Theme.primaryText)
                         .lineLimit(1)
-                    if let detail = accountDetail(entry.account) {
-                        Text(detail)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.secondaryText.opacity(0.8))
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 8)
-                if switchingId == entry.id {
-                    Text("switching…")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Theme.color(for: .running))
-                } else if feedback?.id == entry.id {
-                    Text(feedback?.text ?? "")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.color(for: .needsApproval))
-                } else if isActive {
-                    Text("active")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Theme.secondaryText.opacity(0.6))
+                    accountSubtitle(entry)
                 }
             }
-            if switchingId != entry.id {
-                accountBody(entry)
-            }
+            .frame(width: whoWidth, alignment: .leading)
+            .help(isActive ? "Active account" : "Click to make this the default account")
+            accountCells(entry)
         }
         .padding(.leading, 18)
         .padding(.trailing, 15)
-        .padding(.vertical, 10)
+        .padding(.vertical, 7)
         // The cards' hover idiom: a soft rounded backdrop under the row
         // the cursor is on (identical geometry to SessionRowView's).
         .background(
@@ -125,58 +133,98 @@ struct UsageDrilldownView: View {
         .onTapGesture { switchTo(entry.account) }
     }
 
-    /// The meters (or a hint) below the account header.
-    @ViewBuilder
-    private func accountBody(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
-        if !entry.meters.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                if entry.isStale, let sample = entry.sample {
-                    Text("Last updated \(age(of: sample.at)) ago")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(Theme.secondaryText.opacity(0.7))
-                }
-                ForEach(Array(entry.meters.enumerated()), id: \.offset) { _, meter in
-                    meterView(meter)
-                }
+    /// email · plan, with the data age when it is stale.
+    private func accountSubtitle(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
+        HStack(spacing: 0) {
+            if let detail = accountDetail(entry.account) {
+                Text(detail)
+                    .foregroundStyle(Theme.secondaryText.opacity(0.8))
+                    .truncationMode(.middle)
             }
-            .padding(.leading, 13)
+            if entry.isStale, !entry.meters.isEmpty, let sample = entry.sample {
+                Text(" · \(age(of: sample.at)) ago")
+                    .foregroundStyle(Theme.claudeOrange.opacity(0.85))
+                    .fixedSize()
+            }
+        }
+        .font(.system(size: 10))
+        .lineLimit(1)
+    }
+
+    /// One cell per grid column, or a status line spanning them.
+    @ViewBuilder
+    private func accountCells(_ entry: UsageModel.ClaudeAccountUsage) -> some View {
+        if switchingId == entry.id {
+            spanningText("switching…", color: Theme.color(for: .running), mono: true)
+        } else if feedback?.id == entry.id {
+            spanningText(feedback?.text ?? "", color: Theme.color(for: .needsApproval))
+        } else if entry.meters.isEmpty {
+            spanningText("no data · run a session or turn on network refresh",
+                         color: Theme.secondaryText.opacity(0.5))
         } else {
-            Text("run a session or turn on network refresh")
-                .font(.system(size: 10))
-                .foregroundStyle(Theme.secondaryText.opacity(0.5))
-                .padding(.leading, 13)
+            ForEach(columns, id: \.self) { label in
+                meterCell(entry.meters.first { $0.label == label }, stale: entry.isStale)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 
-    /// One `/usage`-style meter: label, a severity-colored bar with the
-    /// percentage, and the reset line.
-    private func meterView(_ meter: UsageMeter) -> some View {
+    private func spanningText(_ text: String, color: Color, mono: Bool = false) -> some View {
+        Text(text)
+            .font(.system(size: 10, design: mono ? .monospaced : .default))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Percentage and time to reset over a thin severity bar; an empty
+    /// track with a dash when this account has no such window.
+    private func meterCell(_ meter: UsageMeter?, stale: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(meter.label)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.primaryText)
-            HStack(spacing: 8) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.white.opacity(0.10))
+            HStack(spacing: 4) {
+                if let meter {
+                    Text("\(meter.percent)%")
+                        .bold()
+                        .foregroundStyle(meterColor(meter.severity))
+                } else {
+                    Text("—").foregroundStyle(Theme.secondaryText.opacity(0.5))
+                }
+                Spacer(minLength: 0)
+                if let meter, let reset = meter.resetsAt {
+                    Text(countdown(to: reset))
+                        .foregroundStyle(Theme.secondaryText.opacity(0.7))
+                        .lineLimit(1)
+                }
+            }
+            .font(.system(size: 10, design: .monospaced))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.white.opacity(0.10))
+                    if let meter {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(meterColor(meter.severity))
                             .frame(width: max(2, geo.size.width * CGFloat(min(meter.percent, 100)) / 100))
+                            .opacity(stale ? 0.45 : 1)
                     }
                 }
-                .frame(height: 8)
-                Text("\(meter.percent)% used")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Theme.secondaryText)
-                    .fixedSize()
             }
-            if let reset = meter.resetsAt {
-                Text(resetText(reset))
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(Theme.secondaryText.opacity(0.7))
-            }
+            .frame(height: 5)
         }
+        .help(meter?.resetsAt.map(resetText) ?? "")
+    }
+
+    /// "3d17h" / "3h10m" / "42m" like the strip; "reset" once the window
+    /// has rolled over (the stored percentage is then outdated).
+    private func countdown(to date: Date) -> String {
+        let seconds = Int(date.timeIntervalSinceNow)
+        guard seconds > 0 else { return "reset" }
+        let days = seconds / 86_400
+        let hours = (seconds % 86_400) / 3_600
+        let minutes = (seconds % 3_600) / 60
+        if days > 0 { return "\(days)d\(hours)h" }
+        if hours > 0 { return "\(hours)h\(minutes)m" }
+        return "\(minutes)m"
     }
 
     private func meterColor(_ severity: UsageMeter.Severity) -> Color {

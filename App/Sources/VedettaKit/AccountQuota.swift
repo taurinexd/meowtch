@@ -63,6 +63,26 @@ public enum AccountQuota {
         }
     }
 
+    /// Column labels for the accounts grid: the union of every account's
+    /// meter labels, in the same order the meters use.
+    public static func columns(for meterLists: [[UsageMeter]]) -> [String] {
+        Set(meterLists.flatMap { $0.map(\.label) }).sorted { lhs, rhs in
+            let (rankLHS, rankRHS) = (meterRank(lhs), meterRank(rhs))
+            return rankLHS != rankRHS ? rankLHS < rankRHS : lhs < rhs
+        }
+    }
+
+    /// Short column header: "SESSION 5H", "WEEK 7D", "FABLE 7D".
+    public static func columnTitle(_ label: String) -> String {
+        if label == "Current session" { return "SESSION 5H" }
+        if label == "Current week (all models)" { return "WEEK 7D" }
+        if label.hasPrefix("Current week ("), label.hasSuffix(")") {
+            let model = label.dropFirst("Current week (".count).dropLast()
+            return "\(model.uppercased()) 7D"
+        }
+        return label.uppercased()
+    }
+
     private static func meterRank(_ label: String) -> Int {
         if label == "Current session" { return 0 }
         if label == "Current week (all models)" { return 1 }

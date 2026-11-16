@@ -89,3 +89,26 @@ struct AccountQuotaTests {
         #expect(scheduler.shouldPoll(account: a, index: 0, now: t0.addingTimeInterval(601)))
     }
 }
+
+struct UsageColumnsTests {
+    private func meter(_ label: String) -> UsageMeter {
+        UsageMeter(label: label, percent: 0, resetsAt: nil, severity: .normal)
+    }
+
+    @Test func columnsUnionAccountsInMeterOrder() {
+        let tech = [meter("Current week (all models)"), meter("Current week (Fable)")]
+        let dev = [meter("Current session"), meter("Current week (Opus)"), meter("Current week (all models)")]
+        #expect(AccountQuota.columns(for: [tech, [], dev]) == [
+            "Current session", "Current week (all models)",
+            "Current week (Fable)", "Current week (Opus)",
+        ])
+        #expect(AccountQuota.columns(for: [[], []]).isEmpty)
+    }
+
+    @Test func columnTitlesAreShort() {
+        #expect(AccountQuota.columnTitle("Current session") == "SESSION 5H")
+        #expect(AccountQuota.columnTitle("Current week (all models)") == "WEEK 7D")
+        #expect(AccountQuota.columnTitle("Current week (Fable)") == "FABLE 7D")
+        #expect(AccountQuota.columnTitle("Something else") == "SOMETHING ELSE")
+    }
+}

@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import VedettaKit
 
 /// Live AskUserQuestion prompts shown in the notch. Like a plan approval,
 /// the request BLOCKS the bridge: Vedetta holds the PermissionRequest hook
@@ -102,6 +103,7 @@ final class QuestionStore: ObservableObject {
         let hadQuestion = live.contains { $0.sessionId == sessionId }
         live.removeAll { $0.sessionId == sessionId }
         selections[sessionId] = nil
+        freeText[sessionId] = nil
         questionIndex[sessionId] = nil
         // Unblock a still-suspended hook (abandoned, e.g. the session ended):
         // resuming with nil lets the caller fall back to the native picker.
@@ -134,7 +136,30 @@ final class QuestionStore: ObservableObject {
     }
 
     func isAnswered(sessionId: String, questionIndex index: Int) -> Bool {
-        !(selections[sessionId]?[index]?.isEmpty ?? true)
+        QuestionAnswer.isAnswered(
+            selected: selections[sessionId]?[index] ?? [],
+            freeText: freeText[sessionId]?[index]
+        )
+    }
+
+    /// The user's own answer per question ("Type something" in the
+    /// terminal picker), keyed by session then question index.
+    @Published private(set) var freeText: [String: [Int: String]] = [:]
+
+    func freeText(sessionId: String, questionIndex: Int) -> String {
+        freeText[sessionId]?[questionIndex] ?? ""
+    }
+
+    /// Typing replaces a single-select choice, like picking "Type
+    /// something" in the terminal; a multiSelect keeps its ticks.
+    func setFreeText(sessionId: String, questionIndex: Int, multiSelect: Bool, _ text: String) {
+        var forSession = freeText[sessionId] ?? [:]
+        forSession[questionIndex] = text
+        freeText[sessionId] = forSession
+        if !multiSelect, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           selections[sessionId]?[questionIndex]?.isEmpty == false {
+            selections[sessionId]?[questionIndex] = []
+        }
     }
 
     /// Jumps to the next still-unanswered question after the current one
@@ -158,17 +183,17 @@ final class QuestionStore: ObservableObject {
         if multiSelect {
             if chosen.contains(optionIndex) { chosen.remove(optionIndex) } else { chosen.insert(optionIndex) }
         } else {
-            chosen = [optionIndex]  // single-select replaces
+            chosen = [optionIndex]  // single-select replaces, typed text too
+            freeText[sessionId]?[questionIndex] = nil
         }
         forSession[questionIndex] = chosen
         selections[sessionId] = forSession
     }
 
-    /// True once every question has at least one option chosen.
+    /// True once every question has an option chosen or a typed answer.
     func canSubmit(sessionId: String) -> Bool {
         guard let live = first(for: sessionId) else { return false }
-        let chosen = selections[sessionId] ?? [:]
-        return live.questions.indices.allSatisfy { !(chosen[$0]?.isEmpty ?? true) }
+        return live.questions.indices.allSatisfy { isAnswered(sessionId: sessionId, questionIndex: $0) }
     }
 
     /// A single-select single question answers immediately on click; the
@@ -204,13 +229,15 @@ final class QuestionStore: ObservableObject {
     func submit(sessionId: String) {
         guard let live = first(for: sessionId), canSubmit(sessionId: sessionId) else { return }
         let chosen = selections[sessionId] ?? [:]
+        let typed = freeText[sessionId] ?? [:]
 
         var answers: [String: [String]] = [:]
         for (index, question) in live.questions.enumerated() {
-            let labels = (chosen[index] ?? []).sorted().compactMap { optionIndex -> String? in
-                question.choices.indices.contains(optionIndex) ? question.choices[optionIndex].label : nil
-            }
-            answers[question.prompt] = labels
+            answers[question.prompt] = QuestionAnswer.values(
+                labels: question.choices.map(\.label),
+                selected: chosen[index] ?? [],
+                freeText: typed[index]
+            )
         }
         resolve(sessionId: sessionId, answers: answers)
     }
@@ -221,6 +248,7 @@ final class QuestionStore: ObservableObject {
         let continuation = continuations.removeValue(forKey: sessionId)
         live.removeAll { $0.sessionId == sessionId }
         selections[sessionId] = nil
+        freeText[sessionId] = nil
         questionIndex[sessionId] = nil
         continuation?.resume(returning: answers)
         onResolve?()

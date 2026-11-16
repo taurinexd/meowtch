@@ -5,6 +5,15 @@
 # Testing.framework and lib_TestingInterop.dylib live. With full Xcode
 # installed a plain `swift test` works and the flags are harmless no-ops.
 
+# Prefer full Xcode when present: recent Command Line Tools ship without the
+# SwiftUI macro plugins (@State fails with "SwiftUIMacros not found").
+XCODE_DEV := /Applications/Xcode.app/Contents/Developer
+ifeq (,$(DEVELOPER_DIR))
+ifneq (,$(wildcard $(XCODE_DEV)))
+export DEVELOPER_DIR := $(XCODE_DEV)
+endif
+endif
+
 DEVFW := /Library/Developer/CommandLineTools/Library/Developer/Frameworks
 DEVLIB := /Library/Developer/CommandLineTools/Library/Developer/usr/lib
 
