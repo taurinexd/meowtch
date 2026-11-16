@@ -24,6 +24,11 @@ enum SettingsKey {
     /// the question once, at the first launch after updating.
     static let updateConsentAsked = "updateConsentAsked"
     static let soundVolume = "soundVolume"
+    /// CALL suggestions send the call transcript to Claude: off until the
+    /// user turns them on, and turning them off kills the session.
+    static let callSuggestionsEnabled = "callSuggestionsEnabled"
+    /// Folder whose `.meowtch/client.md` feeds the suggestions (path).
+    static let callClientFolder = "callClientFolder"
     // Pre-existing keys, listed for the single source of truth:
     // "showSessionMetadata" (SessionMetadataPresentation.defaultsKey),
     // "panelDisplayExternal", "soundsMuted", "codexApprovalMode",
@@ -47,6 +52,7 @@ enum SettingsDefaults {
             SettingsKey.updateAutoCheck: true,
             SettingsKey.updateConsentAsked: false,
             SettingsKey.soundVolume: 0.5,
+            SettingsKey.callSuggestionsEnabled: false,
         ])
     }
 }

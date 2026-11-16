@@ -446,6 +446,14 @@ enum EventDispatcher {
             CallSession.shared.transcribeFile(URL(fileURLWithPath: path))
             return Data(#"{"ok":true}"#.utf8)
 
+        case "callAsk":
+            // Debug: ask the quick-lane engine directly; without a value,
+            // read back what it streamed so far.
+            if let question = envelope["value"] as? String {
+                CallAskProbe.ask(question)
+            }
+            return try? JSONSerialization.data(withJSONObject: CallAskProbe.state())
+
         case "callTranscript":
             // Debug: the last 20 transcript lines, oldest first.
             let lines = CallSession.shared.transcript.recent(20).map { line -> [String: Any] in
