@@ -2,8 +2,11 @@
 #
 # The TESTFLAGS below work around a Command Line Tools quirk on macOS 26:
 # `swift test` does not add the Developer Frameworks / lib paths where
-# Testing.framework and lib_TestingInterop.dylib live. With full Xcode
-# installed a plain `swift test` works and the flags are harmless no-ops.
+# Testing.framework and lib_TestingInterop.dylib live. Only when the CLT
+# is the toolchain in use: with Xcode in use a plain `swift test` works,
+# and these flags would link the CLT's Testing.framework against Xcode's
+# (undefined Testing symbols) — the CLT folder is often still installed
+# next to Xcode, so its mere presence isn't the signal.
 
 # Prefer full Xcode when present: recent Command Line Tools ship without the
 # SwiftUI macro plugins (@State fails with "SwiftUIMacros not found").
@@ -14,10 +17,12 @@ export DEVELOPER_DIR := $(XCODE_DEV)
 endif
 endif
 
-DEVFW := /Library/Developer/CommandLineTools/Library/Developer/Frameworks
-DEVLIB := /Library/Developer/CommandLineTools/Library/Developer/usr/lib
+CLT := /Library/Developer/CommandLineTools
+DEVFW := $(CLT)/Library/Developer/Frameworks
+DEVLIB := $(CLT)/Library/Developer/usr/lib
+ACTIVE_DEV := $(or $(DEVELOPER_DIR),$(shell xcode-select -p 2>/dev/null))
 
-ifneq (,$(wildcard $(DEVFW)))
+ifeq ($(CLT),$(ACTIVE_DEV))
 TESTFLAGS := -Xswiftc -F$(DEVFW) -Xlinker -F$(DEVFW) \
 	-Xlinker -rpath -Xlinker $(DEVFW) \
 	-Xlinker -rpath -Xlinker $(DEVLIB)
