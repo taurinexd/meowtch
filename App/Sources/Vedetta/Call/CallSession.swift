@@ -19,6 +19,10 @@ final class CallSession: ObservableObject {
     /// Whether the default output is private to the user's ears; read when
     /// listening starts (spec: headphones are a stated precondition).
     @Published private(set) var headphones = true
+    /// Last time each channel's level crossed `CallCopilot.speechRMS`: the
+    /// trigger's sense of who is speaking, faster than the transcriber.
+    private(set) var lastLoudClient: Date?
+    private(set) var lastLoudMe: Date?
 
     private var systemTap: AnyObject?
     private var microphone: MicrophoneCapture?
@@ -45,10 +49,14 @@ final class CallSession: ObservableObject {
         }
         headphones = Self.defaultOutputIsHeadphones()
         isListening = true
+        CallCopilot.shared.start()
         Task { await self.startCaptures() }
     }
 
     func stop() {
+        CallCopilot.shared.stop()
+        lastLoudClient = nil
+        lastLoudMe = nil
         silenceWatch?.cancel()
         silenceWatch = nil
         clientPeak = 0
@@ -140,6 +148,7 @@ final class CallSession: ObservableObject {
         guard #available(macOS 26, *) else { problem = .requiresMacOS26; return }
         stop()
         isListening = true
+        CallCopilot.shared.start()
         Task {
             do {
                 try await LiveTranscriber.prepareAssets { _ in }
@@ -188,11 +197,14 @@ final class CallSession: ObservableObject {
                 let level = chunk.buffer.rmsLevel
                 await MainActor.run {
                     guard let self else { return }
+                    let loud = level >= CallCopilot.speechRMS
                     if speaker == .client {
                         self.clientLevel = level
                         self.clientPeak = max(self.clientPeak, level)
+                        if loud { self.lastLoudClient = Date() }
                     } else {
                         self.meLevel = level
+                        if loud { self.lastLoudMe = Date() }
                     }
                 }
             }

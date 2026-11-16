@@ -454,6 +454,25 @@ enum EventDispatcher {
             }
             return try? JSONSerialization.data(withJSONObject: CallAskProbe.state())
 
+        case "callCopilot":
+            // Debug: the quick lane's state and metrics; {"enabled": Bool}
+            // flips the consent switch, {"answerNow": true} is ⌥ Space.
+            let copilot = CallCopilot.shared
+            if let enabled = envelope["enabled"] as? Bool { copilot.setEnabled(enabled) }
+            if envelope["answerNow"] as? Bool == true { copilot.answerNow() }
+            return try? JSONSerialization.data(withJSONObject: [
+                "enabled": CallCopilot.isEnabled,
+                "active": copilot.isActive,
+                "hotKey": copilot.isHotKeyRegistered,
+                "question": copilot.question ?? NSNull(),
+                "answer": copilot.answer,
+                "streaming": copilot.isStreaming,
+                "verify": copilot.verifyHint ?? NSNull(),
+                "costUSD": copilot.callCostUSD,
+                "problem": copilot.engineProblem ?? NSNull(),
+                "metrics": copilot.metrics.snapshot(),
+            ])
+
         case "callTranscript":
             // Debug: the last 20 transcript lines, oldest first.
             let lines = CallSession.shared.transcript.recent(20).map { line -> [String: Any] in

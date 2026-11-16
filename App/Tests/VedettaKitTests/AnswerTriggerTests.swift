@@ -9,7 +9,7 @@ struct AnswerTriggerTests {
                        answered: [String] = []) -> TriggerInput {
         TriggerInput(
             pending: pending, now: now,
-            lastClientActivity: now - clientSilence,
+            lastClientActivity: now - clientSilence, lastClientSpeech: nil,
             lastMeActivity: meAgo.map { now - $0 },
             answered: answered
         )
@@ -34,6 +34,12 @@ struct AnswerTriggerTests {
     @Test func modalOpenerCountsAsQuestion() {
         #expect(fires(AnswerTrigger.decide(input("Riuscite a farlo entro giugno", clientSilence: 1.1))))
         #expect(fires(AnswerTrigger.decide(input("È possibile spostare la consegna", clientSilence: 1.1))))
+    }
+
+    @Test func modalOpenerCountsInALaterSentence() {
+        #expect(AnswerTrigger.decide(input("Il carrello misto funziona già. Riuscite a farlo entro giugno.", clientSilence: 1.1))
+            == .fire(question: "Il carrello misto funziona già. Riuscite a farlo entro giugno.", endpointAt: now - 1.1))
+        #expect(fires(AnswerTrigger.decide(input("Il nuovo tema è già pronto. Si può cambiare il colore dei pulsanti", clientSilence: 1.1))))
     }
 
     @Test func statementNeverFires() {
@@ -73,6 +79,42 @@ struct AnswerTriggerTests {
     @Test func nearDuplicateIsWordSetSimilarity() {
         #expect(AnswerTrigger.isNearDuplicate("Quando consegnate il checkout?", "quando consegnate il checkout"))
         #expect(!AnswerTrigger.isNearDuplicate("Quando consegnate il checkout?", "Quanto costa il checkout?"))
+    }
+
+    // Measured 2026-11-16: the transcript trails the audio by ~1 s and keeps
+    // updating through short pauses; silence is read from the audio level.
+    private func live(_ pending: String, audioSilence: TimeInterval, textSettled: TimeInterval) -> TriggerInput {
+        TriggerInput(
+            pending: pending, now: now,
+            lastClientActivity: now - textSettled, lastClientSpeech: now - audioSilence,
+            lastMeActivity: nil, answered: []
+        )
+    }
+
+    @Test func audioSilenceWinsOverLateTranscriptUpdates() {
+        #expect(fires(AnswerTrigger.decide(live("Come gestite le disiscrizioni dalla newsletter",
+                                                audioSilence: 1.4, textSettled: 0.5))))
+    }
+
+    @Test func markerWaitsForTheTextToSettle() {
+        #expect(AnswerTrigger.decide(live("Come gestite le disiscrizioni dalla neo",
+                                          audioSilence: 1.2, textSettled: 0.1)) == .wait)
+    }
+
+    @Test func clientStillSpeakingWaitsEvenWithAQuestionMark() {
+        #expect(AnswerTrigger.decide(live("Quanto costa una seconda lingua?",
+                                          audioSilence: 0.1, textSettled: 2)) == .wait)
+    }
+
+    @Test func endpointIsWhenTheAudioWentQuiet() {
+        #expect(AnswerTrigger.decide(live("Quando andate online col sito?", audioSilence: 0.8, textSettled: 0.2))
+            == .fire(question: "Quando andate online col sito?", endpointAt: now - 0.8))
+    }
+
+    @Test func questionKeepsOnlyTheLastTwoSentences() {
+        #expect(AnswerTrigger.questionText("Buongiorno. Allora, il sito va bene. Ma quando andate online? E con che costi?")
+            == "Ma quando andate online? E con che costi?")
+        #expect(AnswerTrigger.questionText("? Quanto costa la seconda lingua") == "Quanto costa la seconda lingua")
     }
 
     @Test func latestOnlyQueueKeepsOnlyTheLastWaiting() {

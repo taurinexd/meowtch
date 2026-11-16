@@ -73,6 +73,13 @@ struct CallCopilotPromptTests {
         #expect(!CallCopilotPrompt.system(webgas: nil, client: nil).contains("## Scheda cliente"))
     }
 
+    @Test func personaForbidsCommitmentsInMatteosName() {
+        // First runs suggested «ti scrivo oggi stesso», «entro venerdì».
+        let prompt = CallCopilotPrompt.system(webgas: nil, client: nil)
+        #expect(prompt.contains("mai impegni a nome di Matteo"))
+        #expect(prompt.contains("ti faccio sapere"))
+    }
+
     @Test func userMessageLabelsSpeakers() {
         let t0 = Date(timeIntervalSinceReferenceDate: 0)
         let lines = [

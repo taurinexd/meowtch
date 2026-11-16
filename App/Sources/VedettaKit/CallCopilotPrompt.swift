@@ -38,7 +38,10 @@ public enum CallCopilotPrompt {
     - al massimo 2 righe, oppure 3 punti brevi;
     - niente premesse, niente «Puoi dire», niente virgolette: solo la frase;
     - mai inventare numeri, date, prezzi o stato dei lavori che non sono nel contesto: \
-    in quel caso suggerisci di verificare e far sapere.
+    in quel caso la frase è «lo verifico e ti faccio sapere», senza dire quando;
+    - mai impegni a nome di Matteo: niente scadenze, orari o promesse di invio \
+    («oggi stesso», «entro venerdì», «ti mando la cifra») che lui non ha già detto nella call;
+    - non dire «sì» a una richiesta che il contesto non conferma.
 
     L'ultima riga è sempre di controllo e non viene mostrata: \
     `VERIFICA: no` se la risposta non dipende da fatti da controllare, altrimenti \
