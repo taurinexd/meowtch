@@ -164,19 +164,19 @@ struct SessionEventReducerTests {
     @Test func directoryStaysAtProjectRootWhenAgentCdsIntoSubfolder() {
         let store = SessionStore()
         SessionEventReducer.apply(
-            envelope("UserPromptSubmit", cwd: "/Users/x/Code/5om",
+            envelope("UserPromptSubmit", cwd: "/Users/x/Code/studio",
                      extra: ["prompt": "tema"]),
             to: store
         )
-        #expect(store.sessions.first?.directoryName == "5om")
+        #expect(store.sessions.first?.directoryName == "studio")
         // A cd into a subfolder must not relabel the card.
         SessionEventReducer.apply(
-            envelope("PreToolUse", cwd: "/Users/x/Code/5om/theme", extra: [
+            envelope("PreToolUse", cwd: "/Users/x/Code/studio/theme", extra: [
                 "tool_name": "Bash", "tool_input": ["command": "ls"],
             ]),
             to: store
         )
-        #expect(store.sessions.first?.directory == "/Users/x/Code/5om")
+        #expect(store.sessions.first?.directory == "/Users/x/Code/studio")
         // A genuine switch to an unrelated project does update it.
         SessionEventReducer.apply(
             envelope("UserPromptSubmit", cwd: "/Users/x/Code/starforge", extra: ["prompt": "vai"]),
