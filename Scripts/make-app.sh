@@ -57,6 +57,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<string>AppIcon</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Meowtch listens to your microphone during a call to know when you are speaking.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Meowtch listens to the meeting audio during a call to transcribe what the other side says, on this Mac.</string>
 </dict>
 </plist>
 PLIST

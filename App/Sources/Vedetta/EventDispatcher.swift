@@ -427,6 +427,19 @@ enum EventDispatcher {
                 "hidden": ScreenPrivacy.shared.hidden,
             ])
 
+        case "callListen":
+            // Debug: start/stop listening without a click, read levels back.
+            let session = CallSession.shared
+            if let value = envelope["value"] as? Bool {
+                value ? session.start() : session.stop()
+            }
+            return try? JSONSerialization.data(withJSONObject: [
+                "listening": session.isListening,
+                "clientRMS": session.clientLevel,
+                "meRMS": session.meLevel,
+                "problem": session.problem?.message ?? NSNull(),
+            ])
+
         case "screenPrivacy":
             // The ghost, over the wire: the CALL surface has to stay
             // screenshottable while it is being built.
