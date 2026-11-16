@@ -15,6 +15,10 @@ final class ClaudeCallEngine: @unchecked Sendable {
     private let onEvent: @Sendable (ClaudeStreamEvent) -> Void
     private let onExit: @Sendable (String) -> Void
     private let lock = NSLock()
+    /// Start, send and stop run one at a time: a question that arrives
+    /// while the first launch is still resolving `claude` must not launch
+    /// a second session.
+    private let lifecycle = DispatchQueue(label: "app.vedetta.call.engine")
     private var process: Process?
     private var stdin: FileHandle?
     private var systemPrompt = ""
@@ -49,6 +53,15 @@ final class ClaudeCallEngine: @unchecked Sendable {
 
     /// Launches the session. Blocks briefly while resolving `claude`.
     func start(systemPrompt: String) throws {
+        try lifecycle.sync { try launch(systemPrompt: systemPrompt) }
+    }
+
+    private func launch(systemPrompt: String) throws {
+        let stopped = lock.withLock { () -> Bool in
+            self.systemPrompt = systemPrompt
+            return stopping
+        }
+        guard !stopped else { return }  // stop() came first: never launch after it
         guard let claude = ClaudeCLI.resolve() else { throw CallEngineError.claudeNotFound }
         signal(SIGPIPE, SIG_IGN)  // a write to a dead session must fail, not kill the app
         try FileManager.default.createDirectory(at: Self.workingDirectory, withIntermediateDirectories: true)
@@ -105,10 +118,15 @@ final class ClaudeCallEngine: @unchecked Sendable {
 
     /// Sends one question; restarts the session first if it died.
     func send(_ userMessage: String) {
+        lifecycle.sync { deliver(userMessage) }
+    }
+
+    private func deliver(_ userMessage: String) {
         if !isRunning {
-            let prompt = lock.withLock { systemPrompt }
+            let (prompt, stopped) = lock.withLock { (systemPrompt, stopping) }
+            guard !stopped else { return }
             do {
-                try start(systemPrompt: prompt)
+                try launch(systemPrompt: prompt)
             } catch {
                 onExit("claude could not start")
                 return
@@ -123,6 +141,11 @@ final class ClaudeCallEngine: @unchecked Sendable {
     }
 
     func stop() {
+        lock.withLock { stopping = true }  // a launch still queued will not resurrect it
+        lifecycle.sync { halt() }
+    }
+
+    private func halt() {
         let process = lock.withLock { () -> Process? in
             stopping = true
             try? stdin?.close()
