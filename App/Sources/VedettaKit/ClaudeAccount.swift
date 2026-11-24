@@ -85,3 +85,25 @@ public enum ClaudeAccountRegistry {
         (path as NSString).standardizingPath
     }
 }
+
+/// Which registered account a credential belongs to. Email alone is not an
+/// identity: the same claude.ai user can be registered twice, once per org
+/// (personal Max + Team), and taking the first email match hands one org's
+/// token to the other account. Plan disambiguates; anything still
+/// ambiguous resolves to nobody, so the caller leaves the slot alone.
+public enum ClaudeCredentialOwner {
+    public static func resolve(
+        email: String, plan: String?, accounts: [ClaudeAccount]
+    ) -> ClaudeAccount? {
+        let sameEmail = accounts.filter {
+            $0.email?.caseInsensitiveCompare(email) == .orderedSame
+        }
+        guard sameEmail.count > 1 else { return sameEmail.first }
+        guard let plan, !plan.isEmpty else { return nil }
+        let samePlan = sameEmail.filter {
+            $0.subscriptionType?.caseInsensitiveCompare(plan) == .orderedSame
+        }
+        if samePlan.count == 1 { return samePlan[0] }
+        return nil
+    }
+}

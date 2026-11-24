@@ -75,3 +75,46 @@ struct ClaudeAccountTests {
         #expect(anonymous.displayName == ".claude-b")
     }
 }
+
+struct ClaudeCredentialOwnerTests {
+    private func account(_ path: String, _ email: String?, _ plan: String?) -> ClaudeAccount {
+        ClaudeAccount(path: path, alias: nil, email: email, subscriptionType: plan,
+                      isDefault: false, isAvailable: true)
+    }
+
+    private var accounts: [ClaudeAccount] {
+        [
+            account("/u/.claude", "tools@x.net", "max"),
+            account("/u/.claude-tech", "tech@x.net", "max"),
+            account("/u/.claude-team", "tools@x.net", "team"),
+        ]
+    }
+
+    @Test func uniqueEmailResolvesRegardlessOfPlan() {
+        let owner = ClaudeCredentialOwner.resolve(email: "TECH@x.net", plan: nil, accounts: accounts)
+        #expect(owner?.path == "/u/.claude-tech")
+    }
+
+    @Test func sharedEmailTeamTokenGoesToTeamAccountNotFirstMatch() {
+        let owner = ClaudeCredentialOwner.resolve(email: "tools@x.net", plan: "team", accounts: accounts)
+        #expect(owner?.path == "/u/.claude-team")
+    }
+
+    @Test func sharedEmailPersonalTokenGoesToPersonalAccount() {
+        let owner = ClaudeCredentialOwner.resolve(email: "tools@x.net", plan: "max", accounts: accounts)
+        #expect(owner?.path == "/u/.claude")
+    }
+
+    @Test func sharedEmailWithoutPlanIsAmbiguous() {
+        #expect(ClaudeCredentialOwner.resolve(email: "tools@x.net", plan: nil, accounts: accounts) == nil)
+    }
+
+    @Test func sharedEmailAndPlanIsAmbiguous() {
+        let twins = accounts + [account("/u/.claude-team2", "tools@x.net", "team")]
+        #expect(ClaudeCredentialOwner.resolve(email: "tools@x.net", plan: "team", accounts: twins) == nil)
+    }
+
+    @Test func unknownEmailHasNoOwner() {
+        #expect(ClaudeCredentialOwner.resolve(email: "nobody@x.net", plan: "max", accounts: accounts) == nil)
+    }
+}

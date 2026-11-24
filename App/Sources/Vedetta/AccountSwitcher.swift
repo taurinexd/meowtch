@@ -137,12 +137,19 @@ enum AccountSwitcher {
               let email = await profileEmail(accessToken: credentials.accessToken)
         else { return }   // expired or offline: try again next tick
         let accounts = VedettaSetup.claudeAccounts
-        guard let owner = accounts.first(where: {
+        let sameEmail = accounts.contains {
             $0.email?.caseInsensitiveCompare(email) == .orderedSame
-        }) else {
+        }
+        guard sameEmail else {
             UserDefaults.standard.set(true, forKey: slotUnidentifiedKey)
             return
         }
+        // Same email on several accounts (personal + team org) and the plan
+        // can't tell them apart: never guess — a wrong guess overwrites the
+        // other account's mirror with this token.
+        guard let owner = ClaudeCredentialOwner.resolve(
+            email: email, plan: credentials.subscriptionType, accounts: accounts
+        ) else { return }
         _ = keychainWrite(service: namespacedService(for: owner.path), value: slotRaw)
         if ClaudeAccountRegistry.canonical(owner.path) == activePath {
             UserDefaults.standard.set(false, forKey: slotUnidentifiedKey)

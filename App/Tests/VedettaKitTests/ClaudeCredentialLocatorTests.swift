@@ -57,6 +57,13 @@ struct ClaudeCredentialLocatorTests {
         #expect(creds.expiresAt == Date(timeIntervalSince1970: 1_753_350_000))
         #expect(creds.isExpired(now: Date(timeIntervalSince1970: 1_753_360_000)))
         #expect(!creds.isExpired(now: Date(timeIntervalSince1970: 1_753_340_000)))
+        #expect(creds.subscriptionType == nil)
+    }
+
+    @Test func parsesSubscriptionType() throws {
+        let json = #"{"claudeAiOauth":{"accessToken":"t","subscriptionType":"team"}}"#
+        let creds = try #require(ClaudeCredentials.parse(Data(json.utf8)))
+        #expect(creds.subscriptionType == "team")
     }
 
     @Test func parseRejectsGarbage() {

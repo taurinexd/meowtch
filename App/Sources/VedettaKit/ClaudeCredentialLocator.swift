@@ -48,10 +48,15 @@ public enum ClaudeCredentialLocator {
 public struct ClaudeCredentials: Equatable, Sendable {
     public let accessToken: String
     public let expiresAt: Date?
+    /// The plan the credential was issued for (`max`, `team`, …). One
+    /// email can own several plans (personal + team org), so this is what
+    /// tells two same-email accounts apart.
+    public let subscriptionType: String?
 
-    public init(accessToken: String, expiresAt: Date?) {
+    public init(accessToken: String, expiresAt: Date?, subscriptionType: String? = nil) {
         self.accessToken = accessToken
         self.expiresAt = expiresAt
+        self.subscriptionType = subscriptionType
     }
 
     public static func parse(_ data: Data) -> ClaudeCredentials? {
@@ -64,7 +69,10 @@ public struct ClaudeCredentials: Equatable, Sendable {
         if let millis = (oauth["expiresAt"] as? NSNumber)?.doubleValue {
             expiresAt = Date(timeIntervalSince1970: millis / 1000)
         }
-        return ClaudeCredentials(accessToken: token, expiresAt: expiresAt)
+        return ClaudeCredentials(
+            accessToken: token, expiresAt: expiresAt,
+            subscriptionType: oauth["subscriptionType"] as? String
+        )
     }
 
     public func isExpired(now: Date) -> Bool {
