@@ -92,6 +92,16 @@ final class NotchPanelController {
             }
         }
 
+        // CALL: a suggestion started streaming. Open on it, so it can be
+        // read without reaching for the notch mid-sentence.
+        NotificationCenter.default.addObserver(
+            forName: .vedettaCallSuggestion,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.showCallSuggestion() }
+        }
+
         // The Settings window's display toggle relocates the panel.
         NotificationCenter.default.addObserver(
             forName: .vedettaPanelDisplayChanged,
@@ -157,6 +167,38 @@ final class NotchPanelController {
                 self.maybePeek(sessionId: sessionId)
             }
         }
+    }
+
+    // MARK: - CALL suggestion
+
+    private var suggestionCloseWorkItem: DispatchWorkItem?
+    /// How long a finished suggestion stays open without the cursor on it.
+    private let suggestionDwell: TimeInterval = 20
+
+    private func showCallSuggestion() {
+        guard ScreenPrivacy.shared.mode == .call else { return }
+        if !uiModel.isExpanded {
+            uiModel.usageDrilldown = false
+            panel.orderFrontRegardless()
+            setExpanded(true)
+        }
+        scheduleSuggestionClose(after: suggestionDwell)
+    }
+
+    private func scheduleSuggestionClose(after delay: TimeInterval) {
+        suggestionCloseWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.pinnedExpanded else { return }
+            // The real cursor, not `isHovering`: a programmatic open leaves
+            // the tracking state reading "inside" with the cursor elsewhere.
+            if self.cursorOverShape() || CallCopilot.shared.isStreaming {
+                self.scheduleSuggestionClose(after: 5)
+                return
+            }
+            self.setExpanded(false)
+        }
+        suggestionCloseWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     // MARK: - Finished-session peek

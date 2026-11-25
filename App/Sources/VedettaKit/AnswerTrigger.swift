@@ -54,6 +54,7 @@ public enum AnswerTrigger {
     static let truncationEndings: Set<String> = [
         "e", "ed", "ma", "che", "di", "del", "della", "per", "con", "a", "al", "in", "il", "la",
         "lo", "i", "gli", "le", "un", "una", "o", "se", "quindi", "però", "cioè", "tipo", "ehm",
+        "nel", "nella", "nei", "negli", "sul", "sulla", "dal", "dalla", "col", "alle", "agli", "dei", "delle",
     ]
     static let questionWords: Set<String> = [
         "chi", "cosa", "come", "quando", "quanto", "quanti", "quante", "perché", "quale", "quali", "dove",
@@ -132,13 +133,26 @@ public enum AnswerTrigger {
         return similarity >= duplicateSimilarity
     }
 
-    /// A question word anywhere, or a sentence that opens like a request.
+    /// Unambiguous requests, matched anywhere in a sentence: the transcriber
+    /// often drops the «?» and clients lead in with «e per il gestionale,
+    /// riuscite a…» (measured 2026-11-25). Weak openers («hai», «c'è»)
+    /// stay opening-only: mid-sentence they are mostly statements.
+    static let requestPhrases = [
+        "potete", "potreste", "potresti", "riuscite a", "riesci a", "riuscireste", "riusciresti",
+        "si potrebbe", "sarebbe possibile", "è possibile", "si può", "mi sai dire", "mi dici",
+        "ci dite", "mi dite", "vi risulta",
+    ]
+
+    /// A question word or an explicit request anywhere, or a sentence that
+    /// opens like one.
     private static func looksLikeQuestion(_ text: String) -> Bool {
         sentences(text).contains { sentence in
             let words = normalizedWords(sentence)
             if words.contains(where: questionWords.contains) { return true }
-            let opening = words.joined(separator: " ")
-            return modalOpeners.contains { opening == $0 || opening.hasPrefix($0 + " ") }
+            let joined = words.joined(separator: " ")
+            let padded = " \(joined) "
+            if requestPhrases.contains(where: { padded.contains(" \($0) ") }) { return true }
+            return modalOpeners.contains { joined == $0 || joined.hasPrefix($0 + " ") }
         }
     }
 

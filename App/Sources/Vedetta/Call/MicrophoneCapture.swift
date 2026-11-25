@@ -23,6 +23,18 @@ final class MicrophoneCapture: @unchecked Sendable {
         let (stream, continuation) = AsyncStream.makeStream(of: CallAudioChunk.self, bufferingPolicy: .bufferingNewest(64))
         self.continuation = continuation
         let input = engine.inputNode
+        // Apple's echo cancellation: removes what the speakers play (the
+        // meeting) from the mic, so on speakers the "me" channel stays
+        // Matteo's voice. Must be set while the engine is stopped. Ducking
+        // at its minimum, so the meeting audio is not turned down.
+        do {
+            try input.setVoiceProcessingEnabled(true)
+            input.voiceProcessingOtherAudioDuckingConfiguration = .init(
+                enableAdvancedDucking: false, duckingLevel: .min
+            )
+        } catch {
+            NSLog("Vedetta call: voice processing unavailable: %@", String(describing: error))
+        }
         let format = input.outputFormat(forBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
             if let copy = buffer.deepCopy() { continuation.yield(CallAudioChunk(buffer: copy)) }

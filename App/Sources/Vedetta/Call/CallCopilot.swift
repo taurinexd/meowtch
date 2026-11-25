@@ -154,7 +154,11 @@ final class CallCopilot: ObservableObject {
             pending: turns.pending(in: transcript), now: now,
             lastClientActivity: transcript.lines.last { $0.speaker == .client }?.updatedAt,
             lastClientSpeech: session.lastLoudClient,
-            lastMeActivity: latest(transcript.lines.last { $0.speaker == .me }?.updatedAt, session.lastLoudMe),
+            // On speakers the mic hears the client: its level says nothing
+            // about Matteo, and echoed lines are the client's words.
+            lastMeActivity: session.headphones
+                ? latest(transcript.lines.last { $0.speaker == .me }?.updatedAt, session.lastLoudMe)
+                : CallEcho.lastOwnSpeech(in: transcript),
             answered: answered
         )
         switch AnswerTrigger.decide(input) {
@@ -193,6 +197,7 @@ final class CallCopilot: ObservableObject {
         outputTokens = 0
         startedAt = Date()
         decidedAt = ask.decidedAt
+        NotificationCenter.default.post(name: .vedettaCallSuggestion, object: nil)
         let message = CallCopilotPrompt.userMessage(
             question: ask.question, recent: CallSession.shared.transcript.recent(Self.recentLines)
         )
@@ -238,4 +243,9 @@ final class CallCopilot: ObservableObject {
         if let startedAt { elapsed = Date().timeIntervalSince(startedAt) }
         if let next = queue.finish() { send(next) }
     }
+}
+
+extension Notification.Name {
+    /// A suggestion started streaming: the notch opens on it.
+    static let vedettaCallSuggestion = Notification.Name("vedettaCallSuggestion")
 }

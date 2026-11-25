@@ -36,6 +36,17 @@ struct AnswerTriggerTests {
         #expect(fires(AnswerTrigger.decide(input("È possibile spostare la consegna", clientSilence: 1.1))))
     }
 
+    @Test func explicitRequestCountsMidSentence() {
+        // Real transcript shape: no «?», request after a lead-in.
+        let text = "Ok, perfetto. E per il collegamento con il gestionale riuscite a sincronizzare anche le giacenze del magazzino."
+        #expect(fires(AnswerTrigger.decide(input(text, clientSilence: 1.1))))
+    }
+
+    @Test func weakOpenerMidSentenceIsNotAQuestion() {
+        #expect(AnswerTrigger.decide(input("Allora ok, hai ragione sul catalogo nuovo", clientSilence: 1.1)) == .wait)
+        #expect(AnswerTrigger.decide(input("Va bene, ci sono già tutti i prodotti online", clientSilence: 1.1)) == .wait)
+    }
+
     @Test func modalOpenerCountsInALaterSentence() {
         #expect(AnswerTrigger.decide(input("Il carrello misto funziona già. Riuscite a farlo entro giugno.", clientSilence: 1.1))
             == .fire(question: "Il carrello misto funziona già. Riuscite a farlo entro giugno.", endpointAt: now - 1.1))
