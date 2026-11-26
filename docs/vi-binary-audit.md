@@ -772,3 +772,25 @@ socket; il tasto vero va provato a mano.
 
 `rate_limit_event` sulla 2.1.325 porta una sola finestra (`seven_day`), non entrambe come
 sulla 2.1.258: la barra legge il 5h da `UsageModel`.
+
+## Codex app-server: processi orfani (2026-11-26)
+
+Sintomo: Mac lentissimo, swap a 12,3 GB su 13,3. Sotto Meowtch c'erano 40 `node codex
+app-server`, ognuno con il suo binario `codex`: 80 processi, 3 nuovi circa ogni ora, mai chiusi.
+
+Causa: `CodexAppServerClient` è un actor, quindi rientrante mentre aspetta `initialize`.
+Ogni Claude OAuth probe riuscito richiama `refresh()` (`UsageModel`), e ogni `refresh()`
+lancia `refreshCodex()`; il limite di 240 s scatta solo a risposta arrivata. Con più
+account un tick fa 4 letture insieme (le raffiche da 4 righe ogni 30 minuti in
+`~/.vedetta/run/usage.log`). Se in quel momento il server era fermo (spegnimento a riposo
+dopo 300 s), ognuna vedeva `initialized == false` e ne lanciava uno: il client teneva
+solo l'ultimo, gli altri non venivano mai fermati.
+
+Fix: `ensureStarted()` fa entrare le chiamate concorrenti nell'avvio già in corso
+(`starting`), e il `terminationHandler` di un server già sostituito non chiude più quello
+nuovo. SIGTERM ferma davvero il wrapper npm e il binario (provato a mano), quindi
+l'unica perdita era l'avvio concorrente.
+
+Prova (stesso scenario sui due build: avvio, server fermato a mano, 4 comandi `usage`
+insieme sul socket): 0.1.9 installata lascia 4 server, il build con il fix 1, con le 4
+letture servite da quello.

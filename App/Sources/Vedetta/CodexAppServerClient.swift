@@ -10,6 +10,10 @@ actor CodexAppServerClient {
     enum ClientError: Error { case binaryUnavailable, startupBackoff, disconnected, timeout }
 
     private var process: Process?
+    /// The launch in progress. The actor is reentrant while `initialize` is
+    /// awaited, so concurrent callers (a burst of quota reads) must join this
+    /// launch instead of each spawning a server that nothing tracks or stops.
+    private var starting: Task<Void, Error>?
     private var input: FileHandle?
     private var output: FileHandle?
     private var inbox = CodexRPCInbox()
@@ -79,6 +83,14 @@ actor CodexAppServerClient {
 
     private func ensureStarted() async throws {
         if initialized, process?.isRunning == true { return }
+        if let starting { return try await starting.value }
+        let launch = Task { try await self.launch() }
+        starting = launch
+        defer { starting = nil }
+        try await launch.value
+    }
+
+    private func launch() async throws {
         guard Date() >= retryAfter else { throw ClientError.startupBackoff }
         guard let codex = Self.resolveCodexPath() else { throw ClientError.binaryUnavailable }
 
@@ -95,10 +107,14 @@ actor CodexAppServerClient {
             environment["CODEX_HOME"] = codexHome
             process.environment = environment
         }
-        process.terminationHandler = { [weak self] _ in
+        process.terminationHandler = { [weak self] ended in
             guard let self else { return }
-            Task { await self.connectionEnded() }
+            Task { await self.connectionEnded(ended) }
         }
+        // A server that already exited may still have its termination
+        // handler queued; stop tracking it so that handler cannot end the
+        // connection being opened now.
+        if self.process != nil { stopProcess() }
         do {
             try process.run()
         } catch {
@@ -176,8 +192,11 @@ actor CodexAppServerClient {
         continuations.removeValue(forKey: id)?.resume(throwing: ClientError.timeout)
     }
 
-    private func connectionEnded() {
-        guard process != nil else { return }
+    /// `ended` is the server whose termination reported this; nil means the
+    /// current server's stdout closed.
+    private func connectionEnded(_ ended: Process? = nil) {
+        guard let current = process else { return }
+        if let ended, ended !== current { return }  // an earlier server, already replaced
         for continuation in continuations.values {
             continuation.resume(throwing: ClientError.disconnected)
         }
